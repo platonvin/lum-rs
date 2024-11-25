@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "lum",       # Include the lum crate
+    "lumal",     # Include the lumal crate
+    "examples",  # example programs
+]
+
+[profile.release]
+opt-level = "z"
+panic = "abort"
+strip = "symbols"
+codegen-units = 1
+lto = "fat"
+debuginfo = "0"
+size-level = "2"
+overflow-checks = true

@@ -1,0 +1,17 @@
+[package]
+name = "lumal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cgmath = "0.18.0"
+vulkanalia = { version = "0.25.0", features = ["libloading", "provisional", "window"] }
+vulkanalia-vma = { version = "0.2.0" }
+winit = "0.29"
+anyhow = "1"
+euler = "0.4.1"
+glam = "0.29.2"
+
+[lib]
+name = "lumal"
+path = "src/lib.rs"  # Path to the library source file

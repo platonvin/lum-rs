@@ -1,0 +1,4 @@
+/target
+/.idea
+lumal/shaders/frag.spv
+lumal/shaders/vert.spv
