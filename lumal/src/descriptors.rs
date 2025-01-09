@@ -1,11 +1,12 @@
-use crate::{Buffer, DescriptorCounter, Image, RasterPipe};
+use std::{option, ptr::null, u32::MAX};
+
+use crate::{ring::Ring, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe, MAX_FRAMES_IN_FLIGHT};
 use crate::LumalRenderer; 
-use vulkanalia::vk::{self, DeviceV1_0};
+use vulkanalia::vk::{self, DeviceV1_3};
 use anyhow::*;
 
-use vulkanalia::prelude::v1_0::*;
+use vulkanalia::prelude::v1_3::*;
 
-// Enum for BlendAttachment
 pub enum BlendAttachment {
     NoBlend,
     BlendMix,
@@ -14,29 +15,59 @@ pub enum BlendAttachment {
     BlendReplaceIfLess,    // Basically min
 }
 
-// Enum for DepthTesting
+#[allow(non_camel_case_types)]
+#[derive(PartialEq)]
 pub enum DepthTesting {
-    DepthTestNoneBit = 0,
-    DepthTestReadBit = 1 << 0,
-    DepthTestWriteBit = 1 << 1,
+    DT_None,
+    DT_Read,
+    DT_Write,
+    DT_ReadWrite,
 }
 
-// Enum for Discard
 pub enum Discard {
     NoDiscard,
     DoDiscard,
 }
 
-// Enum for LoadStoreOp
 pub enum LoadStoreOp {
     DontCare,
     Clear,
     Store,
     Load,
 }
-// Structure for AttachmentDescription
-pub struct AttachmentDescription {
-    pub images: Vec<Image>, // Assuming ring is a Vec-like structure
+impl LoadStoreOp {
+    pub(crate) fn to_vk_load(&self) -> vk::AttachmentLoadOp {
+        match self {
+            LoadStoreOp::DontCare => vk::AttachmentLoadOp::DONT_CARE,
+            LoadStoreOp::Clear => vk::AttachmentLoadOp::CLEAR,
+            LoadStoreOp::Load => vk::AttachmentLoadOp::LOAD,
+            LoadStoreOp::Store => unreachable!(),
+        }
+    }
+    pub(crate) fn to_vk_store(&self) -> vk::AttachmentStoreOp {
+        match self {
+            LoadStoreOp::DontCare => vk::AttachmentStoreOp::DONT_CARE,
+            LoadStoreOp::Store => vk::AttachmentStoreOp::STORE,
+            LoadStoreOp::Clear => unreachable!(),
+            LoadStoreOp::Load => unreachable!(),
+        }
+    }
+}
+
+impl PartialEq for LoadStoreOp {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (LoadStoreOp::DontCare, LoadStoreOp::DontCare) => true,
+            (LoadStoreOp::Clear, LoadStoreOp::Clear) => true,
+            (LoadStoreOp::Load, LoadStoreOp::Load) => true,
+            (LoadStoreOp::Store, LoadStoreOp::Store) => true,
+            _ => false,
+        }
+    }
+}
+
+pub struct AttachmentDescription<'lt> {
+    pub images: Option<&'lt Ring<Image>>, // Option ring of Images
     pub load: LoadStoreOp,
     pub store: LoadStoreOp,
     pub sload: LoadStoreOp,
@@ -46,77 +77,137 @@ pub struct AttachmentDescription {
 }
 
 // Structure for SubpassAttachments
-pub struct SubpassAttachments {
-    pub pipes: Vec<RasterPipe>,
-    pub a_input: Vec<Vec<Image>>, // Input images for the subpass
-    pub a_color: Vec<Vec<Image>>, // Color images for the subpass
-    pub a_depth: Vec<Image>,         // Depth image for the subpass
+// everything is a a pointer to be able to compare them later
+pub struct SubpassDescription<'lt> {
+    pub pipes: &'lt mut [&'lt mut RasterPipe],
+    pub a_input: &'lt [Option<&'lt Ring<Image>>],    // Input images for the subpass
+    pub a_color: &'lt [Option<&'lt Ring<Image>>],    // Color images for the subpass
+    pub a_depth: Option<&'lt Ring<Image>>,           // Depth image for the subpass
 }
 
 // Structure for SubpassAttachmentRefs
+#[derive(Clone, Default, Debug)]
 pub struct SubpassAttachmentRefs {
     pub a_input: Vec<vk::AttachmentReference>,
     pub a_color: Vec<vk::AttachmentReference>,
-    pub a_depth: vk::AttachmentReference,
+    // using Option is unconvenient because we need to point'er it afterwards. But still
+    pub a_depth: Option<vk::AttachmentReference>,
 }
+
 // Enum for RelativeDescriptorPos (relative descriptor positions)
+#[derive(Clone, Copy, Debug)]
 pub enum RelativeDescriptorPos {
-    RDNone,     // What?
-    RDPrevious, // Relative Descriptor position previous - for accumulators
-    RDCurrent,  // Relative Descriptor position matching - common CPU-paired
-    RDFirst,    // Relative Descriptor position first - for GPU-only
+    NotPresented,     // What?
+    Previous, // Relative Descriptor position previous - for accumulators
+    Current,  // Relative Descriptor position matching - common CPU-paired
+    First,    // Relative Descriptor position first - for GPU-only
 }
 
 // Structure for ShaderStage
 pub struct ShaderStage {
-    pub src: *const i8,              // Source code as a C string (raw pointer)
+    pub src: &'static str,           // Source code as a string (raw pointer)
     pub stage: vk::ShaderStageFlags, // Shader stage flags
 }
 
+pub struct AttrFormOffs {
+    pub format: vk::Format,
+    pub offset: usize,
+}
+
 // Structure for DescriptorInfo
+#[derive(Clone, Debug)]
 pub struct DescriptorInfo {
     pub descriptor_type: vk::DescriptorType,
     pub relative_pos: RelativeDescriptorPos,
-    pub buffers: Option<Vec<Buffer>>, // Option ring of Buffers
-    pub images: Option<Vec<Image>>,   // Option ring of Images
+    pub buffers: Option<Ring<Buffer>>, // Option ring of Buffers
+    pub images: Option<Ring<Image>>,   // Option ring of Images
     pub image_sampler: vk::Sampler,
     pub image_layout: vk::ImageLayout, // Image layout for use (not current)
-    pub stages: vk::ShaderStageFlags,  // Shader stages
+    pub specified_stages: vk::ShaderStageFlags,  // Shader stages
 }
-
+impl Default for DescriptorInfo {
+    fn default() -> Self {
+        Self {
+            descriptor_type: Default::default(),
+            relative_pos: RelativeDescriptorPos::NotPresented,
+            buffers: Default::default(),
+            images: Default::default(),
+            image_sampler: Default::default(),
+            image_layout: Default::default(),
+            specified_stages: Default::default(),
+        }
+    }
+}
+impl DescriptorInfo {
+    pub fn make_new(
+        descriptor_type: vk::DescriptorType,
+        relative_pos: RelativeDescriptorPos,
+        buffers: Option<Ring<Buffer>>, // Option ring of Buffers
+        images: Option<Ring<Image>>,   // Option ring of Images
+        image_sampler: vk::Sampler,
+        image_layout: vk::ImageLayout, // Image layout for use (not current)
+        stages: vk::ShaderStageFlags,  // Shader stages
+    ) -> Self {
+        Self {
+            descriptor_type: descriptor_type,
+            relative_pos,
+            buffers,
+            images,
+            image_sampler,
+            image_layout: image_layout,
+            specified_stages: stages,
+        }
+    }
+}
 // Structure for ShortDescriptorInfo
 pub struct ShortDescriptorInfo {
     pub descriptor_type: vk::DescriptorType,
     pub stages: vk::ShaderStageFlags,
 }
 
-// Structure for DelayedDescriptorSetup
-pub struct DelayedDescriptorSetup {
-    pub set_layout: *mut vk::DescriptorSetLayout, // Pointer to descriptor set layout
-    pub sets: Option<Vec<vk::DescriptorSet>>, // Option ring of descriptor sets
-    pub descriptions: Vec<DescriptorInfo>,     // Descriptors
-    pub stages: vk::ShaderStageFlags,
-    pub create_flags: vk::DescriptorSetLayoutCreateFlags, // Create flags
-}
-
 impl LumalRenderer {
     /// immediately creates vulkan descriptor set layout
-    pub unsafe fn create_descriptor_set_layout(
-        &self,
-        descriptor_infos: Vec<ShortDescriptorInfo>,
+    pub fn create_descriptor_set_layout(
+        &mut self,
+        descriptor_infos: &[ShortDescriptorInfo],
         layout: &mut vk::DescriptorSetLayout,
         flags: vk::DescriptorSetLayoutCreateFlags,
     ) {
         let bindings: Vec<vk::DescriptorSetLayoutBinding> = descriptor_infos
             .iter()
             .enumerate()
-            .map(|(i, info)| vk::DescriptorSetLayoutBinding {
-                binding: i as u32,
-                descriptor_type: info.descriptor_type,
-                descriptor_count: 1,
-                stage_flags: info.stages,
-                ..Default::default()
-            })
+            .map(|(i, info)| {
+                macro_rules! make_descriptor_type {
+                    ($name:ident) => {
+                            self.descriptor_counter.$name += 1
+                    };
+                }
+                match info.descriptor_type {
+                    vk::DescriptorType::SAMPLER => make_descriptor_type!(SAMPLER),
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER => make_descriptor_type!(COMBINED_IMAGE_SAMPLER),
+                    vk::DescriptorType::SAMPLED_IMAGE => make_descriptor_type!(SAMPLED_IMAGE),
+                    vk::DescriptorType::STORAGE_IMAGE => make_descriptor_type!(STORAGE_IMAGE),
+                    vk::DescriptorType::UNIFORM_TEXEL_BUFFER => make_descriptor_type!(UNIFORM_TEXEL_BUFFER),
+                    vk::DescriptorType::STORAGE_TEXEL_BUFFER => make_descriptor_type!(STORAGE_TEXEL_BUFFER),
+                    vk::DescriptorType::UNIFORM_BUFFER => make_descriptor_type!(UNIFORM_BUFFER),
+                    vk::DescriptorType::STORAGE_BUFFER => make_descriptor_type!(STORAGE_BUFFER),
+                    vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC => make_descriptor_type!(UNIFORM_BUFFER_DYNAMIC),
+                    vk::DescriptorType::STORAGE_BUFFER_DYNAMIC => make_descriptor_type!(STORAGE_BUFFER_DYNAMIC),
+                    vk::DescriptorType::INPUT_ATTACHMENT => make_descriptor_type!(INPUT_ATTACHMENT),
+                    _ => {
+                        panic!("Unknown descriptor type");
+                    }
+                }
+                
+                vk::DescriptorSetLayoutBinding {
+                    binding: i as u32,
+                    descriptor_type: info.descriptor_type,
+                    descriptor_count: 1,
+                    stage_flags: info.stages,
+                    ..Default::default()
+                }
+            }
+            )
             .collect();
 
         let layout_info = vk::DescriptorSetLayoutCreateInfo {
@@ -128,9 +219,9 @@ impl LumalRenderer {
         };
         
         // actually create layout and write it to ptr 
-        *layout = self.device
+        *layout = unsafe { self.device
             .create_descriptor_set_layout(&layout_info, None)
-            .expect("Failed to create descriptor set layout");
+            .expect("Failed to create descriptor set layout") };
     }
 
     pub unsafe fn create_descriptor_pool(&self) -> Result<vk::DescriptorPool> {
@@ -162,7 +253,7 @@ impl LumalRenderer {
             s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
             pool_size_count: pool_sizes.len() as u32,
             pool_sizes: pool_sizes.as_ptr(),
-            max_sets: self.descriptor_sets_count * self.settings.fif as u32,
+            max_sets: self.descriptor_sets_count * self.settings.fif as u32,  
             ..Default::default()
         };
 
@@ -171,12 +262,12 @@ impl LumalRenderer {
     }
 
     pub unsafe fn allocate_descriptor(
-        &self,
-        sets: &mut Vec<vk::DescriptorSet>,
+        device: Device,
+        // sets: &mut Vec<vk::DescriptorSet>,
         layout: vk::DescriptorSetLayout,
         pool: vk::DescriptorPool,
-        count: usize,
-    ) {
+        count: usize, ) -> Ring<vk::DescriptorSet> 
+    {
         let layouts = vec![layout; count];
         let alloc_info = vk::DescriptorSetAllocateInfo {
             s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -186,22 +277,24 @@ impl LumalRenderer {
             ..Default::default()
         };
 
-        *sets = self
-            .device
-            .allocate_descriptor_sets(&alloc_info)
-            .expect("Failed to allocate descriptor sets");
+        let mut ring = Ring::new(count, vk::DescriptorSet::null());
+        // return
+        let vec = device.allocate_descriptor_sets(&alloc_info)
+              .expect("Failed to allocate descriptor sets");
+        for (i,v) in vec.iter().enumerate() {
+            ring[i] = *v;            
+        }
+        return ring;
     }
-
-    pub fn reset_descriptor_setup(&mut self) {
-        self.delayed_descriptor_setups.clear();
-    }
-
-    pub fn defer_descriptor_setup(
+    
+    // Tell the LumalRenderer that such descriptor will be setup
+    // basically counts needed resources to then allocate them
+    pub fn anounce_descriptor_setup(
         &mut self,
         dset_layout: & mut vk::DescriptorSetLayout,
-        descriptor_sets: & mut Vec<vk::DescriptorSet>,
-        descriptions: Vec<DescriptorInfo>,
-        base_stages: vk::ShaderStageFlags,
+        descriptor_sets: &mut Ring<vk::DescriptorSet>, // Ring to setup into (some setup happens immediately on anounce)
+        descriptions: &[DescriptorInfo], 
+        default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
     ) {
         if *dset_layout == vk::DescriptorSetLayout::null() {
@@ -209,127 +302,135 @@ impl LumalRenderer {
                 .iter()
                 .map(|desc| ShortDescriptorInfo {
                     descriptor_type: desc.descriptor_type,
-                    stages: if desc.stages.is_empty() {
-                        base_stages
+                    stages: if desc.specified_stages.is_empty() {
+                        default_stages
                     } else {
-                        desc.stages
+                        desc.specified_stages
                     },
                 })
                 .collect();
             unsafe {
                 // actually create layout and write it to ptr 
-                self.create_descriptor_set_layout(descriptor_infos, dset_layout, create_flags);
+                self.create_descriptor_set_layout(&descriptor_infos, dset_layout, create_flags);
             }
         }
 
-        self.descriptor_sets_count += self.settings.fif as u32; // cuase dset per fif
-        self.delayed_descriptor_setups.push(
-            DelayedDescriptorSetup {
-                set_layout: dset_layout,
-                sets: Some(descriptor_sets.to_vec()),
-                descriptions: descriptions,
-                stages: base_stages,
-                create_flags,
-            }
-        );
+        self.descriptor_sets_count += ((MAX_FRAMES_IN_FLIGHT*1) as u32); // cuase dset per fif
     }
 }
 
 
-// impl LumalRenderer {
-//     // defer is just a request, this is an actual logic
-//     pub unsafe fn actually_setup_descriptor(
-//         &self,
-//         dset_layout: &vk::DescriptorSetLayout,
-//         descriptor_sets: &mut Vec<vk::DescriptorSet>,
-//         descriptions: &[DescriptorInfo],
-//         stages: vk::ShaderStageFlags,
-//     ) {
-//         for frame_i in 0..descriptor_sets.len() {
-//             let previous_frame_i = if frame_i == 0 {
-//                 self.settings.fif as usize - 1
-//             } else {
-//                 frame_i - 1
-//             };
+impl LumalRenderer {
+    // anounce is just a request, this is an actual logic
+    pub unsafe fn actually_setup_descriptor_impl(
+        descriptor_pool: &vk::DescriptorPool,
+        settings: &LumalSettings,
+        device: &Device,
+        dset_layout: &vk::DescriptorSetLayout,
+        descriptor_sets: &mut Ring<vk::DescriptorSet>,
+        descriptions: &[DescriptorInfo],
+        stages: vk::ShaderStageFlags,
+    ) {
+        *descriptor_sets = Ring::new(MAX_FRAMES_IN_FLIGHT, vk::DescriptorSet::null());
+        let dset_layouts = vec![*dset_layout; MAX_FRAMES_IN_FLIGHT];
+        for frame_i in 0..MAX_FRAMES_IN_FLIGHT {
+            descriptor_sets[frame_i] = device.allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
+                s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+                descriptor_pool: *descriptor_pool,
+                descriptor_set_count: MAX_FRAMES_IN_FLIGHT as u32,
+                set_layouts: dset_layouts.as_ptr(),
+                next: null(),
+            }).unwrap()[0];
+        }
+        assert!(descriptor_sets.len() == MAX_FRAMES_IN_FLIGHT);
+        for frame_i in 0..descriptor_sets.len() {
+            let previous_frame_i = 
+                if frame_i == 0 
+                    {settings.fif - 1} 
+                else 
+                    {frame_i - 1};
 
-//             let mut image_infos = vec![vk::DescriptorImageInfo::default(); descriptions.len()];
-//             let mut buffer_infos = vec![vk::DescriptorBufferInfo::default(); descriptions.len()];
-//             let mut writes = vec![vk::WriteDescriptorSet::default(); descriptions.len()];
+            let mut image_infos = vec![vk::DescriptorImageInfo::default(); descriptions.len()];
+            let mut buffer_infos = vec![vk::DescriptorBufferInfo::default(); descriptions.len()];
+            let mut writes = vec![vk::WriteDescriptorSet::default(); descriptions.len()];
 
-//             for (i, desc) in descriptions.iter().enumerate() {
-//                 writes[i] = vk::WriteDescriptorSet {
-//                     s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-//                     dst_set: descriptor_sets[frame_i],
-//                     dst_binding: i as u32,
-//                     dst_array_element: 0,
-//                     descriptor_count: 1,
-//                     descriptor_type: desc.descriptor_type,
-//                     ..Default::default()
-//                 };
+            for (i, desc) in descriptions.iter().enumerate() {
+                writes[i] = vk::WriteDescriptorSet {
+                    s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+                    dst_set: descriptor_sets[frame_i],
+                    dst_binding: i as u32,
+                    dst_array_element: 0,
+                    descriptor_count: 1,
+                    descriptor_type: desc.descriptor_type,
+                    ..Default::default()
+                };
 
-//                 let descriptor_frame_id = match desc.relative_pos {
-//                     RelativeDescriptorPos::RDCurrent => frame_i,
-//                     RelativeDescriptorPos::RDPrevious => previous_frame_i,
-//                     RelativeDescriptorPos::RDFirst => 0,
-//                     RelativeDescriptorPos::RDNone => {
-//                         writes[i].descriptor_count = 0;
-//                         continue;
-//                     }
-//                 };
+                let descriptor_frame_id = match desc.relative_pos {
+                    RelativeDescriptorPos::Current => frame_i,
+                    RelativeDescriptorPos::Previous => previous_frame_i,
+                    RelativeDescriptorPos::First => 0,
+                    RelativeDescriptorPos::NotPresented => {
+                        writes[i].descriptor_count = 0;
+                        continue;
+                    }
+                };
 
-//                 if let Some(images) = &desc.images {
-//                     assert!(images[descriptor_frame_id].view != vk::ImageView::null());
-//                     image_infos[i] = vk::DescriptorImageInfo {
-//                         image_view: images[descriptor_frame_id].view,
-//                         image_layout: desc.image_layout,
-//                         sampler: desc.image_sampler.unwrap_or(vk::Sampler::null()),
-//                     };
-//                     writes[i].p_image_info = &image_infos[i];
+                if let Some(images) = &desc.images {
+                    assert!(images[descriptor_frame_id].view != vk::ImageView::null());
+                    image_infos[i] = vk::DescriptorImageInfo {
+                        image_view: images[descriptor_frame_id].view,
+                        image_layout: desc.image_layout,
+                        sampler: desc.image_sampler,
+                    };
+                    writes[i].image_info = &image_infos[i];
 
-//                     assert!(desc.buffers.is_none());
-//                     if desc.image_sampler.is_some()
-//                         && desc.descriptor_type != vk::DescriptorType::COMBINED_IMAGE_SAMPLER
-//                     {
-//                         panic!("Descriptor has sampler but type is not for sampler");
-//                     }
-//                 } else if let Some(buffers) = &desc.buffers {
-//                     buffer_infos[i] = vk::DescriptorBufferInfo {
-//                         buffer: buffers[descriptor_frame_id].buffer,
-//                         offset: 0,
-//                         range: vk::WHOLE_SIZE,
-//                     };
-//                     writes[i].p_buffer_info = &buffer_infos[i];
-//                 } else {
-//                     panic!("Unknown descriptor type");
-//                 }
-//             }
+                    assert!(desc.buffers.is_none());
+                    if desc.image_sampler != vk::Sampler::null() && desc.descriptor_type != vk::DescriptorType::COMBINED_IMAGE_SAMPLER {
+                        panic!("Descriptor has sampler but type is not for sampler");
+                    }
+                } else if let Some(buffers) = &desc.buffers {
+                    buffer_infos[i] = vk::DescriptorBufferInfo {
+                        buffer: buffers[descriptor_frame_id].buffer,
+                        offset: 0,
+                        range: vk::WHOLE_SIZE as u64,
+                    };
+                    writes[i].buffer_info = &buffer_infos[i];
+                } else {
+                    panic!("Unknown descriptor type");
+                }
+            }
 
-//             self.device.update_descriptor_sets(&writes, &[]);
-//         }
-//     }
+            device.update_descriptor_sets(&writes, &[] as &[vk::CopyDescriptorSet]);
+        }
+    }
 
-//     pub unsafe fn flush_descriptor_setup(&mut self) {
-//         // create vulkan descriptor pool
-//         self.vulkan_data.descriptor_pool = self.create_descriptor_pool()?;
-        
-//         // create descriptor sets. Layouts are alredy created
-//         for setup in &self.delayed_descriptor_setups {
-//             if let Some(sets) = &setup.sets {
-//                 if sets.is_empty() {
-//                     self.allocate_descriptor(
-//                         &mut sets,
-//                         *setup.set_layout,
-//                         self.v.unwrap(),
-//                         self.settings.fif as usize,
-//                     );
-//                 }
-//                 self.actually_setup_descriptor(
-//                     setup.set_layout,
-//                     sets,
-//                     &setup.descriptions,
-//                     setup.stages,
-//                 );
-//             }
-//         }
-//     }
-// }
+    pub unsafe fn flush_descriptor_setup(&mut self) -> Result<()> {
+        // (actually) create Vulkan descriptor pool
+        self.vulkan_data.descriptor_pool = self.create_descriptor_pool()?;
+    
+        Ok(())
+    }
+
+    pub fn acutally_setup_descriptor(
+        &mut self,
+        dset_layout: & mut vk::DescriptorSetLayout,
+        descriptor_sets: &mut Ring<vk::DescriptorSet>, // Ring to setup into
+        descriptions: &[DescriptorInfo], 
+        default_stages: vk::ShaderStageFlags,
+        create_flags: vk::DescriptorSetLayoutCreateFlags,
+    ) {
+        // actually setup descriptor
+        unsafe {
+            Self::actually_setup_descriptor_impl(
+                &self.vulkan_data.descriptor_pool,
+                &self.settings,
+                &self.device,
+                &mut *dset_layout,
+                descriptor_sets,
+                descriptions,
+                default_stages,
+            );
+        }
+    }
+    
+}

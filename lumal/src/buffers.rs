@@ -7,7 +7,7 @@ use vulkanalia_vma::{self as vma};
 use vulkanalia_vma::Alloc;
 
 impl LumalRenderer {
-    pub fn create_buffer_storage(
+    pub fn create_buffer(
         &self,
         usage: vk::BufferUsageFlags,
         size: usize,
@@ -45,7 +45,7 @@ impl LumalRenderer {
         };
 
         let (vk_buffer, allocation) = unsafe { self
-            .allocator
+            .allocator.as_ref().unwrap()
             .create_buffer(buffer_info, &alloc_info) }?;
 
         Ok(Buffer {
@@ -56,7 +56,7 @@ impl LumalRenderer {
     }
 
     // creates ring of vulkan buffers. Optionally maps
-    pub fn create_buffer_storages(
+    pub fn create_buffer_rings(
         &self,
         ring_size: usize,
         usage: vk::BufferUsageFlags,
@@ -68,7 +68,7 @@ impl LumalRenderer {
 
         // Initialize each image and push to the vector.
         for _ in 0..ring_size {
-            let buffer = self.create_buffer_storage(
+            let buffer = self.create_buffer(
                 usage,
                 biffer_size,
                 host,
@@ -81,5 +81,22 @@ impl LumalRenderer {
             data: buffers,
             index: 0,
         })
+    }
+
+    pub fn destroy_buffer(&self, buf: &Buffer){
+        unsafe { 
+            // unmap if mapped
+            match buf.mapped {
+                Some(_) => self.allocator.as_ref().unwrap().unmap_memory(buf.allocation),
+                None => {}, // do nothing
+            }
+            self.allocator.as_ref().unwrap().destroy_buffer(buf.buffer, buf.allocation); 
+        };
+    }
+
+    pub fn destroy_buffer_ring(&self, buffers: &Ring<Buffer>){
+        for buf in buffers {
+            self.destroy_buffer(buf);
+        }
     }
 }

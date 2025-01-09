@@ -4,7 +4,7 @@ fn empty_arr<T>() -> &'static [T] {
 }
 
 use vk::MemoryBarrier;
-use vulkanalia::prelude::v1_0::*;
+use vulkanalia::prelude::v1_3::*;
 use crate::{Image, LumalRenderer};
 
 

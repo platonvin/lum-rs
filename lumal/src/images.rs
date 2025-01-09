@@ -1,22 +1,13 @@
-use crate::{debug_callback, DescriptorCounter};
-use crate::{create_command_buffers, create_command_pool, create_logical_device, create_swapchain, create_swapchain_image_views, create_sync_objects, pick_physical_device, ring::Ring, Buffer, LumalRenderer, LumalSettings, VulkanData, PORTABILITY_MACOS_VERSION, VALIDATION_LAYER}; // Import the LumalRenderer struct
+use crate::{ring::Ring, LumalRenderer}; // Import the LumalRenderer struct
 use crate::Image;
-use std::{collections::HashSet, ptr};
+use std::ptr::{self};
 use anyhow::*; 
-use vulkanalia::vk::{self, DeviceV1_0, KhrSurfaceExtension, KhrSwapchainExtension};
-
-use vulkanalia::loader::{LibloadingLoader, LIBRARY};
-use vulkanalia::prelude::v1_0::*;
-use vulkanalia::window as vk_window;
+use vulkanalia::vk::{self, DeviceV1_0};
 use vulkanalia_vma::{self as vma};
 use vulkanalia_vma::Alloc;
-use winit::dpi::LogicalSize;
-use winit::event_loop::EventLoop;
-use winit::window::{Window, WindowBuilder};
-use Vec as vector;
 
 impl LumalRenderer {
-    pub fn create_image_storage(
+    pub fn create_image(
         &self,
         image_type: vk::ImageType,
         format: vk::Format,
@@ -59,7 +50,7 @@ impl LumalRenderer {
         };
 
         let (vk_image, allocation) = unsafe { self
-            .allocator
+            .allocator.as_ref().unwrap()
             .create_image(image_info, &alloc_info) }?;
 
         let image_image = vk_image;
@@ -126,7 +117,7 @@ impl LumalRenderer {
             mip_levels: image_mip_levels,
         })
     }
-    pub fn create_image_storages(
+    pub fn create_image_ring(
         &self,
         size: usize,
         image_type: vk::ImageType,
@@ -144,7 +135,7 @@ impl LumalRenderer {
 
         // Initialize each image and push to the vector.
         for _ in 0..size {
-            let image = self.create_image_storage(
+            let image = self.create_image(
                 image_type,
                 format,
                 usage,
@@ -163,6 +154,19 @@ impl LumalRenderer {
             data: images,
             index: 0,
         })
+    }
+
+    pub fn destroy_image(&self, img: &Image){
+        unsafe { 
+            self.device.destroy_image_view(img.view, None);
+            self.allocator.as_ref().unwrap().destroy_image(img.image, img.allocation); 
+        };
+    }
+    
+    pub fn destroy_image_ring(&self, images: &Ring<Image>){
+        for img in images {
+            self.destroy_image(img);
+        }
     }
 }
 // }

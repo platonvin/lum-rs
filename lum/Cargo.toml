@@ -4,13 +4,16 @@ version = "0.1.4"
 edition = "2021"
 
 [dependencies]
-lumal = { path = "../lumal" }  # Dependency on lumal crate (low-level Vulkan wrapper)
+lumal = { path = "../lumal" }  # Dependency on lumal crate (lum' abstraction layer over vulkan)
 vulkanalia = { version = "0.25.0", features = ["libloading", "provisional", "window"] }
 vulkanalia-vma = { version = "0.2.0" }
-winit = "0.29"
-euler = "0.4.1"
+winit = "0.30.8"
 anyhow = "1"
-glam = "0.29.2"
+vek = "0.17.1"
+log = "0.4.22"
+
+[build-dependencies]
+cc = "1.0"
 
 [lib]
 name = "lum"

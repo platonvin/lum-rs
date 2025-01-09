@@ -2,3 +2,5 @@
 /.idea
 lumal/shaders/frag.spv
 lumal/shaders/vert.spv
+/temp.md
+*.spv

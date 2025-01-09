@@ -1,0 +1,19 @@
+[alias]     # command aliases
+b = "build"
+c = "check"
+t = "test"
+r = "run"
+rr = "run --release"
+brr = "run --release"
+recursive_example = "rr --example recursions"
+space_example = ["run", "--release", "--", "\"command list\""]
+
+[build]
+rustflags = [
+    # "-C", "target-cpu=native",      # Optimize for the local CPU
+    "-C", "link-arg=-fuse-ld=lld", # Use LLVM's lld linker
+    # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+]
+
+[env]
+RUST_BACKTRACE = "1"

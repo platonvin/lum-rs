@@ -6,12 +6,28 @@ members = [
     "examples",  # example programs
 ]
 
-[profile.release]
-opt-level = "z"
-panic = "abort"
-strip = "symbols"
-codegen-units = 1
-lto = "fat"
-debuginfo = "0"
-size-level = "2"
+[profile.dev]
+opt-level = 1
+codegen-units = 16
+lto = "off"
 overflow-checks = true
+incremental = true
+
+[profile.release]
+opt-level = "s"
+panic = "unwind"
+codegen-units = 1     # TODO: when release only needed
+lto = "thin"
+overflow-checks = true # TODO: 
+# Array bound checks
+
+[profile.dev.package."lum"]
+opt-level = 0
+incremental = true
+
+[profile.dev.package."lumal"]
+opt-level = 0
+incremental = true
+
+[profile.release.package."lum"]
+opt-level = 3

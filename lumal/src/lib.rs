@@ -1,33 +1,47 @@
-#![allow(clippy::missing_safety_doc)]
+#![allow(dead_code, unused)]
+#![allow(unused_parens)]
 
 // lumal is divided into files (aka modules)
 // this in needed for whole thing to compile
-pub mod create_buffer_storages;
-pub mod create_image_storages;
+// Rust is so good that figuring it out only took 1 hour
+pub mod buffers;
+pub mod images;
 pub mod descriptors;
-pub mod ring; // circular vector
-pub mod ops;
+pub mod ring; // circular Vec
+pub mod blit_copy;
+pub mod pipes;
+pub mod file_reading;
+pub mod rpass;
+pub mod macros;
+pub mod samplers;
+pub mod barriers;
+pub mod renderer;
 
 use anyhow::{anyhow, Ok, Result};
-use cgmath::{vec2, vec4};
-use descriptors::DelayedDescriptorSetup;
 use ring::Ring;
-use std::collections::HashSet;
+
+use std::{collections::HashSet, default};
 use std::ffi::CStr;
 use std::mem::{size_of, size_of_val};
 use std::os::raw::c_void;
 use std::ptr::copy_nonoverlapping as memcpy;
-use std::{cell::RefCell, process::exit};
+use std::process::exit;
 use vulkanalia::{bytecode::Bytecode, loader::{LibloadingLoader, LIBRARY}};
-use vulkanalia::prelude::v1_0::*;
+use vulkanalia::prelude::v1_3::*;
 use vulkanalia::Version;
 use vulkanalia_vma::{self as vma};
-use winit::{dpi::LogicalSize, event_loop::EventLoop, window::WindowBuilder};
+use winit::{application::ApplicationHandler, dpi::LogicalSize, event::{DeviceEvent, DeviceId, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::{WindowAttributes, WindowId}};
 use winit::window::Window;
 use Option as optional;
-use Vec as vector;
 
-use vk::{KhrSurfaceExtension, KhrSwapchainExtension};
+// pub struct LumalDescriptorType (vk::DescriptorType);
+
+// #[derive(Clone)]
+// pub struct LumalShaderStageFlags (vk::ShaderStageFlags);
+
+// pub struct LumalImageLayout (vk::ImageLayout);
+
+use vk::{InputChainStruct, KhrSurfaceExtension, KhrSwapchainExtension};
 
 /// The required instance and device layer if validation is enabled.
 const VALIDATION_LAYER: vk::ExtensionName =
@@ -37,6 +51,8 @@ const VALIDATION_LAYER: vk::ExtensionName =
 const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[
     vk::KHR_SWAPCHAIN_EXTENSION.name,
     vk::EXT_HOST_QUERY_RESET_EXTENSION.name,
+    vk::KHR_PUSH_DESCRIPTOR_EXTENSION.name,
+    // vk::
 ];
 /// The Vulkan SDK version that started requiring the portability subset extension for macOS.
 const PORTABILITY_MACOS_VERSION: Version = Version::new(1, 3, 216);
@@ -44,62 +60,116 @@ const PORTABILITY_MACOS_VERSION: Version = Version::new(1, 3, 216);
 /// The number of frames that will be processed concurrently.
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
+#[derive(Clone, Debug)]
 pub struct Buffer {
     pub buffer: vk::Buffer,
     pub allocation: vma::Allocation,
     pub mapped: Option<*mut u8>, // If allocation is mapped
 }
+impl Default for Buffer {
+    fn default() -> Self {
+        Self { buffer: Default::default(), allocation: unsafe { std::mem::zeroed() }, mapped: Default::default() }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Image {
     pub image: vk::Image,
     pub allocation: vma::Allocation,
     pub view: vk::ImageView,              // Main view
-    pub mip_views: vector<vk::ImageView>, // Vector for mip views
+    pub mip_views: Vec<vk::ImageView>, // Vec for mip views
     pub format: vk::Format,
     pub aspect: vk::ImageAspectFlags,
     pub extent: vk::Extent3D,
     pub mip_levels: u32,
 }
+impl Default for Image {
+    fn default() -> Self {
+        Self { image: Default::default(), allocation: unsafe { std::mem::zeroed() }, view: Default::default(), mip_views: Default::default(), format: Default::default(), aspect: Default::default(), extent: Default::default(), mip_levels: Default::default() }
+    }
+}
 
 // Structure for ImageDeletion
+#[derive(Default, Clone)]
 pub struct ImageDeletion {
     pub image: Image,
     pub lifetime: i32,
 }
 
 // Structure for BufferDeletion
+#[derive(Default, Clone)]
 pub struct BufferDeletion {
     pub buffer: Buffer,
     pub lifetime: i32,
 }
 
 // Structure for RasterPipe (Graphics pipeline)
+// #[derive(Default)]
+#[derive(Clone)]
 pub struct RasterPipe {
     pub line: vk::Pipeline,
     pub line_layout: vk::PipelineLayout,
-    pub sets: vector<vk::DescriptorSet>,
+    // WHERE IS MY FUCKING DEFAULT VALUE WHY NO ONE WRITES BINDINGS THAT JUST WORK
+    pub sets: Ring<vk::DescriptorSet>,
     pub set_layout: vk::DescriptorSetLayout,
     pub render_pass: vk::RenderPass, // We don't need to store it in here but why not
     pub subpass_id: i32,
 }
+impl RasterPipe {
+    pub fn as_mut_ptr(&self) -> *mut RasterPipe {
+        return self as *const RasterPipe as *mut RasterPipe;
+    }
+    
+    // fn as_mut(&self) -> &mut RasterPipe {
+    //     unsafe { &mut *self.as_mut_ptr() }
+    // }
+}
+impl Default for RasterPipe {
+    fn default() -> Self {
+        Self { 
+            sets: Ring::new(0, vk::DescriptorSet::null()),
+            line: Default::default(), 
+            line_layout: Default::default(), 
+            set_layout: Default::default(), 
+            render_pass: Default::default(), 
+            subpass_id: Default::default() 
+        }
+    }
+}
 
 // Structure for ComputePipe (Compute pipeline)
+// #[derive(Default)]
+#[derive(Clone)]
 pub struct ComputePipe {
     pub line: vk::Pipeline,
     pub line_layout: vk::PipelineLayout,
-    pub sets: vector<vk::DescriptorSet>,
+    pub sets: Ring<vk::DescriptorSet>,
     pub set_layout: vk::DescriptorSetLayout,
+}
+impl Default for ComputePipe {
+    fn default() -> Self {
+        Self { line: Default::default(), line_layout: Default::default(), sets: Ring::new(0, vk::DescriptorSet::null()), set_layout: Default::default() }
+    }
 }
 
 // Structure for RenderPass
+#[derive(Clone, Debug)]
 pub struct RenderPass {
-    pub clear_colors: vector<vk::ClearValue>,  // Colors to clear
-    pub framebuffers: vector<vk::Framebuffer>, // Framebuffers for the pass
+    pub clear_colors: Vec<vk::ClearValue>,  // Colors to clear
+    pub framebuffers: Ring<vk::Framebuffer>, // Framebuffers for the pass
     pub extent: vk::Extent2D,                  // Extent of the render pass
     pub render_pass: vk::RenderPass,           // The actual RenderPass object
 }
 
+impl Default for RenderPass {
+    fn default() -> Self {
+        Self { clear_colors: Default::default(), framebuffers: Ring::new(0, vk::Framebuffer::default()), extent: Default::default(), render_pass: Default::default() }
+    }
+}
+
 
 // Structure for Window
+// #[derive(Clone, Default)]
 pub struct LumalWindow {
     // pub pointer: *mut glfw::ffi::GLFWwindow, // GLFW window pointer
     pub pointer: *mut winit::window::Window,
@@ -122,8 +192,8 @@ impl LumalQueueFamilyIndices {
 // Structure for SwapChainSupportDetails
 pub struct SwapChainSupportDetails {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
-    pub formats: vector<vk::SurfaceFormatKHR>,
-    pub present_modes: vector<vk::PresentModeKHR>,
+    pub formats: Vec<vk::SurfaceFormatKHR>,
+    pub present_modes: Vec<vk::PresentModeKHR>,
 }
 
 impl SwapChainSupportDetails {
@@ -133,7 +203,7 @@ impl SwapChainSupportDetails {
 }
 
 // Structure for Settings
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct LumalSettings {
     pub timestamp_count: i32,
     pub fif: usize,
@@ -146,9 +216,9 @@ pub struct LumalSettings {
     pub device_features12: vk::PhysicalDeviceVulkan12Features,
     pub physical_features2: vk::PhysicalDeviceFeatures2,
 
-    pub instance_layers: vector<*const i8>,
-    pub instance_extensions: vector<*const i8>,
-    pub device_extensions: vector<*const i8>,
+    // pub instance_layers: Vec<*const i8>,
+    // pub instance_extensions: Vec<*const i8>,
+    // pub device_extensions: Vec<*const i8>,
 }
 impl LumalSettings {
     pub fn create_default() -> LumalSettings {
@@ -163,14 +233,15 @@ impl LumalSettings {
             device_features11: vk::PhysicalDeviceVulkan11Features::default(),
             device_features12: vk::PhysicalDeviceVulkan12Features::default(),
             physical_features2: vk::PhysicalDeviceFeatures2::default(),
-            instance_layers: vec![],
-            instance_extensions: vec![],
-            device_extensions: vec![],
+            // instance_layers: vec![],
+            // instance_extensions: vec![],
+            // device_extensions: vec![],
         };
     }
 }
 
 #[allow(non_snake_case)]
+#[derive(Debug, Clone, Copy)]
 pub struct DescriptorCounter {
     pub COMBINED_IMAGE_SAMPLER: u32,
     pub INPUT_ATTACHMENT: u32,
@@ -185,8 +256,8 @@ pub struct DescriptorCounter {
     pub UNIFORM_TEXEL_BUFFER: u32,
 }
 
-impl DescriptorCounter {
-    pub fn default() -> DescriptorCounter{
+impl Default for DescriptorCounter {
+    fn default() -> DescriptorCounter{
         return DescriptorCounter {
             COMBINED_IMAGE_SAMPLER: 0,
             INPUT_ATTACHMENT: 0,
@@ -203,33 +274,68 @@ impl DescriptorCounter {
     }
 }
 
-// Define the Renderer struct
+#[derive(Debug)]
 pub struct LumalRenderer {
     // pub custom_data: Option<T>,
-    pub allocator: vma::Allocator,
+    pub allocator: Option<vma::Allocator>,
+    
     pub settings: LumalSettings,
     pub vulkan_data: VulkanData,
-    pub event_loop: Option<EventLoop<()>>,
-    pub window: Window,
-    pub entry: Entry,
-    pub instance: Instance,
-    pub device: Device,
-    pub frame: usize,
-    pub resized: bool,
+    pub event_loop: Option<EventLoop<MyUserEvent>>,
+    pub window: Window, // winit window
+    pub entry: Entry, // internal Vulkanalia entry point
+    pub instance: Instance, // wrapper around vk::Instance. TODO: custom vulkan al wrapper (barebone)
+    pub device: Device, // wrapper around vk::Device. TODO: custom vulkan al wrapper (barebone)
+    pub frame: usize, // global counter of rendered frame, mostly for internal use
+    pub image_index: u32,
+    pub should_recreate: bool,
     pub descriptor_counter: DescriptorCounter,
     pub descriptor_sets_count: u32,
-    pub delayed_descriptor_setups: vector<DelayedDescriptorSetup>,
+    // pub delayed_descriptor_setups: Vec<DelayedDescriptorSetup<'a>>,
 }
+
+pub struct MyUserEvent;
+
+
+impl ApplicationHandler<MyUserEvent> for LumalRenderer {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, user_event: MyUserEvent) {
+        // Handle user event.
+    }
+
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Your application got resumed.
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+        // Handle window event.
+    }
+
+    fn device_event(&mut self, event_loop: &ActiveEventLoop, device_id: DeviceId, event: DeviceEvent) {
+        // Handle device event.
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+
+        // self.window.request_redraw();
+        // self.counter += 1;
+    }
+}
+
 
 impl LumalRenderer {
     pub fn create(settings: LumalSettings) -> Result<LumalRenderer> {
         println!("Starting app.");
 
-        let event_loop = EventLoop::new()?;
-        let window = WindowBuilder::new()
-            .with_title("renderer_vk_rs")
-            .with_inner_size(LogicalSize::new(800, 600))
-            .build(&event_loop)?;
+        // let event_loop = EventLoop::new()?;
+        let event_loop = EventLoop::<MyUserEvent>::with_user_event().build().unwrap();
+        
+        // let window = winit::window::Window::default_attributes()
+        //     .with_title("renderer_vk_rs")
+        //     .with_inner_size(LogicalSize::new(800, 600));
+            // .build(&event_loop)?;
+        #[allow(deprecated)]
+        let mut window = event_loop.create_window(Window::default_attributes()).unwrap();
+        let mut lumal_window = LumalWindow { width: 800, height: 600, pointer: &mut window};  
 
         let mut vulkan_data = VulkanData::default();
 
@@ -259,7 +365,7 @@ impl LumalRenderer {
             create_sync_objects(&device, &mut vulkan_data)?;
 
             Ok(LumalRenderer {
-                allocator,
+                allocator: Some(allocator),
                 vulkan_data,
                 event_loop: Some(event_loop),
                 window,
@@ -267,24 +373,16 @@ impl LumalRenderer {
                 instance,
                 device,
                 frame: 0,
-                resized: false,
+                should_recreate: false,
                 settings,
                 descriptor_counter: DescriptorCounter::default(),
-                descriptor_sets_count: 0, // cause just init'ed, no descriptor setup deferred yet
-                delayed_descriptor_setups: vec![],
+                descriptor_sets_count: 0,
+                image_index: 0, // cause just init'ed, no descriptor setup deferred yet
+                // delayed_descriptor_setups: vec![],
             })
         }
     }
-    pub fn destroy_image_ring(&self, images: &Ring<Image>){
-        for img in images {
-            unsafe { self.allocator.destroy_image(img.image, img.allocation); };
-        }
-    }
-    pub fn destroy_buffer_ring(&self, buffers: &Ring<Buffer>){
-        for buf in buffers {
-            unsafe { self.allocator.destroy_buffer(buf.buffer, buf.allocation); };
-        }
-    }
+
     pub unsafe fn create_instance(
         window: &Window,
         entry: &Entry,
@@ -297,7 +395,7 @@ impl LumalRenderer {
             .application_version(vk::make_version(1, 3, 0))
             .engine_name(b"No Engine\0")
             .engine_version(vk::make_version(1, 3, 0))
-            .api_version(vk::make_version(1, 2, 0));
+            .api_version(vk::make_version(1, 3, 0));
     
         // Layers
     
@@ -311,7 +409,7 @@ impl LumalRenderer {
             return Err(anyhow!("Validation layers requested but not supported."));
         }
     
-        let layers = if data.validation {
+        let layers = if (data.validation) {
             vec![VALIDATION_LAYER.as_ptr()]
         } else {
             Vec::new()
@@ -322,7 +420,7 @@ impl LumalRenderer {
         let mut extensions = vulkanalia::window::get_required_instance_extensions(window)
             .iter()
             .map(|e| e.as_ptr())
-            .collect::<vector<_>>();
+            .collect::<Vec<_>>();
     
         // Required by Vulkan SDK on macOS since 1.3.216.
         let flags = if cfg!(target_os = "macos") && entry.version()? >= PORTABILITY_MACOS_VERSION {
@@ -366,16 +464,21 @@ impl LumalRenderer {
         Ok(entry.create_instance(&info, None)?)
     }
     /// buffers, images, pipelines - everything created manually should be destroyed manually before this funcall
-    pub unsafe fn destroy(&self){
+    pub unsafe fn destroy(&mut self){
+        self.device.destroy_descriptor_pool(self.vulkan_data.descriptor_pool, None);  
         self.destroy_swapchain();
         self.destroy_sync_primitives();
+        // cause author of vulkanalia decided to hide it behind the drop. WHY
+        if let Some(allocator) = self.allocator.take() {
+            std::mem::drop(allocator);
+        }
         self.device.destroy_device(None);
         self.instance.destroy_surface_khr(self.vulkan_data.surface, None);
         self.instance.destroy_instance(None);
     }
     
     unsafe fn destroy_swapchain(&self) {
-        self.device.free_command_buffers(self.vulkan_data.command_pool, &self.vulkan_data.command_buffers);
+        self.device.free_command_buffers(self.vulkan_data.command_pool, &self.vulkan_data.command_buffers.as_slice());
         self.vulkan_data.framebuffers.iter().for_each(|f| self.device.destroy_framebuffer(*f, None));
         self.device.destroy_command_pool(self.vulkan_data.command_pool, None);
         self.device.destroy_pipeline(self.vulkan_data.pipeline, None);
@@ -389,6 +492,54 @@ impl LumalRenderer {
         self.vulkan_data.in_flight_fences.iter().for_each(|f| self.device.destroy_fence(*f, None));
         self.vulkan_data.render_finished_semaphores.iter().for_each(|s| self.device.destroy_semaphore(*s, None));
         self.vulkan_data.image_available_semaphores.iter().for_each(|s| self.device.destroy_semaphore(*s, None));
+    }
+    
+    pub fn begin_single_time_command_buffer(&self) -> vk::CommandBuffer {
+        let alloc_info = vk::CommandBufferAllocateInfo {
+            s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
+            level: vk::CommandBufferLevel::PRIMARY,
+            command_pool: self.vulkan_data.command_pool,
+            command_buffer_count: 1,
+            next: std::ptr::null(),
+        };
+        let command_buffers = unsafe { self.device.allocate_command_buffers(&alloc_info).unwrap() };
+        let command_buffer = command_buffers[0];
+        unsafe {
+            self.device.begin_command_buffer(command_buffer, &vk::CommandBufferBeginInfo::default()).unwrap();
+        }
+        command_buffer
+    }
+    pub fn end_single_time_command_buffer(&self, command_buffer: vk::CommandBuffer) {
+        unsafe {
+            self.device.end_command_buffer(command_buffer).unwrap();
+        }
+        let submit_info = vk::SubmitInfo {
+            s_type: vk::StructureType::SUBMIT_INFO,
+            wait_semaphore_count: 0,
+            wait_semaphores: std::ptr::null(),
+            wait_dst_stage_mask: std::ptr::null(),
+            command_buffer_count: 1,
+            command_buffers: &command_buffer,
+            signal_semaphore_count: 0,
+            signal_semaphores: std::ptr::null(),
+            next: std::ptr::null(),
+        };
+        unsafe {
+            self.device.queue_submit(self.vulkan_data.graphics_queue, &[submit_info], vk::Fence::null()).unwrap();
+            // yep unoptimal but you are not supposed to use this at all
+            self.device.queue_wait_idle(self.vulkan_data.graphics_queue).unwrap();
+        }
+    }
+    
+    pub fn bind_compute_pipe(&self, cmb: &mut vk::CommandBuffer, pipe: &ComputePipe) {
+        unsafe {
+            self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
+        }
+    }
+    pub fn bind_raster_pipe(&self, cmb: &mut vk::CommandBuffer, pipe: &RasterPipe) {
+        unsafe {
+            self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
+        }
     }
 }
 
@@ -407,8 +558,8 @@ pub struct VulkanData {
     pub swapchain_format: vk::Format,
     pub swapchain_extent: vk::Extent2D,
     pub swapchain: vk::SwapchainKHR,
-    pub swapchain_images: vector<vk::Image>,
-    pub swapchain_image_views: vector<vk::ImageView>,
+    pub swapchain_images: Ring<vk::Image>,
+    pub swapchain_image_views: Ring<vk::ImageView>,
     // Pipeline
     pub render_pass: vk::RenderPass,
     pub pipeline_layout: vk::PipelineLayout,
@@ -416,17 +567,18 @@ pub struct VulkanData {
     // Command Pool
     pub command_pool: vk::CommandPool,
     // Framebuffers
-    pub framebuffers: vector<vk::Framebuffer>,
+    pub framebuffers: Ring<vk::Framebuffer>,
     // Command Buffers
-    pub command_buffers: vector<vk::CommandBuffer>,
+    pub command_buffers: Ring<vk::CommandBuffer>,
     // Sync Objects
-    pub image_available_semaphores: vector<vk::Semaphore>,
-    pub render_finished_semaphores: vector<vk::Semaphore>,
-    pub in_flight_fences: vector<vk::Fence>,
-    pub images_in_flight: vector<vk::Fence>,
+    pub image_available_semaphores: Ring<vk::Semaphore>,
+    pub render_finished_semaphores: Ring<vk::Semaphore>,
+    pub in_flight_fences: Ring<vk::Fence>,
+    pub images_in_flight: Ring<vk::Fence>,
     // Descriptor pool
     pub descriptor_pool: vk::DescriptorPool,
 }
+
 
 //================================================
 // Instance
@@ -552,7 +704,7 @@ unsafe fn create_logical_device(
                 .queue_family_index(*i)
                 .queue_priorities(queue_priorities)
         })
-        .collect::<vector<_>>();
+        .collect::<Vec<_>>();
 
     // Layers
 
@@ -563,11 +715,10 @@ unsafe fn create_logical_device(
     };
 
     // Extensions
-
     let mut extensions = DEVICE_EXTENSIONS
         .iter()
         .map(|n| n.as_ptr())
-        .collect::<vector<_>>();
+        .collect::<Vec<_>>();
 
     // Required by Vulkan SDK on macOS since 1.3.216.
     if cfg!(target_os = "macos") && entry.version()? >= PORTABILITY_MACOS_VERSION {
@@ -575,16 +726,42 @@ unsafe fn create_logical_device(
     }
 
     // Features
+    // TODO: unhardcode
+    let mut features = vk::PhysicalDeviceFeatures::builder()
+        .sampler_anisotropy(true)
+        .shader_int16(true)
+        .geometry_shader(true)
+        .vertex_pipeline_stores_and_atomics(true)
+        .independent_blend(true)
+        .build();
+    let mut features11 = vk::PhysicalDeviceVulkan11Features::builder()
+        .storage_push_constant16(true)
+        .build();
+    let mut features12 = vk::PhysicalDeviceVulkan12Features::builder()
+        .storage_push_constant8(true)
+        .storage_buffer_8bit_access(true)
+        .shader_int8(true)
+        .build();
+    features12.next = &mut features11 as *mut vk::PhysicalDeviceVulkan11Features as *mut c_void; 
 
-    let features = vk::PhysicalDeviceFeatures::builder().sampler_anisotropy(true);
+    let mut features2 = vk::PhysicalDeviceFeatures2::builder()
+        .features(features)
+        .push_next(&mut features12)
+        .build();
+    
 
-    // Create
+    // let a = vk::PhysicalDeviceVulkan11Features::default();
+    // let b = vk::PhysicalDeviceVulkan12Features::default();
+    // a.
 
     let info = vk::DeviceCreateInfo::builder()
         .queue_create_infos(&queue_infos)
         .enabled_layer_names(&layers)
         .enabled_extension_names(&extensions)
-        .enabled_features(&features);
+        // .enabled_features(&features)
+        .push_next(&mut features2)
+        .build()
+        ;
 
     let device = instance.create_device(data.physical_device, &info, None)?;
 
@@ -658,7 +835,7 @@ unsafe fn create_swapchain(
 
     // Images
 
-    data.swapchain_images = device.get_swapchain_images_khr(data.swapchain)?;
+    data.swapchain_images = Ring::from_vec(device.get_swapchain_images_khr(data.swapchain)?);
 
     Ok(())
 }
@@ -767,7 +944,7 @@ unsafe fn create_command_buffers(device: &Device, data: &mut VulkanData) -> Resu
         .level(vk::CommandBufferLevel::PRIMARY)
         .command_buffer_count(data.swapchain_images.len() as u32);
 
-    data.command_buffers = device.allocate_command_buffers(&info)?;
+    data.command_buffers = Ring::from_vec(device.allocate_command_buffers(&info)?);
 
     Ok(())
 }
@@ -804,13 +981,14 @@ unsafe fn create_sync_objects(device: &Device, data: &mut VulkanData) -> Result<
     let semaphore_info = vk::SemaphoreCreateInfo::builder();
     let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
 
-    for _ in 0..MAX_FRAMES_IN_FLIGHT {
-        data.image_available_semaphores
-            .push(device.create_semaphore(&semaphore_info, None)?);
-        data.render_finished_semaphores
-            .push(device.create_semaphore(&semaphore_info, None)?);
-        data.in_flight_fences
-            .push(device.create_fence(&fence_info, None)?);
+    data.image_available_semaphores.resize(MAX_FRAMES_IN_FLIGHT, Default::default());
+    data.render_finished_semaphores.resize(MAX_FRAMES_IN_FLIGHT, Default::default());
+    data.in_flight_fences          .resize(MAX_FRAMES_IN_FLIGHT, Default::default());
+
+    for i in 0..MAX_FRAMES_IN_FLIGHT {
+        data.image_available_semaphores[i] = (device.create_semaphore(&semaphore_info, None)?);
+        data.render_finished_semaphores[i] = (device.create_semaphore(&semaphore_info, None)?);
+        data.in_flight_fences          [i] = (device.create_fence    (&fence_info,     None)?);
     }
 
     data.images_in_flight = data
@@ -873,8 +1051,8 @@ impl QueueFamilyIndices {
 #[derive(Clone, Debug)]
 struct SwapchainSupport {
     capabilities: vk::SurfaceCapabilitiesKHR,
-    formats: vector<vk::SurfaceFormatKHR>,
-    present_modes: vector<vk::PresentModeKHR>,
+    formats: Vec<vk::SurfaceFormatKHR>,
+    present_modes: Vec<vk::PresentModeKHR>,
 }
 
 impl SwapchainSupport {
@@ -895,136 +1073,18 @@ impl SwapchainSupport {
     }
 }
 
-//================================================
-// Shared (buffers)
-//================================================
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
-/// Creates a device buffer.
-pub unsafe fn create_buffer(
-    instance: &Instance,
-    device: &Device,
-    data: &VulkanData,
-    size: vk::DeviceSize,
-    usage: vk::BufferUsageFlags,
-    properties: vk::MemoryPropertyFlags,
-) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-    // Buffer
-
-    let buffer_info = vk::BufferCreateInfo::builder()
-        .size(size)
-        .usage(usage)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-    let buffer = device.create_buffer(&buffer_info, None)?;
-
-    // Memory
-
-    let requirements = device.get_buffer_memory_requirements(buffer);
-    let memory_type_index = get_memory_type_index(instance, data, properties, requirements)?;
-
-    let memory_info = vk::MemoryAllocateInfo::builder()
-        .allocation_size(requirements.size)
-        .memory_type_index(memory_type_index);
-
-    let memory = device.allocate_memory(&memory_info, None)?;
-
-    Ok((buffer, memory))
+fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
+    let possible_error = "Failed to open file: ".to_owned() + path.as_ref().to_str().unwrap();
+    let mut file = File::open(path).expect(&possible_error);
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).expect("Failed to read file");
+    
+    assert!(buffer.len() % 4 == 0, "Shader file must be aligned to 4 bytes");
+    
+    // Convert to Vec<u8>
+    unsafe { std::slice::from_raw_parts(buffer.as_ptr() as *const u8, buffer.len() / 4).to_vec() }
 }
-
-/// Fills a device buffer with data.
-#[rustfmt::skip]
-pub unsafe fn fill_buffer(device: &Device, buffer: vk::Buffer, memory: vk::DeviceMemory, data: &[impl Copy]) -> Result<()> {
-    device.bind_buffer_memory(buffer, memory, 0)?;
-
-    let dst = device.map_memory(memory, 0, size_of_val(data) as u64, vk::MemoryMapFlags::empty())?;
-    memcpy(data.as_ptr(), dst.cast(), data.len());
-    device.unmap_memory(memory);
-
-    Ok(())
-}
-
-//================================================
-// Shared (shaders)
-//================================================
-
-/// Creates a shader module from a compiled shader.
-pub unsafe fn create_shader_module(device: &Device, bytecode: &[u8]) -> Result<vk::ShaderModule> {
-    let bytecode = Bytecode::new(bytecode).unwrap();
-
-    let info = vk::ShaderModuleCreateInfo::builder()
-        .code_size(bytecode.code_size())
-        .code(bytecode.code());
-
-    Ok(device.create_shader_module(&info, None)?)
-}
-
-//================================================
-// Shared (other)
-//================================================
-
-/// Gets a suitable memory type index for a device buffer.
-pub unsafe fn get_memory_type_index(
-    instance: &Instance,
-    data: &VulkanData,
-    properties: vk::MemoryPropertyFlags,
-    requirements: vk::MemoryRequirements,
-) -> Result<u32> {
-    let memory = instance.get_physical_device_memory_properties(data.physical_device);
-    (0..memory.memory_type_count)
-        .find(|i| {
-            let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
-            let memory_type = memory.memory_types[*i as usize];
-            suitable && memory_type.property_flags.contains(properties)
-        })
-        .ok_or_else(|| anyhow!("Failed to find suitable memory type."))
-}
-
-//================================================
-// Vertex
-//================================================
-
-pub type Vec2 = cgmath::Vector2<f32>;
-pub type Vec4 = cgmath::Vector4<f32>;
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct Vertex {
-    pub pos: Vec2,
-    pub color: Vec4,
-}
-
-impl Vertex {
-    /// Gets the binding description for a vertex of this type.
-    pub fn binding_description() -> vk::VertexInputBindingDescription {
-        vk::VertexInputBindingDescription::builder()
-            .binding(0)
-            .stride(size_of::<Vertex>() as u32)
-            .input_rate(vk::VertexInputRate::VERTEX)
-            .build()
-    }
-
-    /// Gets the attribute descriptions for a vertex of this type.
-    pub fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
-        let pos = vk::VertexInputAttributeDescription::builder()
-            .binding(0)
-            .location(0)
-            .format(vk::Format::R32G32_SFLOAT)
-            .offset(0)
-            .build();
-        let color = vk::VertexInputAttributeDescription::builder()
-            .binding(0)
-            .location(1)
-            .format(vk::Format::R32G32B32A32_SFLOAT)
-            .offset(size_of::<Vec2>() as u32)
-            .build();
-        [pos, color]
-    }
-}
-
-/// The triangle vertices.
-#[rustfmt::skip]
-pub static VERTICES: [Vertex; 3] = [
-    Vertex { pos: vec2(0.0, -0.5), color: vec4(1.0, 0.0, 0.0, 1.0) },
-    Vertex { pos: vec2(0.5, 0.5), color: vec4(0.0, 1.0, 0.0, 1.0) },
-    Vertex { pos: vec2(-0.5, 0.5), color: vec4(0.0, 0.0, 1.0, 0.0) },
-];
