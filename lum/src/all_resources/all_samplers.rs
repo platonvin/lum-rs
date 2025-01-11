@@ -106,5 +106,16 @@ impl crate::LumRenderer {
             unnorm_linear,
             unnorm_nearest,
         }
-    }  
+    }   
+        
+    pub fn destroy_all_samplers(lumal: &mut LumalRenderer, samplers: &mut LumSamplers) {
+        lumal.destroy_sampler(samplers.nearest_sampler);
+        lumal.destroy_sampler(samplers.linear_sampler);
+        lumal.destroy_sampler(samplers.linear_sampler_tiled);
+        lumal.destroy_sampler(samplers.linear_sampler_tiled_mirrored);
+        lumal.destroy_sampler(samplers.overlay_sampler);
+        lumal.destroy_sampler(samplers.shadow_sampler);
+        lumal.destroy_sampler(samplers.unnorm_linear);
+        lumal.destroy_sampler(samplers.unnorm_nearest);
+    }
 }

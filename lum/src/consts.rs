@@ -5,7 +5,7 @@ use vulkanalia::vk::DescriptorType;
 
 // Rust provokes you to write code in a way that does not play well with how i like to write code
 // so sometimes i have to use crutches to get around it
-// also, not i regret chosing vulkanalia as a rust wrapper
+// also, now i regret chosing vulkanalia as a rust wrapper
 
 pub const UNDEFINED: vk::ImageLayout = ImageLayout::from_raw(0);
 pub const GENERAL: vk::ImageLayout = ImageLayout::from_raw(1);

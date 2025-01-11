@@ -34,7 +34,12 @@ impl<T: std::default::Default + Clone> Ring<T> {
 
     /// Returns the current element in the Ring.
     pub fn current(&self) -> &T {
-        &self.data[self.index]
+        return &self.data[self.index]
+    }
+    pub fn previous(&self) -> &T {
+        let index = self.index + self.data.len() - 1;
+        let wrapped_index = index % self.data.len();
+        return &self.data[wrapped_index]
     }
 
     /// Mutably access the current element in the Ring.

@@ -34,13 +34,6 @@ use winit::{application::ApplicationHandler, dpi::LogicalSize, event::{DeviceEve
 use winit::window::Window;
 use Option as optional;
 
-// pub struct LumalDescriptorType (vk::DescriptorType);
-
-// #[derive(Clone)]
-// pub struct LumalShaderStageFlags (vk::ShaderStageFlags);
-
-// pub struct LumalImageLayout (vk::ImageLayout);
-
 use vk::{InputChainStruct, KhrSurfaceExtension, KhrSwapchainExtension};
 
 /// The required instance and device layer if validation is enabled.
@@ -54,10 +47,11 @@ const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[
     vk::KHR_PUSH_DESCRIPTOR_EXTENSION.name,
     // vk::
 ];
-/// The Vulkan SDK version that started requiring the portability subset extension for macOS.
+
+/// Vulkan SDK version that started requiring the portability subset extension for macOS.
 const PORTABILITY_MACOS_VERSION: Version = Version::new(1, 3, 216);
 
-/// The number of frames that will be processed concurrently.
+/// number of frames that will be processed concurrently. 2 is perferct - CPU prepares frame N, GPU renders frame N-1
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 #[derive(Clone, Debug)]
@@ -76,7 +70,7 @@ impl Default for Buffer {
 pub struct Image {
     pub image: vk::Image,
     pub allocation: vma::Allocation,
-    pub view: vk::ImageView,              // Main view
+    pub view: vk::ImageView,           // Main view
     pub mip_views: Vec<vk::ImageView>, // Vec for mip views
     pub format: vk::Format,
     pub aspect: vk::ImageAspectFlags,
@@ -105,7 +99,7 @@ pub struct BufferDeletion {
 
 // Structure for RasterPipe (Graphics pipeline)
 // #[derive(Default)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RasterPipe {
     pub line: vk::Pipeline,
     pub line_layout: vk::PipelineLayout,
@@ -291,7 +285,9 @@ pub struct LumalRenderer {
     pub should_recreate: bool,
     pub descriptor_counter: DescriptorCounter,
     pub descriptor_sets_count: u32,
-    // pub delayed_descriptor_setups: Vec<DelayedDescriptorSetup<'a>>,
+
+    pub main_command_buffers: Ring<vk::CommandBuffer>, // yep, copied
+    pub extra_command_buffers: Ring<vk::CommandBuffer>, // yep, copied
 }
 
 pub struct MyUserEvent;
@@ -329,10 +325,6 @@ impl LumalRenderer {
         // let event_loop = EventLoop::new()?;
         let event_loop = EventLoop::<MyUserEvent>::with_user_event().build().unwrap();
         
-        // let window = winit::window::Window::default_attributes()
-        //     .with_title("renderer_vk_rs")
-        //     .with_inner_size(LogicalSize::new(800, 600));
-            // .build(&event_loop)?;
         #[allow(deprecated)]
         let mut window = event_loop.create_window(Window::default_attributes()).unwrap();
         let mut lumal_window = LumalWindow { width: 800, height: 600, pointer: &mut window};  
@@ -356,12 +348,12 @@ impl LumalRenderer {
 
             create_swapchain(&window, &instance, &device, &mut vulkan_data)?;
             create_swapchain_image_views(&device, &mut vulkan_data)?;
-            // these are handled by downstream user
+            // these are handled by downstream user. Makes no sense to hardcode pipes in renderer
             // example.create_render_pass(&device, &mut data)?;
             // example.create_pipeline(&device, &mut data)?;
             // create_framebuffers(&device, &mut data)?;
+            // create_command_buffers(&device, &mut vulkan_data)?;
             create_command_pool(&instance, &device, &mut vulkan_data)?;
-            create_command_buffers(&device, &mut vulkan_data)?;
             create_sync_objects(&device, &mut vulkan_data)?;
 
             Ok(LumalRenderer {
@@ -379,6 +371,8 @@ impl LumalRenderer {
                 descriptor_sets_count: 0,
                 image_index: 0, // cause just init'ed, no descriptor setup deferred yet
                 // delayed_descriptor_setups: vec![],
+                main_command_buffers: Ring::new(0, vk::CommandBuffer::default()),
+                extra_command_buffers: Ring::new(0, vk::CommandBuffer::default()),
             })
         }
     }
@@ -478,7 +472,7 @@ impl LumalRenderer {
     }
     
     unsafe fn destroy_swapchain(&self) {
-        self.device.free_command_buffers(self.vulkan_data.command_pool, &self.vulkan_data.command_buffers.as_slice());
+        // self.device.free_command_buffers(self.vulkan_data.command_pool, &self.vulkan_data.command_buffers.as_slice());
         self.vulkan_data.framebuffers.iter().for_each(|f| self.device.destroy_framebuffer(*f, None));
         self.device.destroy_command_pool(self.vulkan_data.command_pool, None);
         self.device.destroy_pipeline(self.vulkan_data.pipeline, None);
@@ -531,15 +525,40 @@ impl LumalRenderer {
         }
     }
     
-    pub fn bind_compute_pipe(&self, cmb: &mut vk::CommandBuffer, pipe: &ComputePipe) {
+    pub fn bind_compute_pipe(&self, cmb: &vk::CommandBuffer, pipe: &ComputePipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
         }
     }
-    pub fn bind_raster_pipe(&self, cmb: &mut vk::CommandBuffer, pipe: &RasterPipe) {
+    pub fn bind_raster_pipe(&self, cmb: &vk::CommandBuffer, pipe: &RasterPipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
         }
+    }
+
+    // creates primary command buffer. Lumal does not interact with non-primary command buffers
+    pub fn create_command_buffer(
+        &self,
+    ) -> Ring<vk::CommandBuffer> {
+        let info = vk::CommandBufferAllocateInfo::builder()
+            .command_pool(self.vulkan_data.command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(MAX_FRAMES_IN_FLIGHT as u32);
+
+        let command_buffers = Ring::from_vec(unsafe {
+            self.device.allocate_command_buffers(&info).unwrap() 
+        }); 
+
+        return command_buffers;
+    }
+
+    pub fn destroy_command_buffer(&self, compute_command_buffers: &Ring<vk::CommandBuffer>) {
+        unsafe {
+            self.device.free_command_buffers(
+                self.vulkan_data.command_pool,
+                &compute_command_buffers.as_slice(),
+            )
+        };
     }
 }
 
@@ -569,7 +588,7 @@ pub struct VulkanData {
     // Framebuffers
     pub framebuffers: Ring<vk::Framebuffer>,
     // Command Buffers
-    pub command_buffers: Ring<vk::CommandBuffer>,
+    // pub command_buffers: Ring<vk::CommandBuffer>,
     // Sync Objects
     pub image_available_semaphores: Ring<vk::Semaphore>,
     pub render_finished_semaphores: Ring<vk::Semaphore>,
@@ -933,49 +952,6 @@ unsafe fn create_command_pool(
     Ok(())
 }
 
-//================================================
-// Command Buffers
-//================================================
-
-/// Creates the primary command buffers for recording frame commands.
-unsafe fn create_command_buffers(device: &Device, data: &mut VulkanData) -> Result<()> {
-    let info = vk::CommandBufferAllocateInfo::builder()
-        .command_pool(data.command_pool)
-        .level(vk::CommandBufferLevel::PRIMARY)
-        .command_buffer_count(data.swapchain_images.len() as u32);
-
-    data.command_buffers = Ring::from_vec(device.allocate_command_buffers(&info)?);
-
-    Ok(())
-}
-
-//================================================
-// Framebuffers
-//================================================
-
-/// Creates framebuffers for the swapchain image views.
-// unsafe fn create_framebuffers(device: &Device, data: &mut VulkanData) -> Result<()> {
-//     data.framebuffers = data
-//         .swapchain_image_views
-//         .iter()
-//         .map(|iv| {
-//             let attachments = &[*iv];
-//             let info = vk::FramebufferCreateInfo::builder()
-//                 .render_pass(data.render_pass)
-//                 .attachments(attachments)
-//                 .width(data.swapchain_extent.width)
-//                 .height(data.swapchain_extent.height)
-//                 .layers(1);
-//             device.create_framebuffer(&info, None)
-//         })
-//         .collect::<Result<_, _>>()?;
-//     Ok(())
-// }
-
-//================================================
-// Sync Objects
-//================================================
-
 /// Creates synchronization objects to manage command buffer reuse and rendering.
 unsafe fn create_sync_objects(device: &Device, data: &mut VulkanData) -> Result<()> {
     let semaphore_info = vk::SemaphoreCreateInfo::builder();
@@ -999,10 +975,6 @@ unsafe fn create_sync_objects(device: &Device, data: &mut VulkanData) -> Result<
 
     Ok(())
 }
-
-//================================================
-// Structs
-//================================================
 
 /// The indices of the required queue families for a physical device.
 #[derive(Copy, Clone, Debug)]

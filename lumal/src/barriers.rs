@@ -10,7 +10,7 @@ use crate::{Buffer, Image, LumalRenderer};
 impl LumalRenderer {
     pub fn image_memory_barrier(
         &self,
-        cmdbuf: vk::CommandBuffer,
+        cmdbuf: &vk::CommandBuffer,
         image: &Image,
         src_stage_mask: vk::PipelineStageFlags,
         dst_stage_mask: vk::PipelineStageFlags,
@@ -39,7 +39,7 @@ impl LumalRenderer {
         };
         
         unsafe { self.device.cmd_pipeline_barrier(
-            cmdbuf,
+            *cmdbuf,
             src_stage_mask,
             dst_stage_mask,
             vk::DependencyFlags::empty(),
@@ -51,7 +51,7 @@ impl LumalRenderer {
 
     pub fn buffer_memory_barrier(
         &self,
-        cmdbuf: vk::CommandBuffer,
+        cmdbuf: &vk::CommandBuffer,
         buffer: &Buffer,
         src_stage_mask: vk::PipelineStageFlags,
         dst_stage_mask: vk::PipelineStageFlags,
@@ -71,7 +71,7 @@ impl LumalRenderer {
         };
         
         unsafe { self.device.cmd_pipeline_barrier(
-            cmdbuf,
+            *cmdbuf,
             src_stage_mask,
             dst_stage_mask,
             vk::DependencyFlags::empty(),

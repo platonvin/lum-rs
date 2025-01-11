@@ -4,7 +4,7 @@ use std::string::String;
 
 use lumal::ring::Ring;
 use lumal::Buffer;
-use crate::Voxel;
+// use crate::Voxel;
 pub type MatID = u32;
 
 use vek::{Vec2, Vec3};
@@ -38,7 +38,28 @@ pub type mat4 = vek::Mat4<f32>;
 // pub type dmat4 = vek::Mat4<f32>;
 pub type quat = vek::quaternion::Quaternion<f32>;
 
-#[repr(C)]
+
+#[allow(non_camel_case_types)]
+pub type BlockID_t = i16; 
+#[allow(non_camel_case_types)]
+type MatID_t = u8;
+type Voxel = u8;
+
+pub struct Particle {
+    pub pos: vec3,
+    pub vel: vec3,
+    pub life_time: f32,
+    pub mat_id: MatID_t,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct AoLut {
+    pub world_shift: vec3,
+    pub weight_normalized: f32, // ((1-r^2)/total_weight)*0.7
+    pub screen_shift: vec2,
+    pub padding: vec2,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct VoxelVertex {
     pub pos: u8vec3,
@@ -46,14 +67,12 @@ pub struct VoxelVertex {
     pub mat_id: MatID,
 }
 
-#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PackedVoxelVertex {
     pub pos: u8vec3,
     pub mat_id: MatID,
 }
 
-#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PackedVoxelQuad {
     pub size: u8vec2,
@@ -61,20 +80,17 @@ pub struct PackedVoxelQuad {
     pub mat_id: MatID,
 }
 
-#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PackedVoxelCircuit {
     pub pos: u8vec3,
 }
 
-#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct IndexedVertices {
     pub offset: u32,
     pub icount: u32,
 }
 
-#[repr(C)]
 #[derive(Debug)]
 pub struct FaceBuffers {
     pub pzz: IndexedVertices,
@@ -87,16 +103,14 @@ pub struct FaceBuffers {
     pub indices: lumal::Buffer,
 }
 
-#[repr(C)]
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct InternalMeshModel {
     pub triangles: FaceBuffers,
     pub voxels: Ring<lumal::Image>,
     pub size: ivec3, // integer because in voxels
 }
 
-#[repr(C)]
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct InternalMeshFoliage {
     pub vertex_shader_file: String,
     pub pipe: lumal::RasterPipe,
@@ -104,14 +118,12 @@ pub struct InternalMeshFoliage {
     pub density: i32,
 }
 
-#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct InternalMeshLiquid {
     pub main: MatID,
     pub foam: MatID,
 }
 
-#[repr(C)]
 #[derive(Clone, Debug)]
 pub struct InternalMeshVolumetric {
     pub max_density: f32,
@@ -119,7 +131,6 @@ pub struct InternalMeshVolumetric {
     pub color: u8vec3,
 }
 
-#[repr(C)]
 #[derive(Debug)]
 pub struct InternalUiMesh {
     pub vertexes: lumal::Buffer,
@@ -128,10 +139,15 @@ pub struct InternalUiMesh {
     pub image: *mut lumal::Image,
 }
 
+#[derive(Debug)]
+pub struct MeshTransform {
+    pub rotation: quat,
+    pub translation: vec3,
+}
+
 pub type BlockVoxels = [Voxel; 16*16*16];
 
-#[repr(C)]
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct Block {
     pub voxels: BlockVoxels,
     pub mesh: InternalMeshModel,

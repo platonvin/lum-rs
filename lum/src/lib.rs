@@ -6,30 +6,23 @@
  * files that start with "all_" are initializing / destroying resources (packed in structs)
  * internal_renderer is where all the gpu commands are submitted
  * renderer is a wrapper around internal_renderer that is more stable and easier to use
- */
+*/
 
 pub mod consts;
-pub mod all_pipes;
-pub mod all_buffers;
-pub mod all_images;
-pub mod all_samplers;
+pub mod all_resources;
 pub mod types;
-pub mod all_rpasses;
-
 pub mod internal_renderer;
+pub mod containers;
 
 use std::{mem, ptr::null_mut};
 use anyhow::Result;
 use consts::*;
-use internal_renderer::{Camera, SunLight};
+use containers::Array3D;
+use crate::internal_renderer::{Camera, SunLight};
 use types::*; // to use GENERAL as general image layout
 use lumal::{atrace, descriptors::{DescriptorInfo, RelativeDescriptorPos, ShortDescriptorInfo}, ring::Ring, ComputePipe, LumalRenderer, LumalSettings, RasterPipe};
 use vulkanalia::vk::{self, DeviceV1_3, Extent2D, Handle};
-// use winit::event_loop::EventLoop;
 use winit::window::Window;
-// use glam::*;
-// use lumal::LumalDescriptorType::*;
-// use lumal::LumalShaderStageFlags::*;
 
 use vk::Sampler;
 use RelativeDescriptorPos::Current;
@@ -52,26 +45,6 @@ impl LumSettings {
             lightmap_extent: Extent2D {width:1024, height:1024},
         }
     }
-}
-
-#[allow(non_camel_case_types)]
-type BlockID_t = i16;
-#[allow(non_camel_case_types)]
-type MatID_t = u8;
-type Voxel = u8;
-
-pub struct Particle {
-    pos: vec3,
-    vel: vec3,
-    life_time: f32,
-    mat_id: MatID_t,
-}
-
-pub struct AoLut {
-    world_shift: vec3,
-    weight_normalized: f32, // ((1-r^2)/total_weight)*0.7
-    screen_shift: vec2,
-    padding: vec2,
 }
 
 const FRAME_FORMAT:vk::Format = vk::Format::R16G16B16A16_UNORM;
@@ -181,26 +154,54 @@ pub struct LumRenderPasses {
     shade_rpass: lumal::RenderPass, //for no downscaling
 }
 
-#[allow(non_snake_case)]
 pub struct LumRenderer {
     lumal: lumal::LumalRenderer,
+    // renderer settings. Cannot be changed after creation
     settings: LumSettings,
     lightmap_extent: vk::Extent2D,
 
+    // fields called LumThings are just grouped Vulkan objects needed by renderer
     pipes: LumPipes,
     dependent_images: LumSwapchainDependentImages,
     independent_images: LumIndependentImages,
     buffers: LumBuffers,
     samplers: LumSamplers,
-    // cmdbufs: LumCommandBuffers,
+    cmdbufs: LumCommandBuffers,
     rpasses: LumRenderPasses,
 
-    radianceUpdates: Vec<i8vec4>,
-    specialRadianceUpdates: Vec<i8vec4>,
+    // Queue of blocks whose radiance field needs to be updated. Filled automatically by the renderer
+    radiance_updates: Vec<i8vec4>,
+    // same but requested by user (manually)
+    special_radiance_updates: Vec<i8vec4>,
 
+    // position / direction / sizes of the Camera. Yes, no generic super-high level abstraction, just pod vectors
     camera: internal_renderer::Camera,
     light: SunLight,
-    // descriptorPool: vk::DescriptorPool,
+
+    // Queue of all the 3d block data that needs to be duplicated when allocating new blocks.
+    // Lum uses references to blocks when possible for perfomance reasons
+    // but when a block needs to be modified (like when it intersects a model), we have to instantiate it
+    // which means allocating a new block, copiying the old one to allocated, and then referencing it instead
+    // TODO: ImageCopy is quite big, use more compact representation
+    block_copies_queue: Vec<vk::ImageCopy>,
+    // Queue of all blocks that need to be zeroed
+    // Quite often you need to copy "air" block (empty, zero one) on allocation
+    // modern GPUs are very fast at zeroing memory, so we can do it separately as optimization
+    block_clear_queue: Vec<vk::ImageSubresourceRange>,
+    
+    // tracks amount of allocated (including static) blocks in palette. Used internally for allocation. 
+    // Resets to static_block_count every frame
+    palette_counter: usize, 
+
+    // how many blocks are static blocks (not allocated). Static blocks have voxel data (loaded from file)
+    static_block_palette_size: u32,
+
+    // ground truth for block references data, without any block allocations (no models)
+    origin_world: Array3D<BlockID_t>,
+    // modified origin world, with some blocks allocated for models
+    // for internal use only
+    current_world: Array3D<BlockID_t>,
+    
 }
 const DEPTH_FORMAT_SPARE :vk::Format = vk::Format::D24_UNORM_S8_UINT; //TODO somehow faster than vk::Format::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED :vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
@@ -234,11 +235,11 @@ impl LumRenderer {
             vk::ImageUsageFlags::INPUT_ATTACHMENT).unwrap();
         
         // section where most important (not init-related) vulkan resources are created. Some of them will be recreated on window resize
-        let mut dependent_images: LumSwapchainDependentImages = LumRenderer::create_dependent_images(&lumal, &lum_settings, &lumal_settings);
-        let mut independent_images: LumIndependentImages = LumRenderer::create_independent_images(&lumal, &lum_settings, &lumal_settings);
-        let buffers: LumBuffers = LumRenderer::create_all_buffers(&lumal, &lum_settings, &lumal_settings);
-        let samplers: LumSamplers = LumRenderer::create_all_samplers(&lumal, &lum_settings, &lumal_settings);
-        let command_buffers: LumCommandBuffers;
+        let mut dependent_images = LumRenderer::create_dependent_images(&lumal, &lum_settings, &lumal_settings);
+        let mut independent_images = LumRenderer::create_independent_images(&lumal, &lum_settings, &lumal_settings);
+        let buffers = LumRenderer::create_all_buffers(&lumal, &lum_settings, &lumal_settings);
+        let samplers = LumRenderer::create_all_samplers(&lumal, &lum_settings, &lumal_settings);
+        let command_buffers = LumRenderer::create_all_command_buffers(&lumal, &lum_settings, &lumal_settings);
         
         let mut pipes: LumPipes = LumPipes::default();
 
@@ -266,25 +267,38 @@ impl LumRenderer {
         let camera = Camera::default();
         let light = SunLight::default();
         atrace!();
-            
+
+        let origin_world = Array3D::<BlockID_t>::new(
+            lum_settings.world_size.x as usize,
+            lum_settings.world_size.y as usize,
+            lum_settings.world_size.z as usize,
+        );
+        // same as initalization but cleaner imho
+        let current_world = origin_world.clone();
+        
         let mut lum = LumRenderer {
             lumal: lumal,
             settings: LumSettings::default(),
 
             rpasses: renderpasses,
-            // cmdbufs: command_buffers,
+            cmdbufs: command_buffers,
 
             lightmap_extent: lightmap_extent,
             pipes: pipes,
-            // dependent_images: dependent_images,
             independent_images: independent_images,
             dependent_images: dependent_images,
             buffers: buffers,
             samplers: samplers,
             camera: camera,
             light: light,
-            radianceUpdates: vec![],
-            specialRadianceUpdates: vec![],
+            palette_counter: 0,
+            static_block_palette_size: lum_settings.static_block_palette_size, // TODO: remove settings
+            radiance_updates: vec![],
+            special_radiance_updates: vec![],
+            block_copies_queue: vec![],
+            block_clear_queue: vec![],
+            origin_world: origin_world,
+            current_world: current_world,
         };
         
         atrace!();
@@ -309,24 +323,26 @@ impl LumRenderer {
         LumRenderer::destroy_all_pipes(&mut self.lumal, &mut self.pipes);
         LumRenderer::destroy_all_rpasses(&mut self.lumal, &mut self.rpasses);
         LumRenderer::destroy_all_samplers(&mut self.lumal, &mut self.samplers); 
+        LumRenderer::destroy_all_command_buffers(&mut self.lumal, &self.cmdbufs);
         
         self.lumal.destroy();
     }
-    
-    fn destroy_all_rpasses(lumal: &mut LumalRenderer, rpasses: &mut LumRenderPasses) {
-        lumal.destroy_render_pass(&mut rpasses.lightmap_rpass);
-        lumal.destroy_render_pass(&mut rpasses.gbuffer_rpass);
-        lumal.destroy_render_pass(&mut rpasses.shade_rpass);
-    }
-    
-    fn destroy_all_samplers(lumal: &mut LumalRenderer, samplers: &mut LumSamplers) {
-        lumal.destroy_sampler(samplers.nearest_sampler);
-        lumal.destroy_sampler(samplers.linear_sampler);
-        lumal.destroy_sampler(samplers.linear_sampler_tiled);
-        lumal.destroy_sampler(samplers.linear_sampler_tiled_mirrored);
-        lumal.destroy_sampler(samplers.overlay_sampler);
-        lumal.destroy_sampler(samplers.shadow_sampler);
-        lumal.destroy_sampler(samplers.unnorm_linear);
-        lumal.destroy_sampler(samplers.unnorm_nearest);
-    }
+}
+
+// this is basically safier version of assert! that is checked in debug mode
+// in release mode opens into just assume!
+
+#[macro_export]
+macro_rules! assert_assume {
+    ($cond:expr) => {
+        if cfg!(debug_assertions) {
+            // In debug mode, use assert! for runtime checks
+            assert!($cond);
+        } else {
+            // In release mode, use assume to hint to the compiler
+            unsafe {
+                core::intrinsics::assume($cond);
+            }
+        }
+    };
 }

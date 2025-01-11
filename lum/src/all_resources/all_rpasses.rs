@@ -251,4 +251,10 @@ impl crate::LumRenderer {
             shade_rpass,
         };
     }
+
+    pub fn destroy_all_rpasses(lumal: &mut LumalRenderer, rpasses: &mut LumRenderPasses) {
+        lumal.destroy_render_pass(&mut rpasses.lightmap_rpass);
+        lumal.destroy_render_pass(&mut rpasses.gbuffer_rpass);
+        lumal.destroy_render_pass(&mut rpasses.shade_rpass);
+    }
 }
