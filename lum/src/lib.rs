@@ -202,6 +202,11 @@ pub struct LumRenderer {
     // for internal use only
     current_world: Array3D<BlockID_t>,
     
+    // just particles. Hardocded.
+    particles: Vec<Particle>,
+
+    // time, taken by the last frame - you know
+    delta_time: f32,
 }
 const DEPTH_FORMAT_SPARE :vk::Format = vk::Format::D24_UNORM_S8_UINT; //TODO somehow faster than vk::Format::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED :vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
@@ -279,6 +284,7 @@ impl LumRenderer {
         let mut lum = LumRenderer {
             lumal: lumal,
             settings: LumSettings::default(),
+            delta_time: 0.0,
 
             rpasses: renderpasses,
             cmdbufs: command_buffers,
@@ -299,6 +305,7 @@ impl LumRenderer {
             block_clear_queue: vec![],
             origin_world: origin_world,
             current_world: current_world,
+            particles: vec![],
         };
         
         atrace!();

@@ -45,6 +45,8 @@ pub type BlockID_t = i16;
 type MatID_t = u8;
 type Voxel = u8;
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct Particle {
     pub pos: vec3,
     pub vel: vec3,
@@ -87,18 +89,21 @@ pub struct PackedVoxelCircuit {
 
 #[derive(Clone, Copy, Debug)]
 pub struct IndexedVertices {
-    pub offset: u32,
-    pub icount: u32,
+    pub offset: u32, // yes, they are all stored in same buffer and accessed with offset
+    pub icount: u32, 
 }
 
+#[allow(non_snake_case)]
 #[derive(Debug)]
 pub struct FaceBuffers {
-    pub pzz: IndexedVertices,
-    pub nzz: IndexedVertices,
-    pub zpz: IndexedVertices,
-    pub znz: IndexedVertices,
-    pub zzp: IndexedVertices,
-    pub zzn: IndexedVertices,
+    // zPz means zero-Positive-zero
+    // zzN means zero-zero-Negative
+    pub Pzz: IndexedVertices,
+    pub Nzz: IndexedVertices,
+    pub zPz: IndexedVertices,
+    pub zNz: IndexedVertices,
+    pub zzP: IndexedVertices,
+    pub zzN: IndexedVertices,
     pub vertexes: lumal::Buffer,
     pub indices: lumal::Buffer,
 }

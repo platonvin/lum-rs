@@ -300,4 +300,35 @@ impl LumalRenderer {
 
         framebuffers
     }
+
+    pub fn begin_render_pass(&self, command_buffer: &vk::CommandBuffer, render_pass: &RenderPass, inline: vk::SubpassContents) {
+        let begin_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(render_pass.render_pass)
+            .framebuffer(*render_pass.framebuffers.current())
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: render_pass.extent,
+            })
+            .clear_values(render_pass.clear_colors.as_slice());
+        
+        unsafe {
+            self.device.cmd_begin_render_pass(
+                *command_buffer,
+                &begin_info,
+                inline,
+            );
+            self.device.cmd_set_viewport(
+                *command_buffer,
+                0,
+                &[vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: render_pass.extent.width as f32,
+                    height: render_pass.extent.height as f32,
+                    min_depth: 0.0,
+                    max_depth: 1.0,
+                }],
+            );
+        }
+    }
 }

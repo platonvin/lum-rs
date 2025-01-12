@@ -280,7 +280,7 @@ pub struct LumalRenderer {
     pub entry: Entry, // internal Vulkanalia entry point
     pub instance: Instance, // wrapper around vk::Instance. TODO: custom vulkan al wrapper (barebone)
     pub device: Device, // wrapper around vk::Device. TODO: custom vulkan al wrapper (barebone)
-    pub frame: usize, // global counter of rendered frame, mostly for internal use
+    pub frame: i32, // global counter of rendered frame, mostly for internal use
     pub image_index: u32,
     pub should_recreate: bool,
     pub descriptor_counter: DescriptorCounter,

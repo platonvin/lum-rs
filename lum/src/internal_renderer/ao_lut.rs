@@ -19,7 +19,7 @@ impl LumRenderer {
             .sum()
     }
 
-    fn generate_lut<const SAMPLE_COUNT: usize>(
+    pub fn generate_lut<const SAMPLE_COUNT: usize>(
         max_radius: f32,
         frame_size: vec2,
         horizline_scaled: vec3,

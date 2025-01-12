@@ -31,6 +31,7 @@ what i do like about Rust:
         code just compiles and i still cant believe that
         libraries just work
         rust-analyzer is the best lsp i have ever seen
+            except for macros
     enums
     default > constructor. I Fucking Love This
     C/C++ interop possible

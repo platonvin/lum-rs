@@ -1,7 +1,7 @@
-use std::ptr;
+use std::{mem::{self, transmute}, ops::Index, ptr};
 
 use as_u8_slice_derive::AsU8Slice;
-use internal_renderer::{fAABB, get_shift, iAABB};
+use internal_renderer::{ao_lut, fAABB, get_shift, iAABB};
 use vek::{num_traits::Float, transform, vec, Clamp, FrustumPlanes};
 use vk::{AccessFlags, DeviceV1_0, HasBuilder, Image, ImageLayout, KhrPushDescriptorExtension, PipelineBindPoint, PipelineStageFlags, ShaderStageFlags};
 
@@ -263,96 +263,6 @@ impl crate::LumRenderer {
         };
     }
 
-    /*
-    void LumInternal::LumInternalRenderer::update_radiance() {
-    CommandBuffer& commandBuffer = computeCommandBuffers.current();
-    TRACE()
-    table3d<bool> 
-        set = {};
-    TRACE()
-        set.allocate(world_size);
-    TRACE()
-        set.set(false);
-    TRACE()
-    radianceUpdates.clear();
-    
-    TRACE()
-    for (int zz = 0; zz < world_size.z; zz++) {
-    for (int yy = 0; yy < world_size.y; yy++) {
-    for (int xx = 0; xx < world_size.x; xx++) {
-        // int block_id = who cares on less then a million blocks?
-        // UPD: actually, smarter algorithms resulted in less perfomance
-        int sum_of_neighbours = 0;
-        for (int dz = -1; (dz <= +1); dz++) {
-        for (int dy = -1; (dy <= +1); dy++) {
-        for (int dx = -1; (dx <= +1); dx++) {
-            ivec3 test_block = ivec3 (xx + dx, yy + dy, zz + dz);
-            // kinda slow... but who cares on less then 1m blocks
-            // safity
-            test_block = glm::clamp(test_block, ivec3(0), ivec3(world_size)-1);
-            sum_of_neighbours += current_world (test_block);
-        }}}
-        if(sum_of_neighbours > 0){
-            radianceUpdates.push_back (i8vec4 (xx, yy, zz, 0));
-            set(ivec3(xx, yy, zz)) = true;
-        }
-    }}}
-    // special updates are ones requested via API
-    TRACE()
-    for (auto u : specialRadianceUpdates) {
-        if (!set(ivec3(u.x, u.y, u.z))) {
-            radianceUpdates.push_back (u);
-        }
-    } specialRadianceUpdates.clear();
-    set.deallocate();
-    VkDeviceSize bufferSize = sizeof (radianceUpdates[0]) * radianceUpdates.size();
-    memcpy (stagingRadianceUpdates.current().mapped, radianceUpdates.data(), bufferSize);
-
-    commandBuffer.cmdPipelineBarrier (        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-        gpuRadianceUpdates.current());
-    commandBuffer.cmdPipelineBarrier (        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-        stagingRadianceUpdates.current());
-
-    VkBufferCopy
-        copyRegion = {};
-        copyRegion.size = bufferSize;
-    
-    vkCmdCopyBuffer (commandBuffer.commandBuffer, stagingRadianceUpdates.current().buffer, gpuRadianceUpdates.current().buffer, 1, &copyRegion);
-    commandBuffer.cmdPipelineBarrier (        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-        gpuRadianceUpdates.current());
-    commandBuffer.cmdBindPipe(&radiancePipe);
-    /**/ vkCmdBindDescriptorSets (commandBuffer.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, radiancePipe.lineLayout, 0, 1, &radiancePipe.sets.current(), 0, 0);
-    int magic_number = lumal.iFrame % 2;
-    //if fast than increase work
-    if (timeTakenByRadiance < 1.8) {
-        magicSize --;
-        //if slow than decrease work
-    } else if (timeTakenByRadiance > 2.2) {
-        magicSize ++;
-    }
-    // LOG(timeTakenByRadiance);
-    // LOG(magicSize);
-    magicSize = glm::max (magicSize, 1); //never remove
-    magicSize = glm::min (magicSize, 10);
-    struct rtpc {int time, iters, size, shift;} pushconstant = {lumal.iFrame, 0, magicSize, lumal.iFrame % magicSize};
-    vkCmdPushConstants (commandBuffer.commandBuffer, radiancePipe.lineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof (pushconstant), &pushconstant);
-    int wg_count = radianceUpdates.size() / magicSize;
-    PLACE_TIMESTAMP_OUTSIDE(commandBuffer.commandBuffer);
-    vkCmdDispatch (commandBuffer.commandBuffer, wg_count, 1, 1);
-    PLACE_TIMESTAMP_OUTSIDE(commandBuffer.commandBuffer);
-    commandBuffer.cmdPipelineBarrier (        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-        radianceCache.current());
-    commandBuffer.cmdPipelineBarrier (        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-        radianceCache.current());
-}
-
-    */
-
     pub fn update_radiance(&mut self) {
         let mut command_buffer = self.cmdbufs.compute_command_buffers.current();
 
@@ -477,7 +387,7 @@ impl crate::LumRenderer {
             unsafe {
                 std::slice::from_raw_parts(
                     (push_constant as *const PushConstant) as *const u8,
-                    std::mem::size_of::<PushConstant>(),
+                    mem::size_of::<PushConstant>(),
                 )
             }
         }
@@ -1154,64 +1064,1064 @@ impl crate::LumRenderer {
             &self.pipes.raygen_blocks_pipe,
         );
     }
-/*
-static bool is_face_visible (vec3 normal, vec3 camera_dir) {
-    return (dot (normal, camera_dir) < 0.0f);
-}
 
-#define CHECK_N_DRAW_BLOCK(__norm, __dir) \
-if(is_face_visible(i8vec3(__norm), camera.cameraDir)) {\
-    draw_block_face(__norm, (*block_mesh).triangles.__dir, block_id);\
-}
-void LumInternal::LumInternalRenderer::draw_block_face (i8vec3 normal, IndexedVertices& buff, int block_id) {
-    CommandBuffer& commandBuffer = graphicsCommandBuffers.current();
-    // assert (buff.indexes.data());
-    assert (block_id);
-    i8 sum = normal.x + normal.y + normal.z;
-    u8 sign = (sum > 0) ? 0 : 1;
-    u8vec3 absnorm = abs (normal);
-    // assert(sign != 0);
-    assert ((absnorm.x + absnorm.y + absnorm.z) == 1);
-    u8 pbn = (
-                 sign << 7 |
-                 absnorm.x << 0 |
-                 absnorm.y << 1 |
-                 absnorm.z << 2);
-    //signBit_4EmptyBits_xBit_yBit_zBit
-    struct {u8vec4 inorm;} norms = {u8vec4 (pbn, 0, 0, 0)};
-    vkCmdPushConstants (commandBuffer.commandBuffer, raygenBlocksPipe.lineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        8, sizeof (norms), &norms);
+    fn is_face_visible(&mut self, normal: vec3, camera_dir: vec3) -> bool {
+        return (normal.dot(camera_dir) < 0.0);
+    }
 
-    commandBuffer.cmdDrawIndexed (buff.icount, 1, buff.offset, 0, 0);
-}
+    fn raygen_block_face(&mut self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+        // assert (buff.indexes.data());
+        assert!(block_id > 0);
+        let sum = normal.x + normal.y + normal.z;
+        let sign = (sum > 0) as u8;
+        let absnorm = u8vec3::new(
+            normal.x.abs() as u8,
+            normal.y.abs() as u8,
+            normal.z.abs() as u8,
+        );
+        assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
+        let pbn = {
+            sign << 7 |
+            absnorm.x << 0 |
+            absnorm.y << 1 |
+            absnorm.z << 2
+        };
+        //signBit_4EmptyBits_xBit_yBit_zBit
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            inorm: u8vec4,
+        }
+        let push_constant = PushConstant {
+            inorm: u8vec4::new(pbn, 0, 0, 0),
+        };
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.raygen_blocks_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                8,
+                push_constant.as_u8_slice(),
+            )
+        };
 
-void LumInternal::LumInternalRenderer::raygen_block (InternalMeshModel* block_mesh, int block_id, ivec3 shift) {
-    CommandBuffer& commandBuffer = graphicsCommandBuffers.current();
-    VkBuffer vertexBuffers[] = {(*block_mesh).triangles.vertexes.buffer};
-    VkDeviceSize offsets[] = {0};
-    DEBUG_LOG((*block_mesh).triangles.vertexes.buffer)
+        unsafe { 
+            self.lumal.device.cmd_draw_indexed(
+                *command_buffer,
+                buff.icount,
+                1,
+                buff.offset,
+                0,
+                0,
+            ) 
+        };
+    }
 
-    commandBuffer.cmdBindVertexBuffers (0, 1, vertexBuffers, offsets);
-    commandBuffer.cmdBindIndexBuffer ((*block_mesh).triangles.indices.buffer, 0, VK_INDEX_TYPE_UINT16);
-    ;
+    pub fn raygen_block(&mut self, block_mesh: &InternalMeshModel, block_id: BlockID_t, shift: ivec3) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_bind_vertex_buffers(
+                *command_buffer,
+                0,
+                &[block_mesh.triangles.vertexes.buffer],
+                &[0],
+            );
+            self.lumal.device.cmd_bind_index_buffer(
+                *command_buffer,
+                block_mesh.triangles.indices.buffer,
+                0,
+                vk::IndexType::UINT16, // yes, they are not 32 bit. And what?
+            );
+        };
 
-    /*
-        int16_t block;
-        i16vec3 shift;
-        i8vec4 inorm;
-    */
-    struct {i16 block; i16vec3 shift;} blockshift = {i16 (block_id), i16vec3 (shift)};
-    vkCmdPushConstants (commandBuffer.commandBuffer, raygenBlocksPipe.lineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        0, sizeof (blockshift), &blockshift);
-    CHECK_N_DRAW_BLOCK (i8vec3 (+1, 0, 0), Pzz);
-    CHECK_N_DRAW_BLOCK (i8vec3 (-1, 0, 0), Nzz);
-    CHECK_N_DRAW_BLOCK (i8vec3 (0, +1, 0), zPz);
-    CHECK_N_DRAW_BLOCK (i8vec3 (0, -1, 0), zNz);
-    CHECK_N_DRAW_BLOCK (i8vec3 (0, 0, +1), zzP);
-    CHECK_N_DRAW_BLOCK (i8vec3 (0, 0, -1), zzN);
-}
-*/
-    // pub fn is_face_visible(&mut self, face: PackedVoxelQuad, pos: ivec3) -> bool {
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        
+        struct PushConstant {
+            block: BlockID_t,
+            shift: i16vec3,
+            // inorm: i8vec4, // passed separately
+        }
 
-    // }
+        let push_constant = PushConstant {
+            block: block_id,
+            shift: i16vec3::new(shift.x as i16, shift.y as i16, shift.z as i16),
+        };
+
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.raygen_blocks_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        };
+
+        // loving macros. IDK if C is better, i am not nearly as good in Rust as i am in C, but still cool
+        macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
+            ($__normal:expr, $__face:ident) => { 
+                let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
+                let inorm = ivec3::new($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
+                if self.is_face_visible(fnorm, self.camera.camera_dir) {
+                    self.raygen_block_face(inorm, &block_mesh.triangles.$__face, block_id);
+                }
+            };
+        }
+
+        // draw every face (separately). This allows per-face culling
+        // damn, my rasterization is really optimized
+        // on 1660s it takes like 0.11 for all blocks (few thouthands) to raster 
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new( 1, 0, 0), Pzz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0,  1, 0), zPz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0,  1), zzP); 
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
+    }
+
+    pub fn raygen_start_models(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+        unsafe {
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE)
+        };
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.raygen_models_pipe,
+        );
+    }
+
+    fn raygen_model_face(&mut self, normal: vec3, buff: &IndexedVertices) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            inorm: vec4,
+        } 
+        let push_constant = PushConstant {
+            inorm: vec4::new(normal.x, normal.y, normal.z, 0.0),
+        };
+
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.raygen_models_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                32, // TODO sizeof of merged struct
+                push_constant.as_u8_slice(),
+            )
+        };
+
+        unsafe {
+            self.lumal.device.cmd_draw_indexed(
+                *command_buffer,
+                buff.icount,
+                1,
+                buff.offset,
+                0,
+                0,
+            )
+        }
+    }
+
+    pub fn raygen_model(&mut self, model_mesh: &InternalMeshModel, model_trans: &MeshTransform) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_bind_vertex_buffers(
+                *command_buffer,
+                0,
+                &[model_mesh.triangles.vertexes.buffer],
+                &[0],
+            );
+            self.lumal.device.cmd_bind_index_buffer(
+                *command_buffer,
+                model_mesh.triangles.indices.buffer,
+                0,
+                vk::IndexType::UINT16,
+            );
+        };
+        /*
+            vec4 rot;
+            vec4 shift;
+            vec4 fnormal; //not encoded
+        */
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            rot: quat,
+            shift: vec4,
+            // fnormal: vec4,
+        }
+        let push_constant = PushConstant {
+            rot: model_trans.rotation,
+            shift: vec4::new(
+                model_trans.translation.x,
+                model_trans.translation.y,
+                model_trans.translation.z,
+                0.0,
+            ),
+            // fnormal: vec4::new(normal.x, normal.y, normal.z, 0.0),
+        };
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.raygen_models_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        }
+
+        let model_voxels_info = vk::DescriptorImageInfo::builder()
+            .image_view(self.independent_images.world.current().view)
+            .image_layout(vk::ImageLayout::GENERAL)
+            .sampler(self.samplers.unnorm_nearest);
+        let binding = [model_voxels_info];
+        let model_voxels_write = vk::WriteDescriptorSet::builder()
+            .dst_set(vk::DescriptorSet::null())
+            .dst_binding(0)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&binding);
+
+        unsafe {
+            self.lumal.device.cmd_push_descriptor_set_khr(
+                *command_buffer,
+                vk::PipelineBindPoint::RAY_TRACING_KHR,
+                self.pipes.raygen_models_pipe.line_layout,
+                1,
+                &[model_voxels_write],
+            )
+        }
+
+        macro_rules! CHECK_AND_DRAW_MODEL_FACE {
+            ($__normal:expr, $__face:ident) => { 
+                let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
+                if self.is_face_visible(model_trans.rotation*fnorm, self.camera.camera_dir) {
+                    self.raygen_model_face(fnorm, &model_mesh.triangles.$__face);
+                }
+            };
+        }
+
+        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new ( 1, 0, 0), Pzz);
+        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (-1, 0, 0), Nzz);
+        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0,  1, 0), zPz);
+        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0, -1, 0), zNz);
+        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0, 0,  1), zzP);
+        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0, 0, -1), zzN);
+        // let _ :i64 = 0x0_c001_babe_face; // why did i port this?
+    }
+
+    fn lightmap_block_face(&mut self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
+        let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_draw_indexed(
+                *command_buffer,
+                buff.icount,
+                1,
+                buff.offset,
+                0,
+                0,
+            )
+        }
+    }
+
+    pub fn lightmap_block(&mut self, block_mesh: &InternalMeshModel, block_id: BlockID_t, shift: ivec3) {
+        let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_bind_vertex_buffers(
+                *command_buffer,
+                0,
+                &[block_mesh.triangles.vertexes.buffer],
+                &[0],
+            );
+            self.lumal.device.cmd_bind_index_buffer(
+                *command_buffer,
+                block_mesh.triangles.indices.buffer,
+                0,
+                vk::IndexType::UINT16, // yes, they are not 32 bit. And what?
+            );
+        };
+        /*
+            int16_t block;
+            i16vec3 shift;
+            i8vec4 inorm;
+        */
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            shift: i16vec4,
+        }
+        let push_constant = PushConstant {
+            shift: i16vec4::new(shift.x as i16, shift.y as i16, shift.z as i16, 0),
+        };
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.lightmap_blocks_pipe.line_layout,
+                ShaderStageFlags::VERTEX,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        };
+
+        macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
+            ($__normal:expr, $__face:ident) => { 
+                let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
+                let inorm = ivec3::new($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
+                if self.is_face_visible(fnorm, self.camera.camera_dir) {
+                    self.lightmap_block_face(inorm, &block_mesh.triangles.$__face, block_id);
+                }
+            };
+        }
+
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new( 1, 0, 0), Pzz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0,  1, 0), zPz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0,  1), zzP); 
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
+    }
+
+    fn lightmap_model_face(&mut self, normal: vec3, buff: &IndexedVertices) {
+        let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_draw_indexed(
+                *command_buffer,
+                buff.icount,
+                1,
+                buff.offset,
+                0,
+                0,
+            )
+        }
+    }
+
+    pub fn lightmap_model(&mut self, model_mesh: &InternalMeshModel, model_trans: &MeshTransform) {
+        let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_bind_vertex_buffers(
+                *command_buffer,
+                0,
+                &[model_mesh.triangles.vertexes.buffer],
+                &[0],
+            );
+            self.lumal.device.cmd_bind_index_buffer(
+                *command_buffer,
+                model_mesh.triangles.indices.buffer,
+                0,
+                vk::IndexType::UINT16,
+            );
+        };
+        /*
+            vec4 rot;
+            vec4 shift;
+            vec4 fnormal; //not encoded
+        */
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            rot: quat,
+            shift: vec4,
+            // fnormal: vec4,
+        }
+        let push_constant = PushConstant {
+            rot: model_trans.rotation,
+            shift: vec4::new(
+                model_trans.translation.x,
+                model_trans.translation.y,
+                model_trans.translation.z,
+                0.0,
+            ),
+            // fnormal: vec4::new(normal.x, normal.y, normal.z, 0.0),
+        };
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.lightmap_models_pipe.line_layout,
+                ShaderStageFlags::VERTEX,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        }
+
+        macro_rules! CHECK_AND_LIGHTMAP_MODEL_FACE {
+            ($__normal:expr, $__face:ident) => { 
+                let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
+                if self.is_face_visible(model_trans.rotation*fnorm, self.camera.camera_dir) {
+                    self.lightmap_model_face(fnorm, &model_mesh.triangles.$__face);
+                }
+            };
+        }
+
+        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new ( 1, 0, 0), Pzz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (-1, 0, 0), Nzz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0,  1, 0), zPz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0, -1, 0), zNz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0, 0,  1), zzP);
+        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0, 0, -1), zzN);
+    }
+
+    pub fn update_particles(&mut self) {
+        let mut write_index = 0;
+
+        for i in 0..self.particles.len() {
+            let should_keep = self.particles[i].life_time > 0.0;
+            if should_keep {
+                self.particles[write_index] = self.particles[i];
+
+                let velocity = self.particles[write_index].vel;
+                self.particles[write_index].pos += velocity * self.delta_time;
+
+                self.particles[write_index].life_time -= self.delta_time;
+                write_index += 1;
+            }
+        }
+
+        self.particles.shrink_to(write_index);
+        let capped_particle_count = write_index.clamp(0, self.settings.max_particle_count as usize);
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                self.particles.as_ptr(),
+                self.buffers.gpu_particles.current().mapped.unwrap() as *mut Particle,
+                capped_particle_count, // converts to size automatically
+            )
+        }
+
+        let size_to_flush = capped_particle_count * size_of::<Particle>();
+        unsafe {
+            self.lumal.allocator.as_ref().unwrap().flush_allocation(
+                self.buffers.gpu_particles.current().allocation,
+                0,
+                size_to_flush as u64,
+            );
+        }
+    }
+
+    pub fn raygen_map_particles(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+
+        if !self.particles.is_empty() { // just for safity
+            self.lumal.bind_raster_pipe(
+                &command_buffer,
+                &self.pipes.raygen_particles_pipe,
+            );
+            unsafe {
+                self.lumal.device.cmd_bind_vertex_buffers(
+                    *command_buffer,
+                    0,
+                    &[self.buffers.gpu_particles.current().buffer],
+                    &[0],
+                );
+                self.lumal.device.cmd_draw(
+                    *command_buffer,
+                    self.particles.len() as u32,
+                    1,
+                    0,
+                    0,
+                );
+            }
+        }
+    }
+
+    pub fn raygen_start_grass(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+        // self.lumal.bind_raster_pipe(
+        //     &command_buffer,
+        //     &self.pipes.raygen_grass_pipes[0],
+        // );
+    }
+
+    pub fn updade_grass(&mut self, wind_direction: vec2) {
+        let command_buffer = self.cmdbufs.compute_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_bind_pipeline(
+                *command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipes.update_grass_pipe.line,
+            );
+        }
+
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            wind_direction: vec2,
+            _wtf_is_this: vec2,
+            time: f32,
+        }
+        let push_constant = PushConstant {
+            wind_direction: wind_direction,
+            _wtf_is_this: vec2::new(0.0, 0.0),
+            time: self.lumal.frame as f32,
+        };
+
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.update_grass_pipe.line_layout,
+                ShaderStageFlags::COMPUTE,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        }
+
+        self.lumal.image_memory_barrier(
+            command_buffer,
+            &self.independent_images.grass_state.current(),
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            AccessFlags::SHADER_WRITE,
+            AccessFlags::SHADER_WRITE | AccessFlags::SHADER_READ,
+            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+        );
+
+        unsafe {
+            self.lumal.device.cmd_dispatch( //2x8 2x8 1x1
+                *command_buffer,
+                (self.settings.world_size.x * 2 + 7) / 8,
+                (self.settings.world_size.y * 2 + 7) / 8,
+                1,
+            );
+        }
+    }
+
+    pub fn updade_water(&mut self) {
+        let command_buffer = self.cmdbufs.compute_command_buffers.current();
+        unsafe {
+            self.lumal.device.cmd_bind_pipeline(
+                *command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipes.update_water_pipe.line,
+            );
+        }
+
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            wind_direction: vec2,
+            time: f32,
+        }
+        let push_constant = PushConstant {
+            wind_direction: vec2::new(0.0, 0.0),
+            time: self.lumal.frame as f32,
+        };
+
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.update_water_pipe.line_layout,
+                ShaderStageFlags::COMPUTE,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        }
+
+        self.lumal.image_memory_barrier(
+            command_buffer,
+            &self.independent_images.water_state.current(),
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            AccessFlags::SHADER_WRITE,
+            AccessFlags::SHADER_WRITE | AccessFlags::SHADER_READ,
+            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+        );
+
+        unsafe {
+            self.lumal.device.cmd_dispatch( //2x8 2x8 1x1
+                *command_buffer,
+                (self.settings.world_size.x * 2 + 7) / 8,
+                (self.settings.world_size.y * 2 + 7) / 8,
+                1,
+            );
+        }
+    }
+
+    pub fn raygen_map_grass(&mut self, grass: &InternalMeshFoliage, pos: vec3) {
+        let command_buffers = self.cmdbufs.graphics_command_buffers.current();
+
+        let size = 10;
+        let x_flip = self.camera.camera_dir.x < 0.0;
+        let y_flip = self.camera.camera_dir.y < 0.0;
+
+        // it is somewhat cached
+        self.lumal.bind_raster_pipe(
+            &command_buffers,
+            &grass.pipe,
+        );
+
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            shift: vec4,
+            _size: i32,
+            _time: i32,
+            xf: i32,
+            yf: i32,
+        }
+        let push_constant = PushConstant {
+            shift: vec4::new(
+                pos.x,
+                pos.y,
+                pos.z,
+                0.0,
+            ),
+            _size: size as i32,
+            _time: self.lumal.frame as i32,
+            xf: x_flip as i32, // TODO: compress
+            yf: y_flip as i32,
+        };
+
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffers,
+                grass.pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        }
+
+        let verts_per_blade = grass.vertices;
+        let blade_per_instance = 1; //for triangle strip
+        unsafe {
+            self.lumal.device.cmd_draw(
+                *command_buffers,
+                verts_per_blade as u32 * blade_per_instance as u32,
+                (size * size + (blade_per_instance - 1)) / blade_per_instance,
+                0,
+                0,
+            )
+        };
+    }
+
+    pub fn raygen_start_water(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe { self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE) };
+        
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.raygen_water_pipe,
+        );
+    }
+
+    pub fn raygen_map_water(&mut self, water: &InternalMeshLiquid, pos: vec3) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+        let quality_size = 32;
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            shift: vec4,
+            _size: i32,
+            _time: i32,
+        }
+
+        let push_constant = PushConstant {
+            shift: vec4::new(
+                pos.x,
+                pos.y,
+                pos.z,
+                0.0,
+            ),
+            _size: quality_size as i32,
+            _time: self.lumal.frame as i32,
+        };
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.raygen_water_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        }
+
+        let verts_per_water_tape = quality_size * 2 + 2;
+        let tapes_per_block = quality_size;
+        unsafe {
+            self.lumal.device.cmd_draw(
+                *command_buffer,
+                verts_per_water_tape as u32,
+                tapes_per_block,
+                0,
+                0,
+            )
+        };
+    }
+
+    pub fn end_raygen(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+        unsafe { self.lumal.device.cmd_end_render_pass(*command_buffer) };
+    }
+
+    pub fn start_2nd_spass(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        let ao_lut = Self::generate_lut::<8>(
+            16.0 / 1000.0,
+            vec2::new(
+                self.lumal.vulkan_data.swapchain_extent.width as f32,
+                self.lumal.vulkan_data.swapchain_extent.height as f32,
+            ),
+            self.camera.horizline * self.camera.view_size.x / 2.0,
+            self.camera.vertiline * self.camera.view_size.y / 2.0,
+        );
+
+        // sync
+        self.lumal.buffer_memory_barrier(
+            command_buffer,
+            &self.buffers.ao_lut_uniform.current(),
+            PipelineStageFlags::ALL_COMMANDS,
+            PipelineStageFlags::ALL_COMMANDS,
+            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+        );
+
+        unsafe {
+            self.lumal.device.cmd_update_buffer(
+                *command_buffer,
+                self.buffers.ao_lut_uniform.current().buffer,
+                0,
+                unsafe { // TODO: derive?
+                    std::slice::from_raw_parts(
+                        (&ao_lut as *const AoLut) as *const u8,
+                        std::mem::size_of::<AoLut>(),
+                    )
+                }
+            );
+        }
+
+        // sync
+        self.lumal.buffer_memory_barrier(
+            command_buffer,
+            &self.buffers.ao_lut_uniform.current(),
+            PipelineStageFlags::ALL_COMMANDS,
+            PipelineStageFlags::ALL_COMMANDS,
+            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+        );
+
+        let far = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [-10000.0, -10000.0, -10000.0, -10000.0],
+            },
+        };
+        let near = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [10000.0, 10000.0, 10000.0, 10000.0],
+            },
+        };
+        let clear_depth = vk::ClearValue {
+            depth_stencil: vk::ClearDepthStencilValue {
+                depth: 1.0,
+                stencil: Default::default(),
+            },
+        };
+
+        let clear_colors = [
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0],
+                },
+            },
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0],
+                },
+            },
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0],
+                },
+            },
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0],
+                },
+            },
+            far,
+            near,
+        ];
+
+        unsafe {
+            self.lumal.begin_render_pass(
+                command_buffer,
+                &self.rpasses.shade_rpass,
+                vk::SubpassContents::INLINE,
+            );
+        }
+    }
+
+    pub fn diffuse(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.diffuse_pipe,
+        );
+
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            v1: vec4,
+            v2: vec4,
+            lp: mat4,
+        }
+        let transmuted_frame = unsafe { transmute::<i32, f32>(self.lumal.frame) };
+        let push_constant = PushConstant {
+            v1: vec4::new(
+                self.camera.camera_pos.x,
+                self.camera.camera_pos.y,
+                self.camera.camera_pos.z,
+                transmuted_frame, // kinda rnd source afair
+            ),  
+            v2: vec4::new(
+                self.camera.camera_dir.x,
+                self.camera.camera_dir.y,
+                self.camera.camera_dir.z,
+                0.0,
+            ), 
+            lp: self.light.light_transform,
+        };
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.diffuse_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        };
+
+        unsafe { // you may wonder - why no bound buffer? Answer: its fullscreen triangle
+            self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+        } // btw, every such call is fullscreen triangle
+    }
+
+    pub fn ambient_occlusion(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.ao_pipe,
+        );
+
+        unsafe { // fullscreen triangle
+            self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+        }
+    }
+
+    pub fn glossy_raygen(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.fill_stencil_glossy_pipe,
+        );
+
+        unsafe { // fullscreen triangle
+            self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+        }
+    }
+
+    pub fn raygen_start_smoke(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.fill_stencil_smoke_pipe,
+        );
+    }
+
+    pub fn raygen_map_smoke(&mut self, smoke: &InternalMeshVolumetric, pos: vec3) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            center_size: vec4,
+        }
+        let push_constant = PushConstant {
+            center_size: vec4::new(
+                pos.x * 16.0,
+                pos.y * 16.0,
+                pos.z * 16.0,
+                32.0,
+            ),
+        };
+
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.fill_stencil_smoke_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        };
+
+        unsafe { // least optimized cube in the world. If GPU programmers used twitter, i would be getting canceled for this
+            self.lumal.device.cmd_draw(*command_buffer, 36, 1, 0, 0);
+        }
+    }
+
+    pub fn smoke(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.fill_stencil_smoke_pipe,
+        );
+
+        unsafe { // fullscreen triangle
+            self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+        }
+    }
+
+    pub fn glossy(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.glossy_pipe,
+        );
+
+        #[repr(C)]// for push constants
+        #[derive(AsU8Slice)]// allow cast to &[u8]
+        struct PushConstant {
+            v1: vec4,
+            v2: vec4,
+        }
+        let push_constant = PushConstant {
+            v1: vec4::new(
+                self.camera.camera_pos.x,
+                self.camera.camera_pos.y,
+                self.camera.camera_pos.z,
+                0.0,
+            ),  
+            v2: vec4::new(
+                self.camera.camera_dir.x,
+                self.camera.camera_dir.y,
+                self.camera.camera_dir.z,
+                0.0,
+            ), 
+        };
+
+        unsafe {
+            self.lumal.device.cmd_push_constants(
+                *command_buffer,
+                self.pipes.glossy_pipe.line_layout,
+                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                0,
+                push_constant.as_u8_slice(),
+            )
+        };
+
+        unsafe { // fullscreen triangle
+            self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+        }
+    }
+
+    pub fn tonemap(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        unsafe {
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+        }
+
+        self.lumal.bind_raster_pipe(
+            &command_buffer,
+            &self.pipes.tonemap_pipe,
+        );
+
+        unsafe { // fullscreen triangle
+            self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+        }
+    }
+
+    pub fn end_2nd_spass(&mut self) {
+        let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        // Currently, there is no UI because it is getting abstracted away (l0l)
+        unsafe {
+            self.lumal.device.cmd_end_render_pass(*command_buffer);
+        }
+    }
+
+    pub fn end_frame(&mut self) {
+        self.lumal.end_frame(&[
+            // "Special" cmb used by UI copies & layout transitions HAS to be first
+            // Otherwise copied images are in LAYOUT_UNDEFINED because copies did not happen yet
+            // so, copy before using the copy (makes sense, right?)
+            *self.cmdbufs.copy_command_buffers.current(),
+            *self.cmdbufs.compute_command_buffers.current(),
+            *self.cmdbufs.lightmap_command_buffers.current(),
+            *self.cmdbufs.graphics_command_buffers.current(),
+        ]);
+
+        self.cmdbufs.copy_command_buffers.move_next(); //runtime copies for ui. Also does first frame resources
+        self.cmdbufs.compute_command_buffers.move_next();
+        self.cmdbufs.lightmap_command_buffers.move_next();
+        self.cmdbufs.graphics_command_buffers.move_next();
+
+        self.independent_images.lightmap.move_next();
+        self.dependent_images.highres_frame.move_next();
+        self.dependent_images.highres_depth_stencil.move_next();
+        self.dependent_images.highres_mat_norm.move_next();
+        self.dependent_images.stencil_view_for_ds.move_next();
+        self.dependent_images.far_depth.move_next(); //represents how much should smoke traversal for
+        self.dependent_images.near_depth.move_next(); //represents how much should smoke traversal for
+        // self.dependent_images.mask_frame.move_next(); //where lowres renders to. Blends with highres afterwards
+        self.buffers.staging_world.move_next();
+        self.independent_images.world.move_next(); //can i really use just one?
+        self.independent_images.origin_block_palette.move_next();
+        // self.independent_images.distance_palette.move_next();
+        // self.independent_images.bit_palette.move_next(); //bitmask of originBlockPalette
+        self.independent_images.material_palette.move_next();
+        self.buffers.light_uniform.move_next();
+        self.buffers.uniform.move_next();
+        self.buffers.ao_lut_uniform.move_next();
+        self.buffers.gpu_radiance_updates.move_next();
+        self.buffers.staging_radiance_updates.move_next();
+        self.buffers.gpu_particles.move_next(); //multiple because cpu-related work
+        self.independent_images.perlin_noise2d.move_next(); //full-world grass shift (~direction) texture sampled in grass
+        self.independent_images.perlin_noise3d.move_next(); //full-world grass shift (~direction) texture sampled in grass
+
+        self.independent_images.grass_state.move_next(); //full-world grass shift (~direction) texture sampled in grass
+        self.independent_images.water_state.move_next(); //~same but water
+    }
 }
