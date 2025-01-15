@@ -301,7 +301,12 @@ impl LumalRenderer {
         framebuffers
     }
 
-    pub fn begin_render_pass(&self, command_buffer: &vk::CommandBuffer, render_pass: &RenderPass, inline: vk::SubpassContents) {
+    pub fn cmd_begin_renderpass(
+        &self,
+        command_buffer: &vk::CommandBuffer,
+        render_pass: &RenderPass,
+        inline: vk::SubpassContents,
+    ) {
         let begin_info = vk::RenderPassBeginInfo::builder()
             .render_pass(render_pass.render_pass)
             .framebuffer(*render_pass.framebuffers.current())
@@ -317,18 +322,18 @@ impl LumalRenderer {
                 &begin_info,
                 inline,
             );
-            self.device.cmd_set_viewport(
+            self.cmd_set_viewport(
                 *command_buffer,
-                0,
-                &[vk::Viewport {
-                    x: 0.0,
-                    y: 0.0,
-                    width: render_pass.extent.width as f32,
-                    height: render_pass.extent.height as f32,
-                    min_depth: 0.0,
-                    max_depth: 1.0,
-                }],
+                render_pass.extent.width,
+                render_pass.extent.height,
             );
         }
+    }
+
+    pub fn cmd_end_renderpass(&self, command_buffer: &vk::CommandBuffer, render_pass: &mut RenderPass) {
+        unsafe {
+            self.device.cmd_end_render_pass(*command_buffer);
+        }
+        render_pass.framebuffers.move_next();
     }
 }

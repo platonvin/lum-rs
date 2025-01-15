@@ -76,7 +76,7 @@ impl crate::LumRenderer {
                             stencil: 0,
                         },
                     },
-                    final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    final_layout: vk::ImageLayout::GENERAL,
                 },
             ],
             &mut [
@@ -157,7 +157,7 @@ impl crate::LumRenderer {
                             stencil: 0,
                         },
                     },
-                    final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
                     images: Some(&dimages.far_depth),
@@ -235,12 +235,12 @@ impl crate::LumRenderer {
                     a_color: &[Some(&dimages.swapchain_images)],
                     a_depth: None,
                 },
-                SubpassDescription {
-                    pipes: &mut [&mut pipes.overlay_pipe],
-                    a_input: &[],
-                    a_color: &[Some(&dimages.swapchain_images)],
-                    a_depth: None,
-                },
+                // SubpassDescription {
+                //     pipes: &mut [&mut pipes.overlay_pipe],
+                //     a_input: &[],
+                //     a_color: &[Some(&dimages.swapchain_images)],
+                //     a_depth: None,
+                // },
             ],
         );
         lumal::atrace!();

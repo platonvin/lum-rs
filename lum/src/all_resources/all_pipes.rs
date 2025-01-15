@@ -54,7 +54,6 @@ impl crate::LumRenderer {
         );
         lumal::atrace!();
 
-        // pipes.lightmap_blocks_pipe.subpass_id = 0;
         lumal.create_raster_pipeline(
             &mut pipes.lightmap_blocks_pipe,
             None, // extra_dynamic_layout
@@ -83,7 +82,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.lightmap_models_pipe.subpass_id = 0;
         lumal.create_raster_pipeline(
             &mut pipes.lightmap_models_pipe,
             None,
@@ -112,7 +110,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.raygen_blocks_pipe.subpass_id = 0;
         lumal.create_raster_pipeline(
             &mut pipes.raygen_blocks_pipe,
             None,
@@ -145,7 +142,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.raygen_models_pipe.subpass_id = 1;
         lumal.create_raster_pipeline(
             &mut pipes.raygen_models_pipe,
             Some(pipes.raygen_models_push_layout),
@@ -178,7 +174,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.raygen_particles_pipe.subpass_id = 2;
         lumal.create_raster_pipeline(
             &mut pipes.raygen_particles_pipe,
             None,
@@ -229,7 +224,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.raygen_water_pipe.subpass_id = 4;
         lumal.create_raster_pipeline(
             &mut pipes.raygen_water_pipe,
             None,
@@ -291,7 +285,6 @@ impl crate::LumRenderer {
             );
         }
         
-        // pipes.diffuse_pipe.subpass_id = 0;
         lumal.create_raster_pipeline(
             &mut pipes.diffuse_pipe,
             None,
@@ -323,7 +316,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.ao_pipe.subpass_id = 1;
         lumal.create_raster_pipeline(
             &mut pipes.ao_pipe,
             None,
@@ -354,7 +346,6 @@ impl crate::LumRenderer {
         // Porting fillStencilGlossyPipe
         lumal::atrace!();
 
-        // pipes.fill_stencil_glossy_pipe.subpass_id = 2;
         lumal.create_raster_pipeline(
             &mut pipes.fill_stencil_glossy_pipe,
             None,
@@ -393,7 +384,6 @@ impl crate::LumRenderer {
         // Porting fillStencilSmokePipe
         lumal::atrace!();
 
-        // pipes.fill_stencil_smoke_pipe.subpass_id = 3;
         lumal.create_raster_pipeline(
             &mut pipes.fill_stencil_smoke_pipe,
             None,
@@ -436,7 +426,6 @@ impl crate::LumRenderer {
         // Porting glossyPipe
         lumal::atrace!();
 
-        // pipes.glossy_pipe.subpass_id = 4;
         lumal.create_raster_pipeline(
             &mut pipes.glossy_pipe,
             None,
@@ -475,7 +464,6 @@ impl crate::LumRenderer {
         // Porting smokePipe
         lumal::atrace!();
 
-        // pipes.smoke_pipe.subpass_id = 5;
         lumal.create_raster_pipeline(
             &mut pipes.smoke_pipe,
             None,
@@ -513,7 +501,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.tonemap_pipe.subpass_id = 6;
         lumal.create_raster_pipeline(
             &mut pipes.tonemap_pipe,
             None,
@@ -545,7 +532,6 @@ impl crate::LumRenderer {
 
         lumal::atrace!();
 
-        // pipes.overlay_pipe.subpass_id = 7;
         // lumal.create_raster_pipeline(
         //     &mut pipes.overlay_pipe,
         //     None,

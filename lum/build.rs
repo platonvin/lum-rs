@@ -1,12 +1,3 @@
-// fn main() {
-//     cc::Build::new()
-//         .compiler("clang++") // Specify the C++ compiler as clang++
-//         .cpp(true) // Enables C++ compilation
-//         .file("cpp/my_cpp_code.cpp") // Path to your C++ file
-//         .include("cpp/") // Path to your C++ headers
-//         .flag_if_supported("-std=c++17") // Add C++17 standard flag
-//         .compile("my_cpp_code");
-// }
 
 fn main() {
     // You call it lazy
@@ -18,19 +9,19 @@ fn main() {
 
     let mut build = cc::Build::new();
     build
-        .compiler("clang++") // Specify the C++ compiler
-        .cpp(true)           // Enables C++ compilation
-        .include("cpp/")     // Path to your C++ headers
-        .flag_if_supported("-std=c++17") // Use C++17
-        // .flag_if_supported("-flto=thin") // Enable ThinLTO
-        .flag_if_supported("-O2") // Optimize for release builds
+        .compiler("clang++")
+        .cpp(true) // not C
+        .include("cpp/")
+        .flag_if_supported("-std=c++17")
+        // .flag_if_supported("-flto=thin") // TODO: does it work with Rust?
+        .flag_if_supported("-O2")
         ;
-    // Add all source files to the build
-    for source in sources {
+
+        for source in sources {
         build.file(source);
     }
 
-    // Compile the sources into a static library
+    // Compile into a static library
     build.compile("my_cpp_code");
 
     // I have no fucking idea how to actually get it working LOL

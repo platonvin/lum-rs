@@ -46,12 +46,26 @@ impl LumalRenderer {
 
         let (vk_buffer, allocation) = unsafe { self
             .allocator.as_ref().unwrap()
-            .create_buffer(buffer_info, &alloc_info) }?;
+            .create_buffer(buffer_info, &alloc_info)
+        }?;
 
+        // TODO: Integrated CPU memory utilization
+        // TODO: what if it fails? Different set of flags?
+        let mut mapped = None;
+        if host {
+            // basically make so CPU can read&write buffer memory
+            mapped = Some(unsafe {
+                self.allocator
+                    .as_ref()
+                    .unwrap()
+                    .map_memory(allocation)
+                    .unwrap()
+            });
+        }
         Ok(Buffer {
             buffer: vk_buffer,
             allocation,
-            mapped: None
+            mapped: mapped
         })
     }
 

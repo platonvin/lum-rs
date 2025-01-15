@@ -42,11 +42,29 @@ pub type quat = vek::quaternion::Quaternion<f32>;
 #[allow(non_camel_case_types)]
 pub type BlockID_t = i16; 
 #[allow(non_camel_case_types)]
-type MatID_t = u8;
-type Voxel = u8;
+pub type MatID_t = u8;
+// TODO: enum with empty / non-empty using NonZeroU8
+#[repr(C)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct Voxel (pub u8);
+
+// CPU side structure with actual voxel data but only gpu mesh handler
+pub struct BlockWithMesh {
+    pub voxels: [[[Voxel; 16]; 16]; 16],
+    pub mesh: InternalMeshModel,
+}
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(as_u8_slice_derive::AsU8Slice, Default, Clone, Copy)]
+pub struct Material {
+    pub albedo: vec3,
+    pub transparency: f32,
+    pub emmitness: f32,
+    pub roughness: f32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Particle {
     pub pos: vec3,
     pub vel: vec3,
@@ -54,7 +72,7 @@ pub struct Particle {
     pub mat_id: MatID_t,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct AoLut {
     pub world_shift: vec3,
     pub weight_normalized: f32, // ((1-r^2)/total_weight)*0.7
@@ -62,39 +80,39 @@ pub struct AoLut {
     pub padding: vec2,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct VoxelVertex {
     pub pos: u8vec3,
     pub norm: i8vec3,
     pub mat_id: MatID,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelVertex {
     pub pos: u8vec3,
     pub mat_id: MatID,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelQuad {
     pub size: u8vec2,
     pub pos: u8vec3,
     pub mat_id: MatID,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelCircuit {
     pub pos: u8vec3,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct IndexedVertices {
     pub offset: u32, // yes, they are all stored in same buffer and accessed with offset
     pub icount: u32, 
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FaceBuffers {
     // zPz means zero-Positive-zero
     // zzN means zero-zero-Negative
@@ -108,14 +126,14 @@ pub struct FaceBuffers {
     pub indices: lumal::Buffer,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct InternalMeshModel {
     pub triangles: FaceBuffers,
     pub voxels: Ring<lumal::Image>,
-    pub size: ivec3, // integer because in voxels
+    pub size: uvec3, // integer because in voxels
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct InternalMeshFoliage {
     pub vertex_shader_file: String,
     pub pipe: lumal::RasterPipe,

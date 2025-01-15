@@ -4,7 +4,7 @@ members = [
     "lum",       # Include the lum crate
     "lumal",     # Include the lumal crate
     "examples",  # example programs
-    "as_u8_slice_derive", # derive macro for AsU8Slice
+    "as_u8_slice_derive", "unchecked_integer", # derive macro for AsU8Slice
 ]
 
 [profile.dev]

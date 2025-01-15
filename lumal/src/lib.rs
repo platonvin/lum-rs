@@ -528,11 +528,13 @@ impl LumalRenderer {
     pub fn bind_compute_pipe(&self, cmb: &vk::CommandBuffer, pipe: &ComputePipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
+            self.device.cmd_bind_descriptor_sets(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line_layout, 0, &[*pipe.sets.current()], &[]);
         }
     }
     pub fn bind_raster_pipe(&self, cmb: &vk::CommandBuffer, pipe: &RasterPipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
+            self.device.cmd_bind_descriptor_sets(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line_layout, 0, &[*pipe.sets.current()], &[]);
         }
     }
 
@@ -559,6 +561,58 @@ impl LumalRenderer {
                 &compute_command_buffers.as_slice(),
             )
         };
+    }
+    
+    pub fn transition_image_layout_single_time(&self, image: &Image, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) {
+        let command_buffer = self.begin_single_time_command_buffer();
+        let barrier = vk::ImageMemoryBarrier::builder()
+            .old_layout(old_layout)
+            .new_layout(new_layout)
+            .image(image.image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: image.aspect,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .src_access_mask(vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE)
+            .dst_access_mask(vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE);
+        unsafe {
+            self.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &[] as &[vk::MemoryBarrier],
+                &[] as &[vk::BufferMemoryBarrier],
+                &[barrier],
+            );
+        };
+    }
+    
+    pub fn copy_buffer_to_image_single_time(&self, buffer: vk::Buffer, img: &Image, extent: vk::Extent3D) { 
+        let command_buffer = self.begin_single_time_command_buffer();
+        let copy_region = vk::BufferImageCopy::builder()
+            .image_extent(extent)
+            .image_subresource(vk::ImageSubresourceLayers::builder()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .layer_count(1)
+                .mip_level(0)
+                .base_array_layer(0)
+                .build())
+            .buffer_offset(0)
+            .build();
+        unsafe {
+            self.device.cmd_copy_buffer_to_image(
+                command_buffer,
+                buffer,
+                img.image,
+                vk::ImageLayout::GENERAL,
+                &[copy_region],
+            );
+        };
+        self.end_single_time_command_buffer(command_buffer);
     }
 }
 

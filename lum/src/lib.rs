@@ -11,8 +11,10 @@
 pub mod consts;
 pub mod all_resources;
 pub mod types;
-pub mod internal_renderer;
 pub mod containers;
+pub mod internal_renderer;
+pub mod renderer;
+pub mod load;
 
 use std::{mem, ptr::null_mut};
 use anyhow::Result;
@@ -29,6 +31,7 @@ use RelativeDescriptorPos::Current;
 
 
 #[derive(Clone, Copy)]
+#[pub_fields::pub_fields]
 pub struct LumSettings {
     world_size: uvec3,
     static_block_palette_size: u32,
@@ -154,6 +157,7 @@ pub struct LumRenderPasses {
     shade_rpass: lumal::RenderPass, //for no downscaling
 }
 
+#[pub_fields::pub_fields] // lol i use crate for this
 pub struct LumRenderer {
     lumal: lumal::LumalRenderer,
     // renderer settings. Cannot be changed after creation
@@ -207,10 +211,16 @@ pub struct LumRenderer {
 
     // time, taken by the last frame - you know
     delta_time: f32,
+
+    // used to track if loaded magicavoxel file should write its palette to Lum (implicitly) 
+    has_palette: bool, 
+    // CPU side material palette in vector (not in image like on GPU)
+    material_palette: Vec<Material>,
 }
-const DEPTH_FORMAT_SPARE :vk::Format = vk::Format::D24_UNORM_S8_UINT; //TODO somehow faster than vk::Format::D24_UNORM_S8_UINT on low-end
+const DEPTH_FORMAT_SPARE :vk::Format = vk::Format::D24_UNORM_S8_UINT; //TODO somehow D32 faster than vk::Format::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED :vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
 
+// TODO: separate file
 extern "C" {
     fn my_cpp_function();
 }
@@ -218,7 +228,6 @@ extern "C" {
 impl LumRenderer {
     /// Creates our Vulkan app.
     pub unsafe fn create(lum_settings: &LumSettings) -> Result<LumRenderer> {
-        // Ok(Self {})
         my_cpp_function();
         
         let mut
@@ -299,13 +308,15 @@ impl LumRenderer {
             light: light,
             palette_counter: 0,
             static_block_palette_size: lum_settings.static_block_palette_size, // TODO: remove settings
+            origin_world: origin_world,
+            current_world: current_world,
+            has_palette: false,
             radiance_updates: vec![],
             special_radiance_updates: vec![],
             block_copies_queue: vec![],
             block_clear_queue: vec![],
-            origin_world: origin_world,
-            current_world: current_world,
             particles: vec![],
+            material_palette: vec![Material::default(); 256],
         };
         
         atrace!();

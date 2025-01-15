@@ -42,7 +42,7 @@ impl crate::LumRenderer {
             lumal_settings.fif,
             vk::ImageType::_3D,
             RADIANCE_FORMAT,
-            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
+            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_SRC | vk::ImageUsageFlags::TRANSFER_DST,
             vulkanalia_vma::MemoryUsage::AutoPreferDevice,
             vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
             vk::ImageAspectFlags::COLOR,

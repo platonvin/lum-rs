@@ -7,6 +7,9 @@ use vk::{AccessFlags, DeviceV1_0, HasBuilder, Image, ImageLayout, KhrPushDescrip
 
 use crate::*;
 
+// i am clearly trash with managing division into files
+// if someone has a good idea on how to do it, message me (or just make a PR)
+
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
     camera_pos: vec3,
@@ -372,7 +375,7 @@ impl crate::LumRenderer {
         // binds descriptor sets and pipeline itself
         self.lumal.bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
 
-        let magic_number = self.lumal.frame % 2;
+        let magic_number = 2;
 
         #[repr(C)]// for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -930,10 +933,10 @@ impl crate::LumRenderer {
         
         #[repr(C)]// for push constants
         #[derive(AsU8Slice)]// allow cast to &[u8]
-        struct PushConstant {
+        struct BufferPatch {
             trans: mat4,
         }
-        let push_constant = PushConstant {
+        let buffer_patch = BufferPatch {
             trans: self.light.light_transform,
         };
 
@@ -948,12 +951,11 @@ impl crate::LumRenderer {
         );
 
         unsafe {
-            self.lumal.device.cmd_push_constants(
+            self.lumal.device.cmd_update_buffer(
                 *command_buffer,
-                self.pipes.lightmap_blocks_pipe.line_layout,
-                ShaderStageFlags::COMPUTE,
+                self.buffers.light_uniform.current().buffer,
                 0,
-                push_constant.as_u8_slice(),
+                buffer_patch.as_u8_slice(),
             )
         };
 
@@ -965,6 +967,12 @@ impl crate::LumRenderer {
             PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+        );
+
+        self.lumal.cmd_begin_renderpass(
+            command_buffer,
+            &self.rpasses.lightmap_rpass,
+            vk::SubpassContents::INLINE,
         );
     }
 
@@ -990,8 +998,9 @@ impl crate::LumRenderer {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         unsafe { 
-            self.lumal.device.cmd_end_render_pass(
-                *command_buffer
+            self.lumal.cmd_end_renderpass(
+                command_buffer,
+                &mut self.rpasses.lightmap_rpass,
             ) 
         };
     }
@@ -1001,7 +1010,7 @@ impl crate::LumRenderer {
         
         #[repr(C)]// for push constants
         #[derive(AsU8Slice)]// allow cast to &[u8]
-        struct PushConstant {
+        struct BufferPatch {
             trans_w2s: mat4,
             campos: vec4,
             camdir: vec4,
@@ -1013,7 +1022,7 @@ impl crate::LumRenderer {
             timeseed: i32,
         }
 
-        let push_constant = PushConstant {
+        let buffer_patch = BufferPatch {
             trans_w2s: self.camera.camera_transform,
             campos: vec4::new(self.camera.camera_pos.x, self.camera.camera_pos.y, self.camera.camera_pos.z, 0.0),
             camdir: vec4::new(self.camera.camera_dir.x, self.camera.camera_dir.y, self.camera.camera_dir.z, 0.0),
@@ -1036,12 +1045,11 @@ impl crate::LumRenderer {
         );
         
         unsafe {
-            self.lumal.device.cmd_push_constants(
+            self.lumal.device.cmd_update_buffer(
                 *command_buffer,
-                self.pipes.raygen_blocks_pipe.line_layout,
-                ShaderStageFlags::COMPUTE,
+                self.buffers.uniform.current().buffer,
                 0,
-                push_constant.as_u8_slice(),
+                buffer_patch.as_u8_slice(),
             )
         };
 
@@ -1053,6 +1061,13 @@ impl crate::LumRenderer {
             PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+        );
+
+        self.lumal.cmd_begin_renderpass(
+            command_buffer,
+            // gbuffer is also somewhat referred to as raygen (cause generated gbuffer is used as source for raytrace)
+            &self.rpasses.gbuffer_rpass, 
+            vk::SubpassContents::INLINE,
         );
     }
 
@@ -1765,7 +1780,7 @@ impl crate::LumRenderer {
 
     pub fn end_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        unsafe { self.lumal.device.cmd_end_render_pass(*command_buffer) };
+        unsafe { self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass) };
     }
 
     pub fn start_2nd_spass(&mut self) {
@@ -1858,7 +1873,7 @@ impl crate::LumRenderer {
         ];
 
         unsafe {
-            self.lumal.begin_render_pass(
+            self.lumal.cmd_begin_renderpass(
                 command_buffer,
                 &self.rpasses.shade_rpass,
                 vk::SubpassContents::INLINE,
@@ -2000,7 +2015,7 @@ impl crate::LumRenderer {
 
         self.lumal.bind_raster_pipe(
             &command_buffer,
-            &self.pipes.fill_stencil_smoke_pipe,
+            &self.pipes.smoke_pipe,
         );
 
         unsafe { // fullscreen triangle
@@ -2078,7 +2093,8 @@ impl crate::LumRenderer {
 
         // Currently, there is no UI because it is getting abstracted away (l0l)
         unsafe {
-            self.lumal.device.cmd_end_render_pass(*command_buffer);
+            self.lumal
+                .cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
         }
     }
 
