@@ -65,6 +65,7 @@ impl AppState {
 
         let mut pre_init_lum = Renderer::create().unwrap();
         let grass = pre_init_lum.load_foliage(
+            // this is compiled by lum. But you should compile such shaders yourself
             "shaders/compiled/grass.vert.spv",
             13,
             100,
@@ -112,7 +113,7 @@ impl AppState {
         for xx in 0..self.lum.renderer.settings.world_size.x {
             let is_floor = zz <= 2;
             if is_floor {
-                let block = &mut self.lum.renderer.current_world[(xx as usize, yy as usize, zz as usize)];
+                let block = &mut self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
                 *block = 1;
             }
         }}}

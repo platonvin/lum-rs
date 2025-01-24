@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
 #![allow(unused_parens)]
 #![feature(stmt_expr_attributes)]
 

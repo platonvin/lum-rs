@@ -484,7 +484,7 @@ impl super::InternalRenderer {
         triangles.indices = self.lumal.create_elem_buffer::<u16>(
             &all_indices,
             vk::BufferUsageFlags::TRANSFER_DST // trans_dst needed internally but specified explicitly 
-            | vk::BufferUsageFlags::VERTEX_BUFFER,
+            | vk::BufferUsageFlags::INDEX_BUFFER,
         );
 
         return InternalMeshModel {

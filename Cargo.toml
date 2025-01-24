@@ -5,6 +5,7 @@ cargo-features = ["profile-rustflags"]
     members = [
         "lum",                # Include the lum crate
         "lumal",              # Include the lumal crate
+        "shaders",
         "examples",           # example programs
         "as_u8_slice_derive",
         "unchecked_integer",  # derive macro for AsU8Slice

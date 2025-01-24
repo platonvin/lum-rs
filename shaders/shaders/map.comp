@@ -1,0 +1,68 @@
+#version 450 core
+
+//version with world from model
+
+#define varp lowp
+precision highp int;
+precision highp float;
+
+//TODO: move per-workgroup computations to different shader
+//TODO: AND test shared perfomance
+layout(push_constant) restrict readonly uniform constants{
+     mat4 inverse_trans; //map game voxel world to modelVoxels
+    ivec4 shift;
+} pco;
+
+layout(set = 0, binding = 0, r16i) uniform restrict  readonly iimage3D blocks;
+layout(set = 0, binding = 1, r8ui) uniform restrict writeonly uimage3D blockPalette;
+
+layout(set = 1, binding = 0, r8ui) uniform restrict readonly uimage3D modelVoxels;
+
+const int BLOCK_PALETTE_SIZE_X = 64;
+const int STATIC_BLOCK_COUNT = 15; // 0 + 1..static block count so >=STATIC_BLOCK_COUNT
+
+ivec3 voxel_in_palette(ivec3 relative_voxel_pos, int block_id) {
+    int block_x = block_id % BLOCK_PALETTE_SIZE_X;
+    int block_y = block_id / BLOCK_PALETTE_SIZE_X;
+
+    return relative_voxel_pos + ivec3(16*block_x, 16*block_y,0);
+}
+
+//TODO: balance, X>Y>Z for coherence
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+void main(void){
+    const ivec3 model_size = imageSize(modelVoxels);
+    const ivec3 shift = pco.shift.xyz;
+
+    ivec3 iabsolute_but_relative_to_shift_voxel = ivec3(gl_GlobalInvocationID.xyz);
+     vec3  absolute_but_relative_to_shift_voxel = vec3(iabsolute_but_relative_to_shift_voxel) / 1.0;
+    
+     vec3  world_voxel = absolute_but_relative_to_shift_voxel + vec3(0.5) + vec3(shift);
+    ivec3 iworld_voxel = ivec3(world_voxel);
+
+
+    //part where actual transformation happens
+    //  vec3  relative_vox = (pco.inverse_trans * vec4(absolute_voxel,1)).xyz;
+    // ivec3 irelative_vox = ivec3(round(relative_vox.xyz));
+      vec3 model_voxel = (pco.inverse_trans * vec4(world_voxel,1)).xyz;
+    ivec3 imodel_voxel = ivec3(model_voxel);
+
+    ivec3 itarget_block = iworld_voxel/16;
+
+    int target_block_in_palette = int(imageLoad(blocks, itarget_block).r);
+
+    ivec3 target_palette_voxel = voxel_in_palette(iworld_voxel.xyz % 16, target_block_in_palette);
+
+    uvec4 voxel = imageLoad(modelVoxels, imodel_voxel);
+
+    // read only if fails, i hope.
+    if (target_block_in_palette >= STATIC_BLOCK_COUNT) {
+        uvec4 voxel = imageLoad(modelVoxels, imodel_voxel);
+        if (voxel.r != 0) {
+            imageStore(blockPalette, target_palette_voxel, voxel); // maybe atomic?.. Could use temporal shared block for this
+        }
+    }
+    // if ((voxel.r != 0) && (target_block_in_palette>=STATIC_BLOCK_COUNT)){
+    //     imageStore(blockPalette, target_palette_voxel, voxel); // maybe atomic?.. Could use temporal shared block for this
+    // }
+}

@@ -243,7 +243,6 @@ impl Renderer {
             let ipos = super::types::ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
             self.renderer.raygen_block(brr.block, ipos);
         }
-        // self.renderer.raygen_block(&mesh, 0, Default::default());
         self.renderer.raygen_start_models();
         // self.renderer.raygen_model(&mesh, Default::default());
         self.renderer.update_particles();

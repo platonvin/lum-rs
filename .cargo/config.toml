@@ -14,8 +14,7 @@
     ]
 
 [env]
-    RUST_BACKTRACE = "1" # this is what i love in Rust
-
+    RUST_BACKTRACE = "full" # this is what i love in Rust
 
 [profile.native.build-override]
     rustflags = [
