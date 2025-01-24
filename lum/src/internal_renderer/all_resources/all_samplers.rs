@@ -1,17 +1,14 @@
-use lumal::{descriptors::{DescriptorInfo, RelativeDescriptorPos, ShortDescriptorInfo}, ring::Ring, ComputePipe, LumalRenderer, LumalSettings, RasterPipe};
-use vulkanalia::vk::{self, DeviceV1_0, Extent2D, Handle};
-use vk::Sampler;
-use RelativeDescriptorPos::*;
+use internal_renderer::*;
+use lumal::{Renderer, LumalSettings};
+use vulkanalia::vk::{self};
 
 use crate::*;
 
-impl crate::LumRenderer {
-    pub fn create_all_samplers(lumal: &LumalRenderer, lum_settings: &LumSettings, lumal_settings: &LumalSettings) -> LumSamplers {
+impl InternalRenderer {
+    pub fn create_all_samplers(lumal: &Renderer, lum_settings: &Settings, lumal_settings: &LumalSettings) -> AllSamplers {
 
-        let mut create_sampler = |info: vk::SamplerCreateInfo| -> vk::Sampler {
-            unsafe {
-                lumal.create_sampler(&info).expect("Failed to create sampler")
-            }
+        let create_sampler = |info: vk::SamplerCreateInfo| -> vk::Sampler {
+            lumal.create_sampler(&info).expect("Failed to create sampler")
         };
         
         let base_sampler_info = vk::SamplerCreateInfo {
@@ -96,7 +93,7 @@ impl crate::LumRenderer {
         };
         let shadow_sampler = create_sampler(shadow_sampler_info);
 
-        return LumSamplers {
+        return AllSamplers {
             nearest_sampler,
             linear_sampler,
             linear_sampler_tiled,
@@ -108,7 +105,7 @@ impl crate::LumRenderer {
         }
     }   
         
-    pub fn destroy_all_samplers(lumal: &mut LumalRenderer, samplers: &mut LumSamplers) {
+    pub fn destroy_all_samplers(lumal: &mut Renderer, samplers: &mut AllSamplers) {
         lumal.destroy_sampler(samplers.nearest_sampler);
         lumal.destroy_sampler(samplers.linear_sampler);
         lumal.destroy_sampler(samplers.linear_sampler_tiled);

@@ -1,7 +1,6 @@
 use vulkanalia::vk; 
 use vulkanalia::vk::ImageLayout; 
 use vulkanalia::vk::ShaderStageFlags; 
-use vulkanalia::vk::DescriptorType;
 
 // Rust provokes you to write code in a way that does not play well with how i like to write code
 // so sometimes i have to use crutches to get around it

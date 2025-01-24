@@ -9,7 +9,7 @@ use std::{error, ffi::CStr, ptr::null};
 
 use std::result::Result::Ok;
 
-impl LumalRenderer {
+impl Renderer {
     pub fn start_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
         unsafe { 
             self.device.wait_for_fences(&[*self.vulkan_data.in_flight_fences.current()], true, u64::MAX); 
@@ -43,7 +43,7 @@ impl LumalRenderer {
         self.process_error_code(index_code);
     }
 
-    pub fn present_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
+    pub fn present_frame(&mut self) {
         let wait_semaphores = [*self.vulkan_data.render_finished_semaphores.current()];
         let swapchains = [self.vulkan_data.swapchain];
         let image_indices = [self.image_index];
@@ -80,6 +80,11 @@ impl LumalRenderer {
             self.device.queue_submit(self.vulkan_data.graphics_queue, &[submit_info], *self.vulkan_data.in_flight_fences.current()).unwrap();
         }
 
+        self.present_frame();
+
+        self.vulkan_data.image_available_semaphores.move_next();
+        self.vulkan_data.render_finished_semaphores.move_next();
+        self.vulkan_data.in_flight_fences.move_next();
         // counter for internal purposes
         self.frame += 1;
     }

@@ -1,16 +1,18 @@
-use lumal::{descriptors::{DescriptorInfo, RelativeDescriptorPos, ShortDescriptorInfo}, ring::Ring, ComputePipe, LumalRenderer, LumalSettings, RasterPipe};
-use vulkanalia::vk::{self, DeviceV1_0, Extent2D, Handle};
-use vk::Sampler;
-use RelativeDescriptorPos::*;
+use internal_renderer::*;
+use lumal::{Renderer, LumalSettings};
+use vulkanalia::vk::{self, DeviceV1_0};
+
+use internal_renderer::InternalRenderer;
+use lumal::ring::Ring;
 
 use crate::*;
 
-impl crate::LumRenderer {
+impl InternalRenderer {
     pub fn create_independent_images(
-        lumal: &LumalRenderer, 
-        lum_settings: &LumSettings, 
+        lumal: &Renderer, 
+        lum_settings: &Settings, 
         lumal_settings: &LumalSettings
-    ) -> LumIndependentImages {
+    ) -> AllIndependentImages {
         let world = lumal.create_image_ring (
             lumal_settings.fif,
             vk::ImageType::_3D,
@@ -137,7 +139,7 @@ impl crate::LumRenderer {
             1,
             vk::SampleCountFlags::_1); //does not matter than much
         
-        return LumIndependentImages {
+        return AllIndependentImages {
             grass_state: grass_state.unwrap(),
             water_state: water_state.unwrap(),
             perlin_noise2d: perlin_noise2d.unwrap(),
@@ -154,10 +156,10 @@ impl crate::LumRenderer {
     
     // dependent = swapchain dependent
     pub fn create_dependent_images(
-        lumal: &LumalRenderer, 
-        lum_settings: &LumSettings, 
+        lumal: &Renderer, 
+        _lum_settings: &Settings, 
         lumal_settings: &LumalSettings
-    ) -> LumSwapchainDependentImages {
+    ) -> AllSwapchainDependentImages {
         let sextent = uvec3::new(
             lumal.vulkan_data.swapchain_extent.width,
             lumal.vulkan_data.swapchain_extent.height,
@@ -182,7 +184,7 @@ impl crate::LumRenderer {
             vk::SampleCountFlags::_1,
         ).unwrap();
         
-        let mut highres_depth_stencil = lumal.create_image_ring(
+        let highres_depth_stencil = lumal.create_image_ring(
             lumal_settings.fif,
             vk::ImageType::_2D,
             unsafe { CHOSEN_DEPTH_FORMAT },
@@ -308,7 +310,7 @@ impl crate::LumRenderer {
             };
         }
 
-        return LumSwapchainDependentImages {
+        return AllSwapchainDependentImages {
             swapchain_images: swapchain_images_ring, 
             highres_frame: highres_frame,
             highres_depth_stencil: highres_depth_stencil,
@@ -320,35 +322,35 @@ impl crate::LumRenderer {
         };
     }
 
-    pub fn destroy_independent_images(&self) {
+    pub fn destroy_independent_images(lumal: &Renderer, independent_images: &AllIndependentImages) {
         println!("started destroying independent images");
-        self.lumal.destroy_image_ring(&self.independent_images.grass_state);
-        self.lumal.destroy_image_ring(&self.independent_images.water_state);
-        self.lumal.destroy_image_ring(&self.independent_images.perlin_noise2d);
-        self.lumal.destroy_image_ring(&self.independent_images.perlin_noise3d);
-        self.lumal.destroy_image_ring(&self.independent_images.world);
-        self.lumal.destroy_image_ring(&self.independent_images.radiance_cache);
-        self.lumal.destroy_image_ring(&self.independent_images.origin_block_palette);
-        self.lumal.destroy_image_ring(&self.independent_images.material_palette);
-        self.lumal.destroy_image_ring(&self.independent_images.lightmap);
+        lumal.destroy_image_ring(&independent_images.grass_state);
+        lumal.destroy_image_ring(&independent_images.water_state);
+        lumal.destroy_image_ring(&independent_images.perlin_noise2d);
+        lumal.destroy_image_ring(&independent_images.perlin_noise3d);
+        lumal.destroy_image_ring(&independent_images.world);
+        lumal.destroy_image_ring(&independent_images.radiance_cache);
+        lumal.destroy_image_ring(&independent_images.origin_block_palette);
+        lumal.destroy_image_ring(&independent_images.material_palette);
+        lumal.destroy_image_ring(&independent_images.lightmap);
         println!("destroyed independent images");
     }
 
-    pub fn destroy_dependent_images(&self) {
+    pub fn destroy_dependent_images(lumal: &Renderer, dependent_images: &AllSwapchainDependentImages) {
         println!("started destroying swapchain dependent images");
         
         // Not supposed to happen - swapchain images are destroyed by the driver
         // self.lumal.destroy_image_ring(&self.dependent_images.swapchain_images);
 
-        self.lumal.destroy_image_ring(&self.dependent_images.highres_frame);
-        self.lumal.destroy_image_ring(&self.dependent_images.highres_depth_stencil);
-        self.lumal.destroy_image_ring(&self.dependent_images.highres_mat_norm);
+        lumal.destroy_image_ring(&dependent_images.highres_frame);
+        lumal.destroy_image_ring(&dependent_images.highres_depth_stencil);
+        lumal.destroy_image_ring(&dependent_images.highres_mat_norm);
         // self.lumal.destroy_image_ring(&self.dependent_images.stencil_view_for_ds);
-        for stencil_view in self.dependent_images.stencil_view_for_ds.into_iter() {
-            unsafe { self.lumal.device.destroy_image_view(*stencil_view, None) };
+        for stencil_view in dependent_images.stencil_view_for_ds.into_iter() {
+            unsafe { lumal.device.destroy_image_view(*stencil_view, None) };
         }
-        self.lumal.destroy_image_ring(&self.dependent_images.far_depth);
-        self.lumal.destroy_image_ring(&self.dependent_images.near_depth);
+        lumal.destroy_image_ring(&dependent_images.far_depth);
+        lumal.destroy_image_ring(&dependent_images.near_depth);
         println!("destroyed swapchain dependent images");
     } 
 }

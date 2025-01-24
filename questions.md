@@ -18,6 +18,7 @@ what i do not like about Rust:
     traits are too complicated for my brain
         i guess i should use macros
         how tf does virtual dispatch work?
+        templates are just easier
     no good variadic generics (like Lum::ECManager)
     people try to make things "Rusty"
         i still have not found good vulkan wrapper that just wraps vulkan. This is fucking insane

@@ -2,13 +2,9 @@
 
 use std::string::String;
 
-use lumal::ring::Ring;
-use lumal::Buffer;
-// use crate::Voxel;
-pub type MatID = u32;
+pub type MatID = u8;
 
-use vek::{Vec2, Vec3};
-use vulkanalia::vk; // Vulkan structs
+use vulkanalia::vk;
 
 pub type uvec4 = vek::Vec4<u32>;
 pub type u16vec4 = vek::Vec4<u16>;
@@ -44,9 +40,8 @@ pub type BlockID_t = i16;
 #[allow(non_camel_case_types)]
 pub type MatID_t = u8;
 // TODO: enum with empty / non-empty using NonZeroU8
-#[repr(C)]
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
-pub struct Voxel (pub u8);
+// #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub type Voxel = u8;
 
 // CPU side structure with actual voxel data but only gpu mesh handler
 pub struct BlockWithMesh {
@@ -105,6 +100,8 @@ pub struct PackedVoxelCircuit {
     pub pos: u8vec3,
 }
 
+// IndexedVertices is just another way to store where the data is in (single) allocated buffer
+// this could have been 6 buffers, but insted it is 1 buffer and 6 offsets
 #[derive(Clone, Copy, Debug, Default)]
 pub struct IndexedVertices {
     pub offset: u32, // yes, they are all stored in same buffer and accessed with offset
@@ -112,7 +109,7 @@ pub struct IndexedVertices {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FaceBuffers {
     // zPz means zero-Positive-zero
     // zzN means zero-zero-Negative
@@ -126,28 +123,41 @@ pub struct FaceBuffers {
     pub indices: lumal::Buffer,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
+// handle (reference) to a mesh. 
+// You can clone it but still need to unload one time
 pub struct InternalMeshModel {
     pub triangles: FaceBuffers,
-    pub voxels: Ring<lumal::Image>,
+    pub voxels: lumal::Image,
     pub size: uvec3, // integer because in voxels
 }
 
-#[derive(Debug, Default)]
-pub struct InternalMeshFoliage {
+#[derive(Debug, Clone, Default)]
+// not accessed directly by user, instead indexed
+pub struct InternalMeshFoliageDesc {
     pub vertex_shader_file: String,
-    pub pipe: lumal::RasterPipe,
-    pub vertices: i32,
-    pub density: i32,
+
+    // Stored separately cause im fell in love with ecs
+    // pub pipe: lumal::RasterPipe,
+    
+    // how many vertices will be in per-blade drawcall
+    pub vertices: u32,
+    // how many blades is there in a block (linear)
+    pub density: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Default)]
+pub struct InternalMeshFoliage {
+    pub stored_id: u32,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct InternalMeshLiquid {
     pub main: MatID,
     pub foam: MatID,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InternalMeshVolumetric {
     pub max_density: f32,
     pub variation: f32,

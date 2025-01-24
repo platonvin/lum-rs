@@ -1,7 +1,9 @@
 use std::fmt::{self, Debug};
-use std::iter::{IntoIterator, Iterator};
+use std::iter::IntoIterator;
 use std::ops::{Index, IndexMut};
 use std::slice::{Iter, IterMut};
+
+use crate::types::{ivec3, ivec4};
 
 /*
  * You should index into it in this order
@@ -77,6 +79,31 @@ impl<T: Default + Clone> Index<(usize, usize, usize)> for Array3D<T> {
     fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
         let (x, y, z) = index; // unpack the tuple
         let index_internal = self.index_internal(x, y, z);
+        &self.data[index_internal]
+    }
+}
+
+impl<T: Default + Clone> Index<ivec3> for Array3D<T> {
+    type Output = T;
+
+    fn index(&self, index: ivec3) -> &Self::Output {
+        let index_internal = self.index_internal(
+            index.x as usize,
+            index.y as usize, 
+            index.z as usize
+        ); 
+        &self.data[index_internal]
+    }
+}
+impl<T: Default + Clone> Index<ivec4> for Array3D<T> {
+    type Output = T;
+
+    fn index(&self, index: ivec4) -> &Self::Output {
+        let index_internal = self.index_internal(
+            index.x as usize,
+            index.y as usize, 
+            index.z as usize
+        ); 
         &self.data[index_internal]
     }
 }

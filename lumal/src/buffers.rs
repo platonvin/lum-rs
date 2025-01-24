@@ -1,4 +1,4 @@
-use crate::{ring::Ring, Buffer, LumalRenderer}; // Import the LumalRenderer struct
+use crate::{ring::Ring, Buffer, Renderer}; // Import the LumalRenderer struct
 use std::ptr;
 use anyhow::*; 
 use vulkanalia::vk::{self};
@@ -6,13 +6,13 @@ use vulkanalia::vk::{self};
 use vulkanalia_vma::{self as vma};
 use vulkanalia_vma::Alloc;
 
-impl LumalRenderer {
+impl Renderer {
     pub fn create_buffer(
         &self,
         usage: vk::BufferUsageFlags,
         size: usize,
         host: bool,
-    ) -> Result<Buffer> {
+    ) -> Buffer {
         // buffers.allocate(self.vulkan_data.settings.fif as usize);
         // buffers = Ring::new(self.vulkan_data.settings.fif as usize, Buffer::default());
 
@@ -47,13 +47,14 @@ impl LumalRenderer {
         let (vk_buffer, allocation) = unsafe { self
             .allocator.as_ref().unwrap()
             .create_buffer(buffer_info, &alloc_info)
-        }?;
+        }.unwrap();
 
         // TODO: Integrated CPU memory utilization
         // TODO: what if it fails? Different set of flags?
         let mut mapped = None;
         if host {
             // basically make so CPU can read&write buffer memory
+            // this is very complicated under the hood cause memory is literally on GPU and is accessed via PCI-E bus
             mapped = Some(unsafe {
                 self.allocator
                     .as_ref()
@@ -62,11 +63,11 @@ impl LumalRenderer {
                     .unwrap()
             });
         }
-        Ok(Buffer {
+        Buffer {
             buffer: vk_buffer,
             allocation,
             mapped: mapped
-        })
+        }
     }
 
     // creates ring of vulkan buffers. Optionally maps
@@ -86,7 +87,7 @@ impl LumalRenderer {
                 usage,
                 biffer_size,
                 host,
-            )?;
+            );
             buffers.push(buffer);
         }
 
@@ -112,5 +113,18 @@ impl LumalRenderer {
         for buf in buffers {
             self.destroy_buffer(buf);
         }
+    }
+    
+    pub fn create_elem_buffer<T>(
+        &self,
+        elements: &[T],
+        buffer_usage: vk::BufferUsageFlags,
+    ) -> Buffer {
+        let size = std::mem::size_of::<T>() * elements.len();
+        return self.create_buffer(
+            buffer_usage,
+            size,
+            false, // TODO: bool -> Enum
+        )
     }
 }

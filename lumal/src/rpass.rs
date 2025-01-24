@@ -1,7 +1,8 @@
 use std::{collections::HashMap, f64::consts::E, ptr::null};
 
-use crate::LumalRenderer;
+use crate::Renderer;
 use crate::{
+    trace,
     atrace,
     descriptors::{AttachmentDescription, LoadStoreOp, SubpassAttachmentRefs, SubpassDescription},
     ring::Ring,
@@ -13,7 +14,7 @@ use vulkanalia::vk::{self, DeviceV1_3, Framebuffer};
 use crate::function;
 use vulkanalia::prelude::v1_3::*;
 
-impl LumalRenderer {
+impl Renderer {
     pub fn destroy_render_pass(
         &mut self,
         rpass: &mut RenderPass,
@@ -49,7 +50,7 @@ impl LumalRenderer {
         let mut img2ref = HashMap::new();
         let mut clears = Vec::new();
 
-        atrace!();
+        trace!();
         for (i, attachment) in attachments.iter().enumerate() {
             assert!(attachment.images.is_some());
             let images = &mut attachment.images.as_ref().unwrap();
@@ -83,7 +84,7 @@ impl LumalRenderer {
             img2ref.insert(images.as_ptr(), i as u32); 
             clears.push(attachment.clear);
         }
-        atrace!();
+        trace!();
 
         rpass.clear_colors = clears;
 
@@ -115,7 +116,7 @@ impl LumalRenderer {
                 }
             }
         }
-        atrace!();
+        trace!();
 
         assert!(subpasses.len() == sas_refs.len());
         for (i, sas) in sas_refs.iter_mut().enumerate() { 
@@ -133,20 +134,20 @@ impl LumalRenderer {
             }
         }
 
-        atrace!();
+        trace!();
 
         for i in 0..spass_attachs.len() {
             for pipe in &mut *spass_attachs[i].pipes { 
                 pipe.subpass_id = i as i32; 
             }
         }
-        atrace!();
+        trace!();
 
         // not real vulkan struct, just barriers inside a subpass (currently, dummy barriers)
         let dependencies = Self::create_subpass_dependencies(spass_attachs);
 
         // typical Vulkan createinfo struct
-        atrace!();
+        trace!();
         let create_info = vk::RenderPassCreateInfo {
             s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
             attachment_count: adescs.len() as u32,
@@ -158,7 +159,7 @@ impl LumalRenderer {
             ..Default::default()
         };
         
-        atrace!();
+        trace!();
         // call Vulkan function to actually create the render pass
         let render_pass = unsafe {
             self.device
@@ -166,7 +167,7 @@ impl LumalRenderer {
                 .expect("Failed to create render pass")
         };
         assert!(render_pass != vk::RenderPass::null());
-        atrace!();
+        trace!();
 
         // Pipes (which are abstractions of Vulkan pipelines) need to know the render pass
         // for pipe in &mut *spass_attachs[0].pipes { 
@@ -190,7 +191,7 @@ impl LumalRenderer {
             .filter_map(|desc| desc.images)
             .collect();
         let fb_images: &[&Ring<Image>] = binding.as_slice();
-        atrace!();
+        trace!();
 
         rpass.framebuffers = self.create_framebuffers(
             render_pass,
@@ -198,7 +199,7 @@ impl LumalRenderer {
             rpass.extent.width,
             rpass.extent.height,
         );
-        atrace!();
+        trace!();
 
         return rpass;
     }

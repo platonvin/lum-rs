@@ -170,15 +170,15 @@ mod tests {
     fn unchecked_mul() {
         let a: i16u = UncheckedInt::new(5);
         let b = UncheckedInt::new(10);
-        let c: i32u = (a * b).try_into().unwrap();
+        let c: i16u = (a * b).try_into().unwrap();
         assert_eq!(c.get(), 50);
     }
 
     #[test]
     fn unchecked_div() {
-        let a = UncheckedInt::new(5);
-        let b = UncheckedInt::new(10);
-        let c = a / b;
+        let a: i128u = UncheckedInt::new(5);
+        let b: i128u = UncheckedInt::new(10);
+        let c: i128u = a / b;
         assert_eq!(c.get(), 5);
     }
 

@@ -1,4 +1,4 @@
-use crate::{ring::Ring, Buffer, LumalRenderer}; // Import the LumalRenderer struct
+use crate::{ring::Ring, Buffer, Renderer}; // Import the LumalRenderer struct
 use anyhow::*;
 use std::ptr;
 use vulkanalia::vk::{self, DeviceV1_0};
@@ -6,7 +6,7 @@ use vulkanalia::vk::{self, DeviceV1_0};
 use vulkanalia_vma::Alloc;
 use vulkanalia_vma::{self as vma};
 
-impl LumalRenderer {
+impl Renderer {
     pub fn create_sampler(&self, sampler_info: &vk::SamplerCreateInfo) -> Result<vk::Sampler> {
         let sampler = unsafe { self.device.create_sampler(&sampler_info, None) }?;
         Ok(sampler)

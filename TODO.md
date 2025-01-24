@@ -12,7 +12,19 @@ shader JIT
 
 optimize update_radiance
 
-vec3 -> vec4
+vec3 -> vec4 SIMD asm check
 
 generic subpasses (e.g. for ui)
 
+vector (vec/mat) library that does not suck
+    JUST FUCKING IMPLEMENT CASTS WHY EVERY SINGLE ONE OF THEM IS MISSING HALF KEY FEATURES
+
+assume_assert
+
+multiple VkFunCall's -> single VkFunCall
+
+utilize copy queue
+
+RUST-ANALYZER:
+    suggest variable with attention to type
+    

@@ -39,7 +39,8 @@ use vk::{InputChainStruct, KhrSurfaceExtension, KhrSwapchainExtension};
 /// The required instance and device layer if validation is enabled.
 const VALIDATION_LAYER: vk::ExtensionName =
     vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
-
+const LUNARG_MONITOR_LAYER: vk::ExtensionName =
+    vk::ExtensionName::from_bytes(b"VK_LAYER_LUNARG_monitor");
 /// The required device extensions.
 const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[
     vk::KHR_SWAPCHAIN_EXTENSION.name,
@@ -77,27 +78,13 @@ pub struct Image {
     pub extent: vk::Extent3D,
     pub mip_levels: u32,
 }
+
 impl Default for Image {
     fn default() -> Self {
         Self { image: Default::default(), allocation: unsafe { std::mem::zeroed() }, view: Default::default(), mip_views: Default::default(), format: Default::default(), aspect: Default::default(), extent: Default::default(), mip_levels: Default::default() }
     }
 }
 
-// Structure for ImageDeletion
-#[derive(Default, Clone)]
-pub struct ImageDeletion {
-    pub image: Image,
-    pub lifetime: i32,
-}
-
-// Structure for BufferDeletion
-#[derive(Default, Clone)]
-pub struct BufferDeletion {
-    pub buffer: Buffer,
-    pub lifetime: i32,
-}
-
-// Structure for RasterPipe (Graphics pipeline)
 // #[derive(Default)]
 #[derive(Clone, Debug)]
 pub struct RasterPipe {
@@ -268,15 +255,29 @@ impl Default for DescriptorCounter {
     }
 }
 
+// TODO: not copy? or Copy image?
+#[derive(Default, Clone, Debug)]
+pub struct ImageDeletion {
+    pub image: Image,
+    pub lifetime: i32,
+}
+
+// TODO: not copy? or Copy buffer
+#[derive(Default, Clone, Debug)]
+pub struct BufferDeletion {
+    pub buffer: Buffer,
+    pub lifetime: i32,
+}
+
 #[derive(Debug)]
-pub struct LumalRenderer {
+pub struct Renderer {
     // pub custom_data: Option<T>,
     pub allocator: Option<vma::Allocator>,
     
     pub settings: LumalSettings,
-    pub vulkan_data: VulkanData,
-    pub event_loop: Option<EventLoop<MyUserEvent>>,
-    pub window: Window, // winit window
+    pub vulkan_data: VulkanData, // ok example from vulkanalia is good
+    // pub event_loop: Option<EventLoop<MyUserEvent>>,
+    // pub window: Window, // winit window
     pub entry: Entry, // internal Vulkanalia entry point
     pub instance: Instance, // wrapper around vk::Instance. TODO: custom vulkan al wrapper (barebone)
     pub device: Device, // wrapper around vk::Device. TODO: custom vulkan al wrapper (barebone)
@@ -288,46 +289,17 @@ pub struct LumalRenderer {
 
     pub main_command_buffers: Ring<vk::CommandBuffer>, // yep, copied
     pub extra_command_buffers: Ring<vk::CommandBuffer>, // yep, copied
+
+    // Queues of defered (delayed) GPU-side deletion of resources
+    // this is not immediate because there are some frames in flight
+    // that might still be using resources
+    pub buffer_deletion_queue: Vec<BufferDeletion>,
+    pub image_deletion_queue: Vec<ImageDeletion>,
 }
 
-pub struct MyUserEvent;
-
-
-impl ApplicationHandler<MyUserEvent> for LumalRenderer {
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, user_event: MyUserEvent) {
-        // Handle user event.
-    }
-
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // Your application got resumed.
-    }
-
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-        // Handle window event.
-    }
-
-    fn device_event(&mut self, event_loop: &ActiveEventLoop, device_id: DeviceId, event: DeviceEvent) {
-        // Handle device event.
-    }
-
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-
-        // self.window.request_redraw();
-        // self.counter += 1;
-    }
-}
-
-
-impl LumalRenderer {
-    pub fn create(settings: LumalSettings) -> Result<LumalRenderer> {
+impl Renderer {
+    pub fn create(settings: &LumalSettings, window: &mut Window) -> Result<Renderer> {
         println!("Starting app.");
-
-        // let event_loop = EventLoop::new()?;
-        let event_loop = EventLoop::<MyUserEvent>::with_user_event().build().unwrap();
-        
-        #[allow(deprecated)]
-        let mut window = event_loop.create_window(Window::default_attributes()).unwrap();
-        let mut lumal_window = LumalWindow { width: 800, height: 600, pointer: &mut window};  
 
         let mut vulkan_data = VulkanData::default();
 
@@ -338,7 +310,7 @@ impl LumalRenderer {
         unsafe {
             let loader = LibloadingLoader::new(LIBRARY)?;
             let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
-            let instance = LumalRenderer::create_instance(&window, &entry, &mut vulkan_data)?;
+            let instance = Renderer::create_instance(&window, &entry, &mut vulkan_data)?;
             vulkan_data.surface = vulkanalia::window::create_surface(&instance, &window, &window)?;
             pick_physical_device(&instance, &mut vulkan_data)?;
             let device = create_logical_device(&entry, &instance, &mut vulkan_data)?;
@@ -356,23 +328,23 @@ impl LumalRenderer {
             create_command_pool(&instance, &device, &mut vulkan_data)?;
             create_sync_objects(&device, &mut vulkan_data)?;
 
-            Ok(LumalRenderer {
+            Ok(Renderer {
                 allocator: Some(allocator),
                 vulkan_data,
-                event_loop: Some(event_loop),
-                window,
                 entry,
                 instance,
                 device,
                 frame: 0,
                 should_recreate: false,
-                settings,
+                settings: *settings,
                 descriptor_counter: DescriptorCounter::default(),
                 descriptor_sets_count: 0,
                 image_index: 0, // cause just init'ed, no descriptor setup deferred yet
                 // delayed_descriptor_setups: vec![],
                 main_command_buffers: Ring::new(0, vk::CommandBuffer::default()),
                 extra_command_buffers: Ring::new(0, vk::CommandBuffer::default()),
+                buffer_deletion_queue: vec![],
+                image_deletion_queue: vec![],
             })
         }
     }
@@ -403,11 +375,15 @@ impl LumalRenderer {
             return Err(anyhow!("Validation layers requested but not supported."));
         }
     
-        let layers = if (data.validation) {
+        let mut layers = if (data.validation) {
             vec![VALIDATION_LAYER.as_ptr()]
         } else {
             Vec::new()
         };
+
+        if available_layers.contains(&LUNARG_MONITOR_LAYER) {
+            layers.push(LUNARG_MONITOR_LAYER.as_ptr());   
+        }
     
         // Extensions
     
@@ -562,8 +538,13 @@ impl LumalRenderer {
             )
         };
     }
-    
-    pub fn transition_image_layout_single_time(&self, image: &Image, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) {
+
+    pub fn transition_image_layout_single_time(
+        &self,
+        image: &Image,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) {
         let command_buffer = self.begin_single_time_command_buffer();
         let barrier = vk::ImageMemoryBarrier::builder()
             .old_layout(old_layout)
@@ -589,6 +570,7 @@ impl LumalRenderer {
                 &[barrier],
             );
         };
+        self.end_single_time_command_buffer(command_buffer);
     }
     
     pub fn copy_buffer_to_image_single_time(&self, buffer: vk::Buffer, img: &Image, extent: vk::Extent3D) { 
@@ -614,8 +596,49 @@ impl LumalRenderer {
         };
         self.end_single_time_command_buffer(command_buffer);
     }
-}
 
+    pub fn process_deletion_queues(&mut self) {
+        let mut write_index = 0;
+        for i in 0..self.buffer_deletion_queue.len() {
+            let deletion = &self.buffer_deletion_queue[i];
+            let should_keep = deletion.lifetime > 0;
+
+            if (should_keep) {
+                self.buffer_deletion_queue[write_index] = deletion.clone();
+                self.buffer_deletion_queue[i].lifetime -= 1;
+                write_index += 1;
+            } else {
+                if let Some(_mapped_ptr) = deletion.buffer.mapped {
+                    unsafe { self.allocator.as_ref().unwrap().unmap_memory(deletion.buffer.allocation) };
+                }
+                unsafe { self.allocator.as_ref().unwrap().destroy_buffer(deletion.buffer.buffer, deletion.buffer.allocation) };
+            }
+            // TODO why shrink_to does not work?
+        } self.buffer_deletion_queue.resize(write_index, BufferDeletion::default());
+        
+        write_index = 0;
+        for i in 0..self.image_deletion_queue.len() {
+            let deletion = &self.image_deletion_queue[i];
+            let should_keep = deletion.lifetime > 0;
+
+            if (should_keep) {
+                self.image_deletion_queue[write_index] = deletion.clone();
+                self.image_deletion_queue[i].lifetime -= 1;
+                write_index += 1;
+            } else {
+                unsafe { self.allocator.as_ref().unwrap().destroy_image(deletion.image.image, deletion.image.allocation) };
+                unsafe { self.device.destroy_image_view(deletion.image.view, None) };
+            }
+        } self.image_deletion_queue.resize(write_index, ImageDeletion::default());
+    }
+
+    // The only use i can imagine for this is the indented one - freing resources
+    pub fn process_deletion_queues_untill_all_done(&mut self) {
+        while self.buffer_deletion_queue.len() > 0 || self.image_deletion_queue.len() > 0 {
+            self.process_deletion_queues();
+        }
+    }
+}
 
 /// The Vulkan handles and associated properties used by an example Vulkan app.
 #[derive(Clone, Debug, Default)]
@@ -647,17 +670,10 @@ pub struct VulkanData {
     pub image_available_semaphores: Ring<vk::Semaphore>,
     pub render_finished_semaphores: Ring<vk::Semaphore>,
     pub in_flight_fences: Ring<vk::Fence>,
-    pub images_in_flight: Ring<vk::Fence>,
+    // pub images_in_flight: Ring<vk::Fence>,
     // Descriptor pool
     pub descriptor_pool: vk::DescriptorPool,
 }
-
-
-//================================================
-// Instance
-//================================================
-
-/// Creates an instance.
 
 /// Logs debug messages.
 extern "system" fn debug_callback(
@@ -1020,12 +1036,6 @@ unsafe fn create_sync_objects(device: &Device, data: &mut VulkanData) -> Result<
         data.render_finished_semaphores[i] = (device.create_semaphore(&semaphore_info, None)?);
         data.in_flight_fences          [i] = (device.create_fence    (&fence_info,     None)?);
     }
-
-    data.images_in_flight = data
-        .swapchain_images
-        .iter()
-        .map(|_| vk::Fence::null())
-        .collect();
 
     Ok(())
 }

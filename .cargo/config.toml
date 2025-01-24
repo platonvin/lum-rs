@@ -1,19 +1,25 @@
 [alias]     # command aliases
-b = "build"
-c = "check"
-t = "test"
-r = "run"
-rr = "run --release"
-brr = "run --release"
-recursive_example = "rr --example recursions"
-space_example = ["run", "--release", "--", "\"command list\""]
+    c = "check"
+    t = "test"
+    b = "build"
+    r = "run"
+    br = "build --release"
+    brr = "run --release" # yes one extra r.
 
 [build]
-rustflags = [
-    # "-C", "target-cpu=native",      # Optimize for the local CPU
-    "-C", "link-arg=-fuse-ld=lld", # Use LLVM's lld linker
-    # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
-]
+    rustflags = [
+        # "-C", "target-cpu=native",     # TODO: how to do this in local build and what is local build?
+        "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
+        "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+    ]
 
 [env]
-RUST_BACKTRACE = "1"
+    RUST_BACKTRACE = "1" # this is what i love in Rust
+
+
+[profile.native.build-override]
+    rustflags = [
+        "-C", "target-cpu=native",
+        "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
+        "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+    ]

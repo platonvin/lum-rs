@@ -1,34 +1,48 @@
+cargo-features = ["profile-rustflags"]
+
 [workspace]
-resolver = "2"
-members = [
-    "lum",       # Include the lum crate
-    "lumal",     # Include the lumal crate
-    "examples",  # example programs
-    "as_u8_slice_derive", "unchecked_integer", # derive macro for AsU8Slice
-]
+    resolver = "2"
+    members = [
+        "lum",                # Include the lum crate
+        "lumal",              # Include the lumal crate
+        "examples",           # example programs
+        "as_u8_slice_derive",
+        "unchecked_integer",  # derive macro for AsU8Slice
+    ]
 
 [profile.dev]
-opt-level = 1
-codegen-units = 16
-lto = "off"
-overflow-checks = true
-incremental = true
+    opt-level = 0
+    codegen-units = 16
+    lto = "off"
+    panic = "unwind"
+    overflow-checks = true
+    incremental = true
+    debug = "line-directives-only"
 
 [profile.release]
-opt-level = "s"
-panic = "unwind"
-codegen-units = 1     # TODO: when release only needed
-lto = "thin"
-overflow-checks = true # TODO: 
-# Array bound checks
+    opt-level = 3           # "s" is 5 times slower lol. TODO: investigate
+    panic = "abort"
+    codegen-units = 8
+    lto = "thin"
+    overflow-checks = false # TODO: unchecked math (UB on overflow)
 
-[profile.dev.package."lum"]
-opt-level = 0
-incremental = true
+# Highest possible optimizations
+[profile.native]
+    inherits = "release"
+    opt-level = 3
+    lto = "fat"
+    codegen-units = 1
+    debug = false
+    panic = "abort"
+    overflow-checks = false
+    strip = "symbols"
 
-[profile.dev.package."lumal"]
-opt-level = 0
-incremental = true
-
-[profile.release.package."lum"]
-opt-level = 3
+# TODO: profile package?
+[profile.distribution]
+    inherits = "release"
+    opt-level = 3
+    lto = "fat"
+    codegen-units = 1
+    debug = false
+    panic = "unwind"
+    overflow-checks = true

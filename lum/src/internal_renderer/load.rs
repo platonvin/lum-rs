@@ -1,14 +1,15 @@
-use std::{fs::File, io::Read, ptr::null};
+use std::ptr::null;
 
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, VoxelVisibility};
-use vulkanalia::vk;
+use internal_renderer::*;
+use lumal::{BufferDeletion, ImageDeletion};
+use vulkanalia::vk::{self, Handle};
 use vulkanalia_vma::Alloc;
 
-use crate::{
-    containers::Array3D, ivec3, types::{self, Voxel}, uvec3, vec3, BlockID_t, BlockWithMesh, FaceBuffers, InternalMeshModel, LumRenderer, Material, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y
-};
+use crate::*;
+use crate::types::*;
 
-impl crate::LumRenderer {
+impl super::InternalRenderer {
     // Palette on CPU side is (should) be represented as a POD array
     // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is due to perfomance win + hw limitations
     // E.g. just doing 16*len x 16 x 16 will not work cause 16xlen will be too big size for some gpus
@@ -20,21 +21,19 @@ impl crate::LumRenderer {
             (16 * BLOCK_PALETTE_SIZE_Y).try_into().unwrap(),
             16,
         );
-        block_palette_prepared.data.fill(Voxel(0));
+        block_palette_prepared.data.fill(0);
 
         for (i, block) in block_palette.iter().enumerate() {
             let block_xy = self.index_block_xy(i as i32);
             for x in 0..16 {
-                for y in 0..16 {
-                    for z in 0..16 {
-                        block_palette_prepared[(
-                            x + block_xy.x as usize * 16,
-                            y + block_xy.y as usize * 16,
-                            z,
-                        )] = block.voxels[x as usize][y as usize][z as usize];
-                    }
-                }
-            }
+            for y in 0..16 {
+            for z in 0..16 {
+                block_palette_prepared[(
+                    x + block_xy.x as usize * 16,
+                    y + block_xy.y as usize * 16,
+                    z,
+                )] = block.voxels[x as usize][y as usize][z as usize];
+            }}}
         }
 
         let buffer_size = block_palette_prepared.dimensions().0
@@ -161,13 +160,13 @@ impl crate::LumRenderer {
 
     pub fn extract_palette_from_scene(&mut self, scene: &dot_vox::DotVoxData) {
         assert!(self.material_palette.len() == scene.materials.len());
-        dbg!(scene.materials.len());
-        dbg!(self.material_palette.len());
+        // dbg!(scene.materials.len());
+        // dbg!(self.material_palette.len());
 
         // fill Albedo and transparency only, cause thats how it works
         for (i, material) in self.material_palette.iter_mut().enumerate() {
             let mv_col = &scene.palette[i];
-            *material = crate::Material {
+            *material = super::Material {
                 albedo: vec3::new(
                     mv_col.r as f32 / 255.0,
                     mv_col.g as f32 / 255.0,
@@ -180,16 +179,11 @@ impl crate::LumRenderer {
         }
 
         // now fill emission and roughness
-        for (i, mv_mat) in scene.materials.iter().enumerate() {
+        for mv_mat in scene.materials.iter() {
             let actual_mat_idx = mv_mat.id as usize - 1;
 
-            dbg!(actual_mat_idx);
+            // dbg!(actual_mat_idx);
             let material = &mut self.material_palette[actual_mat_idx];
-
-            // TODO: Enum/match?
-            let is_metal = mv_mat.properties.get("_type") == Some(&"_metal".to_string());
-            let is_diffuse = mv_mat.properties.get("_type") == Some(&"_diffuse".to_string());
-            let is_emmit = mv_mat.properties.get("_type") == Some(&"_emit".to_string());
 
             material.emmitness = mv_mat.emission().unwrap_or(0.0);
             material.roughness = mv_mat.roughness().unwrap_or(0.0);
@@ -200,14 +194,11 @@ impl crate::LumRenderer {
                     material.roughness = 1.0;
                 }
                 Some("_metal") => {
-                    assert!(!is_diffuse);
                     let old_rough = material.roughness;
                     let metalicness = mv_mat.metalness().unwrap_or(0.0);
                     material.roughness = (old_rough + (1.0 - metalicness)) / 2.0;
                 }
                 Some("_emit") => {
-                    assert!(!is_diffuse);
-                    assert!(!is_metal);
                     let old_emit = material.emmitness;
                     let fluxness = mv_mat.radiant_flux().unwrap_or(0.0);
                     material.emmitness = (old_emit * (2.0 + fluxness * 4.0)); // yep i store it in IEEE 754 float
@@ -225,57 +216,6 @@ impl crate::LumRenderer {
         }
     }
     /*
-    //size limited by 256^3
-    void LumInternal::LumInternalRenderer::load_mesh(InternalMeshModel* mesh, const char* vox_file, bool _make_vertices, bool extrude_palette, Material* mat_palette) {
-        auto buffer = readFileBuffer(vox_file);
-        assert(not buffer.empty());
-        const ogt::vox_scene* scene = ogt::vox_read_scene((u8*)buffer.data(), buffer.size());
-
-        assert(scene != NULL);
-        assert(scene->num_models == 1);
-
-        load_mesh(mesh, (Voxel*)scene->models[0]->voxel_data, scene->models[0]->size_x, scene->models[0]->size_y, scene->models[0]->size_z, _make_vertices);
-
-        if (extrude_palette && !hasPalette) {
-            assert(mat_palette != NULL);
-            hasPalette = true;
-            extract_palette_mem(scene, mat_palette);
-        }
-
-        ogt::vox_destroy_scene(scene);
-    }
-
-    // pointer to block_ptr, so block_ptr can be modified
-    void LumInternal::LumInternalRenderer::load_block(BlockWithMesh* block, const char* vox_file) {
-        auto buffer = readFileBuffer(vox_file);
-        assert(not buffer.empty());
-        const ogt::vox_scene* scene = ogt::vox_read_scene((u8*)buffer.data(), buffer.size());
-
-        assert(scene != NULL);
-        assert(scene->num_models == 1);
-        // if ((block) == NULL) {
-        //     *block = new Block;
-        TRACE()
-        // }
-        (block)->mesh.size = ivec3(scene->models[0]->size_x, scene->models[0]->size_y, scene->models[0]->size_z);
-        TRACE()
-        assert(scene->models[0]->size_x > 0 && scene->models[0]->size_y > 0 && scene->models[0]->size_z > 0);
-        TRACE()
-        make_vertices(&((block)->mesh), (Voxel*)scene->models[0]->voxel_data, scene->models[0]->size_x, scene->models[0]->size_y, scene->models[0]->size_z);
-        TRACE()
-        for (int x = 0; x < scene->models[0]->size_x; x++) {
-            for (int y = 0; y < scene->models[0]->size_y; y++) {
-                for (int z = 0; z < scene->models[0]->size_z; z++) {
-                    (block)->voxels[x][y][z] = (u16)scene->models[0]->voxel_data[x + y * scene->models[0]->size_x + z * scene->models[0]->size_x * scene->models[0]->size_y];
-                }
-            }
-        }
-        TRACE()
-        ogt::vox_destroy_scene(scene);
-    }
-
-    // #define free_helper(dir) \
-    // if(not (block)->mesh.triangles.dir.indexes.empty()) vmaDestroyBuffer(render.VMAllocator, (block)->mesh.triangles.dir.indexes[i].buffer, (block)->mesh.triangles.dir.indexes[i].alloc);
     #define free_helper(__dir) \
     if(block->mesh.triangles.__dir.indexes.buffer) {\
         BufferDeletion bd = {};\
@@ -314,17 +254,6 @@ impl crate::LumRenderer {
         // *block = NULL;
     }
 
-    void LumInternal::LumInternalRenderer::load_mesh(InternalMeshModel* mesh, Voxel* Voxels, int x_size, int y_size, int z_size, bool _make_vertices) {
-        assert(mesh != NULL);
-        assert(Voxels != NULL);
-        assert(x_size > 0 && y_size > 0 && z_size > 0);
-        mesh->size = ivec3(x_size, y_size, z_size);
-        if (_make_vertices) {
-            make_vertices(mesh, Voxels, x_size, y_size, z_size);
-        }
-        mesh->voxels = create_RayTrace_VoxelImages(Voxels, mesh->size);
-    }
-
     //frees only gpu side stuff, not mesh ptr
     #undef  free_helper
     #define free_helper(__dir) \
@@ -337,12 +266,6 @@ impl crate::LumRenderer {
 
     void LumInternal::LumInternalRenderer::free_mesh(InternalMeshModel* mesh) {
         assert(mesh != NULL);
-        // free_helper(Pzz);
-        // free_helper(Nzz);
-        // free_helper(zPz);
-        // free_helper(zNz);
-        // free_helper(zzP);
-        // free_helper(zzN);
         if(mesh->triangles.indices.buffer) {\
             Lumal::BufferDeletion bd = {};\
                 bd.buffer = mesh->triangles.indices;\
@@ -370,182 +293,8 @@ impl crate::LumRenderer {
         }
     }
     #undef free_helper
-
-    bool operator== (const LumInternal::PackedVoxelVertex& one, const LumInternal::PackedVoxelVertex& other) {
-        return
-            (one.pos.x == other.pos.x) &&
-            (one.pos.y == other.pos.y) &&
-            (one.pos.z == other.pos.z)
-            ;
-    }
-
-    bool operator!= (const LumInternal::PackedVoxelVertex& one, const LumInternal::PackedVoxelVertex& other) {
-        return ! (one == other);
-    }
-
-    bool operator< (const LumInternal::PackedVoxelVertex& one, const LumInternal::PackedVoxelVertex& other) {
-        return one != other;
-    }
-
-    LumInternal::PackedVoxelQuad pack_quad (const array<LumInternal::PackedVoxelVertex, 6> vertices, uvec3 norm) {
-        LumInternal::PackedVoxelQuad quad = {};
-        vector<LumInternal::PackedVoxelVertex> uniq;
-        unsigned char mat = vertices[0].matID;
-        for (auto v : vertices) {
-            cout << glm::to_string (v.pos) << " \n";
-            // uniq.insert(v);
-            for (auto _v : uniq) {
-                if (v == _v) {
-                    goto label;
-                }
-            }
-            uniq.push_back (v);
-    label:
-            ;
-            // assert(mat == v.matID);
-        }
-        assert (uniq.size() == 4);
-        cout << " \n";
-        uvec3 low = uvec3 (+10000); //_corner
-        uvec3 high = uvec3 (0); //_corner
-        uvec3 diff = {};
-        for (auto v : uniq) {
-            cout << glm::to_string (v.pos) << " \n";
-            low = glm::min (low, uvec3 (v.pos));
-            high = glm::max (high, uvec3 (v.pos));
-        }
-        //general direction is from negative to positive
-        diff = high - low;
-        assert (any (greaterThan (diff, {0, 0, 0})));
-        uvec3 plane = uvec3 (1) - abs (norm);
-        cout << glm::to_string (plane) << " \n";
-        cout << glm::to_string (diff) << " \n";
-        assert (((diff.x == 0) == (plane.x == 0)));
-        assert (((diff.y == 0) == (plane.y == 0)));
-        assert (((diff.z == 0) == (plane.z == 0)));
-        if (abs (norm).x == 1) {
-            quad.size.x = diff.y;
-            quad.size.y = diff.z;
-        } else if (abs (norm).y == 1) {
-            quad.size.x = diff.x;
-            quad.size.y = diff.z;
-        } else if (abs (norm).z == 1) {
-            quad.size.x = diff.x;
-            quad.size.y = diff.y;
-        }
-        quad.pos = low;
-        return quad;
-    }
-
-    void repack_helper (vector<LumInternal::PackedVoxelVertex>& vs, vector<LumInternal::PackedVoxelQuad>& qs, uvec3 norm) {
-        assert ((vs.size() % 6) == 0);
-        for (int i = 0; i < vs.size() / 6; i++) {
-            qs.push_back (pack_quad ({
-                vs[i + 0], vs[i + 1], vs[i + 2],
-                vs[i + 3], vs[i + 4], vs[i + 5],
-            }, norm));
-        }
-    }
-
-    //defenetly not an example of highly optimized code
-    void LumInternal::LumInternalRenderer::make_vertices (InternalMeshModel* mesh, Voxel* Voxels, int x_size, int y_size, int z_size) {
-        ogt::ogt_voxel_meshify_context ctx = {};
-
-        const int totalVoxels = x_size * y_size * z_size;
-        std::vector<Voxel> contour(totalVoxels);
-        for (int i = 0; i < totalVoxels; ++i) {
-            contour[i] = (Voxels[i] == 0) ? 0 : 1;
-        }
-
-        ogt::ogt_int_mesh* ogt_mesh = ogt::my_int_mesh_from_paletted_voxels (&ctx, (const u8*)contour.data(), x_size, y_size, z_size);
-        ogt::my_int_mesh_optimize (&ctx, ogt_mesh);
-    // TRACE();
-        vector<VoxelVertex > verts (ogt_mesh->vertex_count);
-        vector<PackedVoxelVertex> packed_verts (ogt_mesh->vertex_count);
-        vector<PackedVoxelCircuit> circ_verts (ogt_mesh->vertex_count);
-        for (u32 i = 0; i < ogt_mesh->vertex_count; i++) {
-            // vec<3, unsigned char, defaultp> packed_posNorm = {};
-            // packed_posNorm = uvec3(ogt_mesh->vertices[i].pos);
-            // packed_posNorm.x |= (ogt_mesh->vertices[i].normal.x != 0)? (POS_NORM_BIT_MASK) : 0;
-            // packed_posNorm.y |= (ogt_mesh->vertices[i].normal.y != 0)? (POS_NORM_BIT_MASK) : 0;
-            // packed_posNorm.z |= (ogt_mesh->vertices[i].normal.z != 0)? (POS_NORM_BIT_MASK) : 0;
-            verts[i].norm = ivec3 (ogt_mesh->vertices[i].normal);
-            verts[i].pos = uvec3 (ogt_mesh->vertices[i].pos);
-            // printl((int)verts[i].pos.x);
-            verts[i].matID = (MatID_t)ogt_mesh->vertices[i].palette_index;
-            assert (verts[i].norm != (vec<3, signed char, defaultp>) (0));
-            assert (length (vec3 (verts[i].norm)) == 1.0f);
-            assert (!any (greaterThanEqual (ogt_mesh->vertices[i].pos, uvec3 (255))));
-            packed_verts[i].pos = uvec3 (ogt_mesh->vertices[i].pos);
-            packed_verts[i].matID = (MatID_t)ogt_mesh->vertices[i].palette_index;
-            circ_verts[i].pos = uvec3 (ogt_mesh->vertices[i].pos);
-        }
-        vector<u16> verts_Pzz = {};
-        vector<u16> verts_Nzz = {};
-        vector<u16> verts_zPz = {};
-        vector<u16> verts_zNz = {};
-        vector<u16> verts_zzP = {};
-        vector<u16> verts_zzN = {};
-
-        auto classify_normal = [&](const vec3& norm) {
-            if (norm == vec3(1, 0, 0)) return &verts_Pzz;
-            if (norm == vec3(-1, 0, 0)) return &verts_Nzz;
-            if (norm == vec3(0, 1, 0)) return &verts_zPz;
-            if (norm == vec3(0, -1, 0)) return &verts_zNz;
-            if (norm == vec3(0, 0, 1)) return &verts_zzP;
-            if (norm == vec3(0, 0, -1)) return &verts_zzN;
-            return (std::vector<u16>*)(nullptr); // error
-        };
-
-        for (u32 i = 0; i < ogt_mesh->index_count; ++i) {
-            u32 index = ogt_mesh->indices[i];
-            u32 provoking_index = ogt_mesh->indices[(i / 3) * 3];
-            const auto& norm = ogt_mesh->vertices[provoking_index].normal;
-
-            auto* target_vector = classify_normal(norm);
-            if (target_vector) target_vector->push_back(index);
-            else crash("Unrecognized normal");
-        }
-    // TRACE();
-        assert (circ_verts.size() == ogt_mesh->vertex_count);
-        // mesh->triangles.vertexes = render.createElemBuffer<PackedVoxelCircuit> (circ_verts.data(), circ_verts.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    // TRACE();
-        assert (verts_Pzz.size() != 0);
-        assert (verts_Nzz.size() != 0);
-        assert (verts_zPz.size() != 0);
-        assert (verts_zNz.size() != 0);
-        assert (verts_zzP.size() != 0);
-        assert (verts_zzN.size() != 0);
-
-        std::vector<u16> all_indices;
-        auto offset_and_insert = [&all_indices](auto& vector, IndexedVertices& section) {
-            section.offset = all_indices.size();
-            all_indices.insert(all_indices.end(), vector.begin(), vector.end());
-            section.icount = vector.size();
-        };
-
-        offset_and_insert(verts_Pzz, mesh->triangles.Pzz);
-        offset_and_insert(verts_Nzz, mesh->triangles.Nzz);
-        offset_and_insert(verts_zPz, mesh->triangles.zPz);
-        offset_and_insert(verts_zNz, mesh->triangles.zNz);
-        offset_and_insert(verts_zzP, mesh->triangles.zzP);
-        offset_and_insert(verts_zzN, mesh->triangles.zzN);
-
-        mesh->triangles.vertexes = lumal.createElemBuffer<PackedVoxelCircuit>(
-            circ_verts.data(),
-            circ_verts.size(),
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-
-        mesh->triangles.indices = lumal.createElemBuffer<u16>(
-            all_indices.data(),
-            all_indices.size(),
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-
-    // TRACE();
-        ogt::ogt_mesh_destroy (&ctx, (ogt::ogt_mesh*)ogt_mesh);
-    }
-
     */
+
     pub fn extract_palette_from_file(&mut self, scene_file: &str) {
         let scene = dot_vox::load(scene_file).unwrap();
         self.extract_palette_from_scene(&scene);
@@ -555,6 +304,7 @@ impl crate::LumRenderer {
         let scene = dot_vox::load(mesh_file).unwrap();
         assert!(scene.models.len() == 1); // only one model per file supported for now
         let model = &scene.models[0];
+        assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
 
         if extrude_palette && !self.has_palette {
             self.extract_palette_from_scene(&scene);
@@ -568,9 +318,7 @@ impl crate::LumRenderer {
         model: &dot_vox::Model,
         make_vertices: bool,
     ) -> InternalMeshModel {
-        // dbg!(model.voxels.len());
-        // dbg!(model.size);
-        // dbg!((model.size.x * model.size.y * model.size.z) as usize);
+        assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
         // They do not necessarily have to be equal, e.g. for big grid single-voxel model is len()==1
         // assert!(model.voxels.len() == (model.size.x * model.size.y * model.size.z) as usize);
         
@@ -579,33 +327,52 @@ impl crate::LumRenderer {
             y: model.size.y,
             z: model.size.z,
         };
+        
+        // plain 3d array representation
+        let mut plain_voxel_data = Array3D::<VoxelForContour>::new(
+            // +2 cause padding of 1 from each side
+            (size.x + 2) as usize,
+            (size.y + 2) as usize,
+            (size.z + 2) as usize,
+        ); plain_voxel_data.data.fill(VoxelForContour(0));
 
-        let mut plain_voxel_data = Array3D::<Voxel>::new(
-            size.x as usize,
-            size.y as usize,
-            size.z as usize,
-        );
-        // fill with empty voxels
-        plain_voxel_data.data.fill(Voxel(0));
+        // contour means that 2 different voxels (different color, roughness, etc) will be meshed into same triangle(s)
+        // - But where does material come from then?
+        // - from GPU-side 3d voxel arrays. That is faster (cause triangles without such approach are too small and overhead of raster is too heavy)
+        // NOTE: data is still represented with u8
+        // but type is VoxelForContour to implement a trait for mesher lib
+        // In original C++ implementation this was separate array
         model.voxels.iter().for_each(|voxel| {
+            // +1 cause padding of 1 from each side
+            // TODO: check if it is actually needed
             plain_voxel_data[(
-                voxel.x as usize, 
-                voxel.y as usize, 
-                voxel.z as usize
-            )] = Voxel(voxel.i);
+                (voxel.x + 1) as usize,
+                (voxel.y + 1) as usize,
+                (voxel.z + 1) as usize
+            )] = VoxelForContour(voxel.i);
         });
 
-        let voxels = self.create_rayrace_voxel_images(&plain_voxel_data.data, size);
+        // we need 3d array as slice of u8s but we also need a separate type for trait. Here we are
+        let pvd_data_u8_slice = unsafe {
+            std::slice::from_raw_parts(
+                (plain_voxel_data.data.as_ptr() as *const Voxel) as *const u8,
+                std::mem::size_of::<Voxel>() * plain_voxel_data.data.len(),
+            )
+            };
+
+        let voxels = self.create_rayrace_voxel_image(pvd_data_u8_slice, size);
 
         let mut buffer = GreedyQuadsBuffer::new(plain_voxel_data.data.len());
 
-        // TODO: issue on block_mesh bad docs & examples
+        lumal::trace!();
+        // TODO: issue on block_mesh bad readme example
         let chunk_shape = block_mesh::ndshape::RuntimeShape::<u32, 3>::new([
             size.x + 2,
             size.y + 2,
             size.z + 2,
         ]);
             
+        lumal::trace!();
         let faces = block_mesh::RIGHT_HANDED_Y_UP_CONFIG.faces;
         greedy_quads(
             &plain_voxel_data.data.as_slice(),
@@ -615,15 +382,23 @@ impl crate::LumRenderer {
             &faces,
             &mut buffer
         );
+        lumal::trace!();
 
         assert!(buffer.quads.num_quads() > 0);
 
         let num_indices = buffer.quads.num_quads() * 6;
         let num_vertices = buffer.quads.num_quads() * 4;
+        // [0,1,2] [1,2,3] - indices of vertices in vertex array
+        // each sequential three indices form a (single)triangle
+        // triangles are made by mesher (block_mesh) from voxels
         let mut indices = Vec::with_capacity(num_indices);
         let mut positions = Vec::with_capacity(num_vertices);
         let mut normals = Vec::with_capacity(num_vertices);
         
+        lumal::trace!();
+        // problem with block_mesh is that even tho it is voxel, values are still in floats
+        // so for now we repack & convert them
+        // TODO: fork, fix and optimize
         for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
             for quad in group.into_iter() {
                 indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
@@ -631,33 +406,192 @@ impl crate::LumRenderer {
                 normals.extend_from_slice(&face.quad_mesh_normals());
             }
         }
+        lumal::trace!();
 
-        dbg!(indices);
-        dbg!(positions);
-        dbg!(normals);
+        assert!(positions.len() == normals.len());
+        // positions only!
+        // normals are passed as push constants and defined in high-level (look down below)
+        let mut circ_verts = vec![PackedVoxelCircuit::default(); positions.len()];
+        for i in 0..positions.len() {
+            let u8pos = u8vec3::new (
+                positions[i][0] as u8,
+                positions[i][1] as u8,
+                positions[i][2] as u8,
+            );
+            circ_verts[i].pos = u8pos;
+        }
+
+        #[allow(non_snake_case)] let mut verts_Pzz = vec![u16::default(); positions.len()];
+        #[allow(non_snake_case)] let mut verts_Nzz = vec![u16::default(); positions.len()];
+        #[allow(non_snake_case)] let mut verts_zPz = vec![u16::default(); positions.len()];
+        #[allow(non_snake_case)] let mut verts_zNz = vec![u16::default(); positions.len()];
+        #[allow(non_snake_case)] let mut verts_zzP = vec![u16::default(); positions.len()];
+        #[allow(non_snake_case)] let mut verts_zzN = vec![u16::default(); positions.len()];
+
+        // TODO: how to return a ref to local_but_higher_scope variable?
+        let mut push_index_to_corresponding_vec = |normal: vec3, index: u16| {
+            match normal {
+                vec3 {x: 1.0, y: 0.0, z: 0.0} => {verts_Pzz.push(index);},
+                vec3 {x: -1.0, y: 0.0, z: 0.0} => {verts_Nzz.push(index);},
+                vec3 {x: 0.0, y: 1.0, z: 0.0} => {verts_zPz.push(index);},
+                vec3 {x: 0.0, y: -1.0, z: 0.0} => {verts_zNz.push(index);},
+                vec3 {x: 0.0, y: 0.0, z: 1.0} => {verts_zzP.push(index);},
+                vec3 {x: 0.0, y: 0.0, z: -1.0} => {verts_zzN.push(index);},
+                _ => {
+                    dbg!(normal);
+                    panic!("Unknown normal");
+                },
+            }
+        };
+
+        for i in 0..indices.len() {
+            let index = indices[i];
+            // the first one. This is the one that points to vertex that is Provoking Vertex (google it)
+            let provoking_index = indices[(i / 3) * 3];
+            // TODO: should i checks that they all actualyl have same normal?
+            let norm = normals[provoking_index as usize];
+            push_index_to_corresponding_vec(norm.into(), index as u16);
+        }
+
+        assert!(verts_Pzz.len() != 0);
+        assert!(verts_Nzz.len() != 0);
+        assert!(verts_zPz.len() != 0);
+        assert!(verts_zNz.len() != 0);
+        assert!(verts_zzP.len() != 0);
+        assert!(verts_zzN.len() != 0);
+
+        let mut triangles = FaceBuffers::default();
+
+        let mut all_indices = vec![];
+        let mut offset_and_insert = |vec: &mut Vec<u16>, section: &mut IndexedVertices| {
+            section.offset = vec.len() as u32;
+            section.icount = vec.len() as u32;
+            all_indices.extend_from_slice(vec.as_slice());
+        };
+
+        offset_and_insert(&mut verts_Pzz, &mut triangles.Pzz);
+        offset_and_insert(&mut verts_Nzz, &mut triangles.Nzz);
+        offset_and_insert(&mut verts_zPz, &mut triangles.zPz);
+        offset_and_insert(&mut verts_zNz, &mut triangles.zNz);
+        offset_and_insert(&mut verts_zzP, &mut triangles.zzP);
+        offset_and_insert(&mut verts_zzN, &mut triangles.zzN);
+
+        triangles.vertexes = self.lumal.create_elem_buffer::<PackedVoxelCircuit>(
+            &circ_verts,
+            vk::BufferUsageFlags::TRANSFER_DST // trans_dst needed internally but specified explicitly 
+            | vk::BufferUsageFlags::VERTEX_BUFFER,
+        );
+        triangles.indices = self.lumal.create_elem_buffer::<u16>(
+            &all_indices,
+            vk::BufferUsageFlags::TRANSFER_DST // trans_dst needed internally but specified explicitly 
+            | vk::BufferUsageFlags::VERTEX_BUFFER,
+        );
 
         return InternalMeshModel {
-            triangles: todo!(),
+            triangles,
             voxels,
             size,
         };
     }
+
+    pub fn free_mesh(&mut self, mesh: InternalMeshModel) {
+        assert!(mesh.triangles.vertexes.buffer != vk::Buffer::null());
+        assert!(mesh.triangles.indices.buffer != vk::Buffer::null());
+        assert!(mesh.voxels.image != vk::Image::null());
+
+        self.lumal.buffer_deletion_queue.push(BufferDeletion {
+            buffer: mesh.triangles.vertexes,
+            lifetime: FRAMES_IN_FLIGHT as i32,
+        });
+        self.lumal.buffer_deletion_queue.push(BufferDeletion {
+            buffer: mesh.triangles.indices,
+            lifetime: FRAMES_IN_FLIGHT as i32,
+        });
+
+        self.lumal.image_deletion_queue.push(ImageDeletion {
+            image: mesh.voxels,
+            lifetime: FRAMES_IN_FLIGHT as i32,
+        });
+    }
 }
 
-impl block_mesh::Voxel for Voxel {
+impl super::InternalRenderer {
+    //TODO: runtime copies in single copy command buffer instead of per-model cmb creation
+    pub fn create_rayrace_voxel_image(
+        &mut self,
+        voxels: &[Voxel],
+        size: uvec3,
+    ) -> lumal::Image {
+        let buffer_size = size.x * size.y * size.z;
+        assert_eq!(voxels.len(), ((size.x+2) * (size.y+2) * (size.z+2)) as usize);
+
+        let mut voxel_image = self
+            .lumal
+            .create_image(
+                vk::ImageType::_3D,
+                vk::Format::R8_UINT,
+                vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+                vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+                vulkanalia_vma::AllocationCreateFlags::empty(),
+                vk::ImageAspectFlags::COLOR,
+                uvec3_to_extent3d(size),
+                1,
+                vk::SampleCountFlags::_1,
+            )
+            .unwrap();
+
+        self.lumal.transition_image_layout_single_time(
+            &voxel_image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+        );
+
+        let staging_buffer = self.lumal.create_buffer(
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            buffer_size.try_into().unwrap(),
+            true,
+        );
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                voxels.as_ptr(),
+                staging_buffer.mapped.unwrap() as *mut Voxel,
+                buffer_size.try_into().unwrap(),
+            );
+        };
+        lumal::trace!();
+
+        self.lumal.copy_buffer_to_image_single_time(staging_buffer.buffer, &voxel_image, uvec3_to_extent3d(size));
+
+        lumal::trace!();
+        self.lumal.destroy_buffer(&staging_buffer);
+
+        voxel_image
+    }
+    
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct VoxelForContour(pub Voxel);
+
+impl block_mesh::Voxel for VoxelForContour {
     fn get_visibility(&self) -> VoxelVisibility {
         if self.0 == 0 {
             VoxelVisibility::Empty
         } else {
             VoxelVisibility::Opaque
-        }
+        } // never transluent
     }
 }
 
-impl block_mesh::MergeVoxel for Voxel {
+impl block_mesh::MergeVoxel for VoxelForContour {
     type MergeValue = Self;
 
     fn merge_value(&self) -> Self::MergeValue {
-        *self
+        // we only care about contour, thus if not emtpy, merging is allowed
+        return match self.0 {
+            0 => VoxelForContour(0),
+            _ => VoxelForContour(1),
+        }
     }
 }

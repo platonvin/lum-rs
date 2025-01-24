@@ -1,8 +1,9 @@
+use internal_renderer::FRAMES_IN_FLIGHT;
 use vulkanalia::vk::{AccessFlags, DeviceV1_0, ImageLayout, PipelineBindPoint, PipelineStageFlags};
 
 use crate::*;
 
-impl crate::LumRenderer {
+impl super::InternalRenderer {
     pub fn gen_perlin_2d(&mut self) {
         let lumal = &mut self.lumal;
 

@@ -1,23 +1,18 @@
-use lumal::{descriptors::*, ring::Ring, ComputePipe, LumalRenderer, LumalSettings, RasterPipe};
-use mem::offset_of;
-use types::*;
-use vk::Sampler;
-use vulkanalia::vk::{self, Extent2D, Handle};
-use RelativeDescriptorPos::*;
-// use log::*;
-use lumal::function;
+use internal_renderer::*;
+use lumal::{descriptors::*, Renderer, LumalSettings};
+use vulkanalia::vk::{self, Handle};
 
 use crate::*;
 
-impl crate::LumRenderer {
+impl InternalRenderer {
     pub fn create_all_rpasses(
-        lumal: &mut LumalRenderer,
-        lum_settings: &LumSettings,
-        lumal_settings: &LumalSettings,
-        iimages: &mut LumIndependentImages,
-        dimages: &mut LumSwapchainDependentImages,
-        pipes: &mut LumPipes,
-    ) -> LumRenderPasses {
+        lumal: &mut Renderer,
+        _lum_settings: &Settings,
+        _lumal_settings: &LumalSettings,
+        iimages: &mut AllIndependentImages,
+        dimages: &mut AllSwapchainDependentImages,
+        pipes: &mut AllPipes,
+    ) -> AllRenderPasses {
         println!("creating rpass: lightmap");
         let lightmap_rpass = lumal.create_render_pass(
             &[AttachmentDescription {
@@ -49,7 +44,7 @@ impl crate::LumRenderer {
         println!("creating rpass: gbuffer");
         
         let mut foliage_pipes = vec![];
-        for pipe in &mut pipes.raygen_grass_pipes {
+        for pipe in &mut pipes.raygen_foliage_pipes {
             foliage_pipes.push(pipe);
         }
 
@@ -115,7 +110,7 @@ impl crate::LumRenderer {
         assert!(gbuffer_rpass.render_pass != vk::RenderPass::null());
         assert!(pipes.raygen_models_pipe.render_pass != vk::RenderPass::null());
         // Third render pass
-        lumal::atrace!();
+        lumal::trace!();
         let shade_rpass = lumal.create_render_pass(
             &[
                 AttachmentDescription {
@@ -243,16 +238,16 @@ impl crate::LumRenderer {
                 // },
             ],
         );
-        lumal::atrace!();
+        lumal::trace!();
 
-        return LumRenderPasses {
+        return AllRenderPasses {
             lightmap_rpass,
             gbuffer_rpass,
             shade_rpass,
         };
     }
 
-    pub fn destroy_all_rpasses(lumal: &mut LumalRenderer, rpasses: &mut LumRenderPasses) {
+    pub fn destroy_all_rpasses(lumal: &mut Renderer, rpasses: &mut AllRenderPasses) {
         lumal.destroy_render_pass(&mut rpasses.lightmap_rpass);
         lumal.destroy_render_pass(&mut rpasses.gbuffer_rpass);
         lumal.destroy_render_pass(&mut rpasses.shade_rpass);

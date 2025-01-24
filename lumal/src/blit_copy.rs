@@ -5,10 +5,10 @@ fn empty_arr<T>() -> &'static [T] {
 
 use vk::MemoryBarrier;
 use vulkanalia::prelude::v1_3::*;
-use crate::{Image, LumalRenderer};
+use crate::{Image, Renderer};
 
 
-impl LumalRenderer {
+impl Renderer {
     pub fn copy_whole_image(&self, cmdbuf: vk::CommandBuffer, src: &Image, dst: &Image) {
         let copy_op = vk::ImageCopy::builder()
             .src_subresource(vk::ImageSubresourceLayers {

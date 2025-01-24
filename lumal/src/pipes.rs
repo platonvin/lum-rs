@@ -14,7 +14,7 @@ const PREFIXES : &[&str] = &[
     "shaders/compiled/"
 ]; 
 
-impl LumalRenderer {
+impl Renderer {
     pub fn destroy_compute_pipe(&mut self, pipe: &mut ComputePipe) {
         assert!(pipe.line != vk::Pipeline::null());
         assert!(pipe.line_layout != vk::PipelineLayout::null());
@@ -32,7 +32,7 @@ impl LumalRenderer {
             set_layout: vk::DescriptorSetLayout::null(),
         };
     }
-    pub fn destroy_raster_pipe (&mut self, pipe: &mut RasterPipe) {
+    pub fn destroy_raster_pipe (&mut self, pipe: RasterPipe) {
         assert!(pipe.line != vk::Pipeline::null());
         assert!(pipe.line_layout != vk::PipelineLayout::null());
         assert!(pipe.set_layout != vk::DescriptorSetLayout::null());
@@ -42,14 +42,14 @@ impl LumalRenderer {
             self.device.destroy_descriptor_set_layout(pipe.set_layout, None);
         }
         // reset the whole thing. Its like raii but explicit
-        *pipe = RasterPipe {
-            line: vk::Pipeline::null(),
-            line_layout: vk::PipelineLayout::null(),
-            sets: Ring::new(0, vk::DescriptorSet::null()),
-            set_layout: vk::DescriptorSetLayout::null(),
-            render_pass: vk::RenderPass::null(),
-            subpass_id: 0,
-        };
+        // *pipe = RasterPipe {
+        //     line: vk::Pipeline::null(),
+        //     line_layout: vk::PipelineLayout::null(),
+        //     sets: Ring::new(0, vk::DescriptorSet::null()),
+        //     set_layout: vk::DescriptorSetLayout::null(),
+        //     render_pass: vk::RenderPass::null(),
+        //     subpass_id: 0,
+        // };
     }
 
     pub fn create_compute_pipeline(

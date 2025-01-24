@@ -1,7 +1,7 @@
 use std::{option, ptr::null, u32::MAX};
 
 use crate::{ring::Ring, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe, MAX_FRAMES_IN_FLIGHT};
-use crate::LumalRenderer; 
+use crate::Renderer; 
 use vulkanalia::vk::{self, DeviceV1_3};
 use anyhow::*;
 
@@ -165,7 +165,7 @@ pub struct ShortDescriptorInfo {
     pub stages: vk::ShaderStageFlags,
 }
 
-impl LumalRenderer {
+impl Renderer {
     /// immediately creates vulkan descriptor set layout
     pub fn create_descriptor_set_layout(
         &mut self,
@@ -320,7 +320,7 @@ impl LumalRenderer {
 }
 
 
-impl LumalRenderer {
+impl Renderer {
     // anounce is just a request, this is an actual logic
     pub unsafe fn actually_setup_descriptor_impl(
         descriptor_pool: &vk::DescriptorPool,

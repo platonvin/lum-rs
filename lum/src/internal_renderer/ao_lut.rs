@@ -1,10 +1,11 @@
 use std::f32::consts::PI;
 
-use vek::num_traits::{self, Float};
+use internal_renderer::InternalRenderer;
 
 use crate::*;
+use crate::types::*;
 
-impl LumRenderer {
+impl InternalRenderer {
     fn get_world_shift_from_clip_shift(clip_shift: vec2, horizline_scaled: vec3, vertiline_scaled: vec3) -> vec3 {
         horizline_scaled * clip_shift.x + vertiline_scaled * clip_shift.y
     }

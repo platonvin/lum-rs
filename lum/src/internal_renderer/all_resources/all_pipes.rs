@@ -1,34 +1,34 @@
-use lumal::{descriptors::*, ring::Ring, ComputePipe, LumalRenderer, LumalSettings, RasterPipe};
-use mem::offset_of;
-use types::*;
+use consts::*;
+use internal_renderer::*;
+use lumal::{descriptors::*, ring::Ring, Renderer, LumalSettings};
+use std::mem::offset_of;
 use vk::Sampler;
-use vulkanalia::vk::{self, DeviceV1_0, Extent2D, Handle};
+use vulkanalia::vk::{self, DeviceV1_0, Handle};
 use RelativeDescriptorPos::*;
-use lumal::atrace;
 use crate::*;
 
 // This file could be just a data
 // it is setting up all the descriptors/layouts for pipes and pipes themeselves
 
-impl crate::LumRenderer {
+impl InternalRenderer {
     pub unsafe fn create_all_pipes(
-        lumal: &mut LumalRenderer,
-        lum_settings: &LumSettings,
-        lumal_settings: &LumalSettings,
-        buffers: &LumBuffers,
-        iimages: &LumIndependentImages,
-        dimages: &LumSwapchainDependentImages,
-        samplers: &LumSamplers,
-        pipes: &mut LumPipes,
+        lumal: &mut Renderer,
+        lum_settings: &Settings,
+        _lumal_settings: &LumalSettings,
+        buffers: &AllBuffers,
+        iimages: &AllIndependentImages,
+        dimages: &AllSwapchainDependentImages,
+        samplers: &AllSamplers,
+        pipes: &mut AllPipes,
     ) {
         // they are seperate because they are actually secondary layouts - used for descriptor_push
         // this is a big TODO: - get rid of descriptor_push
         setup_all_separate_descriptor_layouts(lumal, pipes);
 
-        lumal::atrace!();
+        lumal::trace!();
         // anounce (count) all descriptors
         Self::do_smth_all_descriptors(
-            &LumRenderer::anounce_descriptor_setup_wrapper,
+            &InternalRenderer::anounce_descriptor_setup_wrapper,
             lumal,
             buffers,
             iimages,
@@ -37,14 +37,47 @@ impl crate::LumRenderer {
             pipes,
         );
 
-        lumal::atrace!();
+        lumal::trace!();
+
+        // do same for grass
+        pipes.raygen_foliage_pipes.iter_mut().for_each(|foliage| {
+            InternalRenderer::anounce_descriptor_setup_wrapper(
+                lumal,
+                &mut foliage.set_layout,
+                &mut foliage.sets,
+                &[
+                    DescriptorInfo::make_new(
+                        UNIFORM_BUFFER,
+                        Current,
+                        Some(buffers.uniform.clone()),
+                        None,
+                        vk::Sampler::null(),
+                        UNDEFINED,
+                        VERTEX | FRAGMENT,
+                    ),
+                    DescriptorInfo::make_new(
+                        COMBINED_IMAGE_SAMPLER,
+                        First, // TODO grass state alwyas first
+                        None,
+                        Some(iimages.grass_state.clone()),
+                        samplers.linear_sampler,
+                        GENERAL,
+                        VERTEX | FRAGMENT,
+                    ),
+                ],
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::DescriptorSetLayoutCreateFlags::empty(),
+            );
+        });
+        
+        lumal::trace!();
         // (actually) allocate space that is enough for all descriptors
         lumal.flush_descriptor_setup().unwrap();
 
-        lumal::atrace!();
+        lumal::trace!();
         // allocate each descriptor set
         Self::do_smth_all_descriptors(
-            &LumRenderer::acutally_setup_descriptor_wrapper,
+            &InternalRenderer::acutally_setup_descriptor_wrapper,
             lumal,
             buffers,
             iimages,
@@ -52,7 +85,40 @@ impl crate::LumRenderer {
             samplers,
             pipes,
         );
-        lumal::atrace!();
+        lumal::trace!();
+
+        // do same for grass
+        pipes.raygen_foliage_pipes.iter_mut().for_each(|foliage| {
+            InternalRenderer::acutally_setup_descriptor_wrapper(
+                lumal,
+                &mut foliage.set_layout,
+                &mut foliage.sets,
+                &[
+                    DescriptorInfo::make_new(
+                        UNIFORM_BUFFER,
+                        Current,
+                        Some(buffers.uniform.clone()),
+                        None,
+                        vk::Sampler::null(),
+                        UNDEFINED,
+                        VERTEX | FRAGMENT,
+                    ),
+                    DescriptorInfo::make_new(
+                        COMBINED_IMAGE_SAMPLER,
+                        First, // TODO grass state alwyas first
+                        None,
+                        Some(iimages.grass_state.clone()),
+                        samplers.linear_sampler,
+                        GENERAL,
+                        VERTEX | FRAGMENT,
+                    ),
+                ],
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::DescriptorSetLayoutCreateFlags::empty(),
+            );
+        });
+        
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.lightmap_blocks_pipe,
@@ -80,7 +146,7 @@ impl crate::LumRenderer {
             vk::StencilOpState::default(), // no stencil
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.lightmap_models_pipe,
@@ -108,7 +174,7 @@ impl crate::LumRenderer {
             vk::StencilOpState::default(), // no stencil
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.raygen_blocks_pipe,
@@ -140,7 +206,7 @@ impl crate::LumRenderer {
             vk::StencilOpState::default(), // no stencil
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.raygen_models_pipe,
@@ -172,7 +238,7 @@ impl crate::LumRenderer {
             vk::StencilOpState::default(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.raygen_particles_pipe,
@@ -222,7 +288,7 @@ impl crate::LumRenderer {
             vk::StencilOpState::default(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.raygen_water_pipe,
@@ -251,11 +317,11 @@ impl crate::LumRenderer {
             vk::StencilOpState::default(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
-        for foliage_pipe in &mut pipes.raygen_grass_pipes {
+        for foliage in pipes.raygen_foliage_pipes.iter_mut() {
             lumal.create_raster_pipeline(
-                foliage_pipe,
+                foliage,
                 None,
                 &[
                     ShaderStage {
@@ -314,7 +380,7 @@ impl crate::LumRenderer {
             vk::StencilOpState::default(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.ao_pipe,
@@ -344,7 +410,7 @@ impl crate::LumRenderer {
         );
 
         // Porting fillStencilGlossyPipe
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.fill_stencil_glossy_pipe,
@@ -382,7 +448,7 @@ impl crate::LumRenderer {
         );
 
         // Porting fillStencilSmokePipe
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.fill_stencil_smoke_pipe,
@@ -424,7 +490,7 @@ impl crate::LumRenderer {
         );
 
         // Porting glossyPipe
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.glossy_pipe,
@@ -462,7 +528,7 @@ impl crate::LumRenderer {
         );
 
         // Porting smokePipe
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.smoke_pipe,
@@ -499,7 +565,7 @@ impl crate::LumRenderer {
             },
         );
 
-        lumal::atrace!();
+        lumal::trace!();
 
         lumal.create_raster_pipeline(
             &mut pipes.tonemap_pipe,
@@ -530,7 +596,7 @@ impl crate::LumRenderer {
 
         // aint no way i port RmlUi to Rust
 
-        lumal::atrace!();
+        lumal::trace!();
 
         // lumal.create_raster_pipeline(
         //     &mut pipes.overlay_pipe,
@@ -572,7 +638,7 @@ impl crate::LumRenderer {
         //     vk::StencilOpState::default(), // no stencil
         // );
 
-        lumal::atrace!();
+        lumal::trace!();
         // Compute pipelines
         lumal.create_compute_pipeline(
             &mut pipes.radiance_pipe,
@@ -582,7 +648,7 @@ impl crate::LumRenderer {
             vk::PipelineCreateFlags::DISPATCH_BASE,
         );
 
-        lumal::atrace!();
+        lumal::trace!();
         lumal.create_compute_pipeline(
             &mut pipes.update_grass_pipe,
             None,
@@ -591,7 +657,7 @@ impl crate::LumRenderer {
             vk::PipelineCreateFlags::empty(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
         lumal.create_compute_pipeline(
             &mut pipes.update_water_pipe,
             None,
@@ -600,7 +666,7 @@ impl crate::LumRenderer {
             vk::PipelineCreateFlags::empty(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
         lumal.create_compute_pipeline(
             &mut pipes.gen_perlin2d_pipe,
             None,
@@ -609,7 +675,7 @@ impl crate::LumRenderer {
             vk::PipelineCreateFlags::empty(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
         lumal.create_compute_pipeline(
             &mut pipes.gen_perlin3d_pipe,
             None,
@@ -618,7 +684,7 @@ impl crate::LumRenderer {
             vk::PipelineCreateFlags::empty(),
         );
 
-        lumal::atrace!();
+        lumal::trace!();
         lumal.create_compute_pipeline(
             &mut pipes.map_pipe,
             Some(pipes.map_push_layout),
@@ -628,28 +694,28 @@ impl crate::LumRenderer {
         );
     }
 
-    pub unsafe fn destroy_all_pipes(lumal: &mut LumalRenderer, pipes: &mut LumPipes) {
-        lumal.destroy_raster_pipe(&mut pipes.lightmap_blocks_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.lightmap_models_pipe);
+    pub unsafe fn destroy_all_pipes(lumal: &mut Renderer, mut pipes: AllPipes) {
+        lumal.destroy_raster_pipe(pipes.lightmap_blocks_pipe);
+        lumal.destroy_raster_pipe(pipes.lightmap_models_pipe);
 
-        lumal.destroy_raster_pipe(&mut pipes.raygen_blocks_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.raygen_models_pipe);
+        lumal.destroy_raster_pipe(pipes.raygen_blocks_pipe);
+        lumal.destroy_raster_pipe(pipes.raygen_models_pipe);
         lumal.device.destroy_descriptor_set_layout(pipes.raygen_models_push_layout, None);
-        lumal.destroy_raster_pipe(&mut pipes.raygen_particles_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.raygen_water_pipe);
+        lumal.destroy_raster_pipe(pipes.raygen_particles_pipe);
+        lumal.destroy_raster_pipe(pipes.raygen_water_pipe);
 
-        for pipe in pipes.raygen_grass_pipes.iter_mut() {
-            lumal.destroy_raster_pipe(pipe);
+        for foliage in pipes.raygen_foliage_pipes {
+            lumal.destroy_raster_pipe(foliage);
         }
 
-        lumal.destroy_raster_pipe(&mut pipes.diffuse_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.ao_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.fill_stencil_glossy_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.fill_stencil_smoke_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.glossy_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.smoke_pipe);
-        lumal.destroy_raster_pipe(&mut pipes.tonemap_pipe);
-        // lumal.destroy_raster_pipe(&mut pipes.overlay_pipe);
+        lumal.destroy_raster_pipe(pipes.diffuse_pipe);
+        lumal.destroy_raster_pipe(pipes.ao_pipe);
+        lumal.destroy_raster_pipe(pipes.fill_stencil_glossy_pipe);
+        lumal.destroy_raster_pipe(pipes.fill_stencil_smoke_pipe);
+        lumal.destroy_raster_pipe(pipes.glossy_pipe);
+        lumal.destroy_raster_pipe(pipes.smoke_pipe);
+        lumal.destroy_raster_pipe(pipes.tonemap_pipe);
+        // lumal.destroy_raster_pipe(pipes.overlay_pipe);
         lumal.device.destroy_descriptor_set_layout(pipes.overlay_pipe.set_layout, None);
 
         // lumal.destroy_compute_pipe(&mut pipes.raytrace_pipe);
@@ -664,15 +730,15 @@ impl crate::LumRenderer {
 
     fn do_smth_all_descriptors<Fun>(
         process: & Fun ,
-        lumal: &mut LumalRenderer,
-        buffers: &LumBuffers,
-        iimages: &LumIndependentImages,
-        dimages: &LumSwapchainDependentImages,
-        samplers: &LumSamplers,
-        pipes: &mut LumPipes,
+        lumal: &mut Renderer,
+        buffers: &AllBuffers,
+        iimages: &AllIndependentImages,
+        dimages: &AllSwapchainDependentImages,
+        samplers: &AllSamplers,
+        pipes: &mut AllPipes,
     ) where
         Fun: for<'b> Fn(
-            &'b mut LumalRenderer,
+            &'b mut Renderer,
             &'b mut vk::DescriptorSetLayout,
             &'b mut Ring<vk::DescriptorSet>,
             &'b [DescriptorInfo],
@@ -1305,7 +1371,7 @@ impl crate::LumRenderer {
 
     // Sorry, i dont have enough iq to understand lifetimes
     fn anounce_descriptor_setup_wrapper(
-        lumal: &mut LumalRenderer,
+        lumal: &mut Renderer,
         dset_layout: &mut vk::DescriptorSetLayout,
         descriptor_sets: &mut Ring<vk::DescriptorSet>,
         descriptions: &[DescriptorInfo],
@@ -1322,7 +1388,7 @@ impl crate::LumRenderer {
     }
 
     fn acutally_setup_descriptor_wrapper(
-        lumal: &mut LumalRenderer,
+        lumal: &mut Renderer,
         dset_layout: &mut vk::DescriptorSetLayout,
         descriptor_sets: &mut Ring<vk::DescriptorSet>,
         descriptions: &[DescriptorInfo],
@@ -1339,7 +1405,7 @@ impl crate::LumRenderer {
     }
 }
 
-fn setup_all_separate_descriptor_layouts(lumal: &mut LumalRenderer, pipes: &mut LumPipes) {
+fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPipes) {
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {
             descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,

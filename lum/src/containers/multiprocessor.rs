@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -119,8 +119,8 @@ impl Drop for Multiprocessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant};
+    use std::sync::{atomic::AtomicUsize, Arc, Mutex};
+    use std::time::Duration;
 
     #[test]
     fn test_thread_count() {

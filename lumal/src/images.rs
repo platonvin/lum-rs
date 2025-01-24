@@ -1,4 +1,4 @@
-use crate::{ring::Ring, LumalRenderer}; // Import the LumalRenderer struct
+use crate::{ring::Ring, Renderer}; // Import the LumalRenderer struct
 use crate::Image;
 use std::ptr::{self};
 use anyhow::*; 
@@ -6,7 +6,7 @@ use vulkanalia::vk::{self, DeviceV1_0};
 use vulkanalia_vma::{self as vma};
 use vulkanalia_vma::Alloc;
 
-impl LumalRenderer {
+impl Renderer {
     pub fn create_image(
         &self,
         image_type: vk::ImageType,
@@ -100,13 +100,7 @@ impl LumalRenderer {
                 .collect::<Result<Vec<_>, _>>()?;
         }
 
-        // self.transition_image_layout_single_time(
-        //     &image.image,
-        //     vk::ImageLayout::GENERAL,
-        //     mipmaps,
-        // )?;
-
-        Ok(Image {
+        let image = Image {
             image: image_image,
             allocation: image_allocation,
             view: image_view,
@@ -115,7 +109,15 @@ impl LumalRenderer {
             aspect: image_aspect,
             extent: image_extent,
             mip_levels: image_mip_levels,
-        })
+        };
+        
+        self.transition_image_layout_single_time(
+            &image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+        );
+
+        Ok(image)
     }
     pub fn create_image_ring(
         &self,

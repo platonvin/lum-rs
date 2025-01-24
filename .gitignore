@@ -1,7 +1,11 @@
 /target
-/.idea
-lumal/shaders/frag.spv
-lumal/shaders/vert.spv
+/.idea 
 /temp.md
 *.spv
 /assets
+/temp2.md
+/flame-graph.html
+/rust-anal.md
+out.txt
+analysis.json
+analysis.jsoncargo

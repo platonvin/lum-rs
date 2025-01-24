@@ -1,6 +1,6 @@
 use vek::Aabb;
 
-use super::{ivec3, mat4, vec3, vec4};
+use super::{mat4, uvec3, vec3, vec4};
 
 // pub struct AABB {
 //     pub min: vec3,
@@ -11,33 +11,7 @@ pub type fAABB = Aabb<f32>;
 #[allow(non_camel_case_types)]
 pub type iAABB = Aabb<i32>;
 
-trait OverlapTrait {
-    fn contains(&self, point: vec3) -> bool;
-
-    fn intersects(&self, other: &fAABB) -> bool;
-}
-
-impl OverlapTrait for fAABB {
-    fn contains(&self, point: vec3) -> bool {
-        return (self.min.x) <= (point.x)
-            && (self.min.y) <= (point.y)
-            && (self.min.z) <= (point.z)
-            && (self.max.x) >= (point.x)
-            && (self.max.y) >= (point.y)
-            && (self.max.z) >= (point.z);
-    }
-
-    fn intersects(&self, other: &fAABB) -> bool {
-        return self.min.x <= other.max.x
-            && self.min.y <= other.max.y
-            && self.min.z <= other.max.z
-            && self.max.x >= other.min.x
-            && self.max.y >= other.min.y
-            && self.max.z >= other.min.z;
-    }
-}
-
-pub fn get_shift(trans: mat4, size: ivec3) -> fAABB {
+pub fn get_shift(trans: mat4, size: uvec3) -> fAABB {
     let box_vec = vec3::new(
         (size.x - 1) as f32,
         (size.y - 1) as f32,

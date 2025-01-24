@@ -1,278 +1,161 @@
-#![allow(clippy::missing_safety_doc)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
 
-use anyhow::Result;
-use lum::{LumRenderer, LumSettings};
-use winit::event::{self, Event};
+use lum::{internal_renderer::Settings, renderer::Renderer, types::{u8vec3, BlockID_t, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric}};
+use winit::application::ApplicationHandler;
+use winit::event::{DeviceEvent, DeviceId, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::window::{Window, WindowId};
 
-/*
-void Lum::Renderer::submitFrame() noexcept {
-TRACE()
-    opaque_members->render.start_frame();
-TRACE()
-
-        // opaque_members->render.start_compute();
-            opaque_members->render.start_blockify();    
-            for (let m : mesh_que){
-                opaque_members->render.blockify_mesh((LumInternal::InternalMeshModel*)m.mesh.ptr, &m.trans);
-            }
-TRACE()
-
-            opaque_members->render.end_blockify();
-TRACE()
-            opaque_members->render.shift_radiance(stored_radiance_shift);
-TRACE()
-            opaque_members->render.update_radiance();
-TRACE()
-            // opaque_members->render.recalculate_df(); // currently unused. per-voxel Distance Field 
-            // opaque_members->render.recalculate_bit(); // currently unused. Bitpacking, like (block==Air) ? 0 : 1 
-TRACE()
-            opaque_members->render.updade_grass({});
-TRACE()
-            opaque_members->render.updade_water();
-TRACE()
-            opaque_members->render.exec_copies();
-TRACE()
-                opaque_members->render.start_map();
-TRACE()
-                for (let m : mesh_que){
-                    opaque_members->render.map_mesh((LumInternal::InternalMeshModel*)m.mesh.ptr, &m.trans);
-                }
-TRACE()
-                opaque_members->render.end_map();
-TRACE()
-            opaque_members->render.end_compute();
-TRACE()
-                // opaque_members->render.raytrace();
-                opaque_members->render.start_lightmap();
-TRACE()
-                //yeah its wrong
-                opaque_members->render.lightmap_start_blocks();
-TRACE()
-                    for(let b : block_que){
-                        opaque_members->render.lightmap_block(&opaque_members->block_palette[b.block].mesh, b.block, b.pos);
-                    }
-TRACE()
-                opaque_members->render.lightmap_start_models();
-TRACE()
-                    for (let m : mesh_que){
-                        opaque_members->render.lightmap_model((LumInternal::InternalMeshModel*)m.mesh.ptr, &m.trans);
-                    }
-TRACE()
-                opaque_members->render.end_lightmap();
-TRACE()
-
-                opaque_members->render.start_raygen();  
-TRACE()
-                // printl(block_que.size());
-                opaque_members->render.raygen_start_blocks();
-TRACE()
-                    for(let b : block_que){
-                        // DEBUG_LOG(b.block)
-                        // DEBUG_LOG(&block_palette[b.block].mesh)
-                        opaque_members->render.raygen_block(&opaque_members->block_palette[b.block].mesh, b.block, b.pos);
-                    }  
-TRACE()
-                    
-                opaque_members->render.raygen_start_models();
-TRACE()
-                    for (let m : mesh_que){
-                        opaque_members->render.raygen_model((LumInternal::InternalMeshModel*)m.mesh.ptr, &m.trans);
-                    }
-TRACE()
-                opaque_members->render.update_particles();
-TRACE()
-                opaque_members->render.raygen_map_particles();      
-TRACE()
-                opaque_members->render.raygen_start_grass();
-TRACE()
-                    for(let f : foliage_que){
-                        opaque_members->render.raygen_map_grass((LumInternal::InternalMeshFoliage*)f.foliage, f.pos);
-                    }
-TRACE()
-
-                opaque_members->render.raygen_start_water();
-TRACE()
-                    for(let l : liquid_que){
-                        opaque_members->render.raygen_map_water(*((LumInternal::InternalMeshLiquid*)(l.liquid)), l.pos);
-                    }
-TRACE()
-                opaque_members->render.end_raygen();
-TRACE()
-                opaque_members->render.start_2nd_spass();
-TRACE()
-                opaque_members->render.diffuse();
-TRACE()
-                opaque_members->render.ambient_occlusion(); 
-TRACE()
-                opaque_members->render.glossy_raygen();
-TRACE()
-                opaque_members->render.raygen_start_smoke();
-TRACE()
-                    for(let v : volumetric_que){
-                        opaque_members->render.raygen_map_smoke(*((LumInternal::InternalMeshVolumetric*)(v.volumetric)), v.pos);
-                    }
-TRACE()
-                opaque_members->render.glossy();
-TRACE()
-                opaque_members->render.smoke();
-TRACE()
-                opaque_members->render.tonemap();
-TRACE()
-            opaque_members->render.start_ui(); 
-//                 ui.update();
-TRACE()
-//                 ui.draw();
-TRACE()
-        opaque_members->render.end_ui(); 
-        opaque_members->render.end_2nd_spass();
-TRACE()
-    // this should happen BEFORE end_frame
-    // otherwise (if after) there is more (visible!) inconsistency which might seem like its perfomance problems
-    updateTime(); 
-
-    opaque_members->render.end_frame();
-TRACE()
+// i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityEnum -> LumMeshModel
+// #[derive(Default)]
+struct AllMeshes {
+    tank_body: InternalMeshModel,
+    tank_head: InternalMeshModel,
+    tank_rf_leg: InternalMeshModel,
+    tank_lb_leg: InternalMeshModel,
+    tank_lf_leg: InternalMeshModel,
+    tank_rb_leg: InternalMeshModel,
+    water: InternalMeshLiquid,
+    grass: InternalMeshFoliage,
+    smoke: InternalMeshVolumetric,
 }
 
-*/
-fn main() -> Result<()> {
-    print!("started");
-    let settings = LumSettings {
-        static_block_palette_size: 0,
-        ..LumSettings::default()
-    };
-
-
-    let mut lum = unsafe { LumRenderer::create(&settings) }?;
-    let tank_body = lum.load_mesh_from_file("assets/tank_body.vox", true, true);
-
-    loop {
-        let mut should_break = false;
-        lumal::atrace!();
-        lum.lumal.event_loop.take().unwrap().run(
-            |event, event_loop| {
-                match event {
-                    Event::LoopExiting => {
-                        // break; // oh syntax problem creted for no reason by winit. Or is there a reason?
-                        should_break = true;
-                        println!("should_break");
-                        return;
-                    }
-                    _ => {
-                        println!("event");
-                        lumal::atrace!();
-                        lum.start_frame();
-                        lumal::atrace!();
-                        lum.start_blockify();
-                        lumal::atrace!();
-                        lum.end_blockify();
-            
-            lumal::atrace!();
-                        lum.shift_radiance(Default::default());
-            
-            lumal::atrace!();
-                        lum.update_radiance();
-                        lumal::atrace!();
-                        lum.updade_grass(Default::default());
-                        lumal::atrace!();
-                        lum.updade_water();
-                        lumal::atrace!();
-                        lum.exec_copies();
-                        
-                        lumal::atrace!();
-                        lum.start_map();
-                        lumal::atrace!();
-                            // lum.map_mesh(&mesh, Default::default());
-                            lumal::atrace!();
-                        lum.end_map();
-            
-            lumal::atrace!();
-                        lum.end_compute();
-            
-            lumal::atrace!();
-                        lum.start_lightmap();
-                        lumal::atrace!();
-                            lum.lightmap_start_blocks();
-                            lumal::atrace!();
-                            // lum.lightmap_block(&mesh, 0, Default::default());
-                            lumal::atrace!();
-                            lum.lightmap_start_models();
-                            lumal::atrace!();
-                            // lum.lightmap_model(&mesh, Default::default());
-                            lumal::atrace!();
-                            lum.end_lightmap();
-            
-            lumal::atrace!();
-                        lum.start_raygen();
-                        lumal::atrace!();
-                            lum.raygen_start_blocks();
-                            lumal::atrace!();
-                            // lum.raygen_block(&mesh, 0, Default::default());
-                            lumal::atrace!();
-                            lum.raygen_start_models();
-                            lumal::atrace!();
-                            // lum.raygen_model(&mesh, Default::default());
-                            lumal::atrace!();
-                            lum.update_particles();
-                            lumal::atrace!();
-                            lum.raygen_map_particles();
-                            lumal::atrace!();
-                            lum.raygen_start_grass();
-                            lumal::atrace!();
-                            // lum.raygen_map_grass(&mesh, Default::default());
-                            lumal::atrace!();
-                            lum.raygen_start_water();
-                            lumal::atrace!();
-                            // lum.raygen_map_water(&mesh, Default::default());
-                            lumal::atrace!();
-                            lum.end_raygen();
-            
-            lumal::atrace!();
-                        lum.start_2nd_spass();
-                        lumal::atrace!();
-                            lum.diffuse();
-                            lumal::atrace!();
-                            lum.ambient_occlusion();
-                            lumal::atrace!();
-                            lum.glossy_raygen();
-                            lumal::atrace!();
-                            lum.raygen_start_smoke();
-                            lumal::atrace!();
-                            // lum.raygen_map_smoke(&mesh, Default::default());
-                            lumal::atrace!();
-                            lum.glossy();
-                            lumal::atrace!();
-                            lum.smoke();
-                            lumal::atrace!();
-                            lum.tonemap();
-                        
-                        lumal::atrace!();
-                        // lum.start_ui();
-                        //     ui.update();
-                        //     ui.draw();
-                        lumal::atrace!();
-                        // lum.end_ui();
-            
-            lumal::atrace!();
-                        lum.end_2nd_spass();
-                        lumal::atrace!();
-                    lum.end_frame();
-                    }
-                    // am i wrong or is winit defeating purpose of Vulkan async?
-                }
-            }
-        )?;
-        if should_break {
-            break;
+impl AllMeshes {
+    fn new(lum: &mut Renderer, grass: InternalMeshFoliage) -> Self {
+        Self {
+            tank_body: lum.load_model("assets/tank_body.vox"),
+            tank_head: lum.load_model("assets/tank_head.vox"),
+            tank_rf_leg: lum.load_model("assets/tank_rf_lb_leg.vox"),
+            tank_lb_leg: lum.load_model("assets/tank_rf_lb_leg.vox"),
+            tank_lf_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
+            tank_rb_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
+            water: lum.load_liquid(17, 16),
+            grass : grass,
+            smoke: lum.load_volumetric(0.5, 0.1, u8vec3::new(0, 0, 0)),
         }
     }
-    lumal::atrace!();
-    // lum.start_frame();
-    
-    // LumRenderer::
-    lumal::atrace!();
-    unsafe { lum.destroy() };
 
-    print!("finished");
-    Ok(())
+    fn unload(self, lum: &mut Renderer) {
+        lum.unload_model(self.tank_body);
+        lum.unload_model(self.tank_head);
+        lum.unload_model(self.tank_rf_leg);
+        lum.unload_model(self.tank_lb_leg);
+        lum.unload_model(self.tank_lf_leg);
+        lum.unload_model(self.tank_rb_leg);
+        lum.unload_liquid(self.water);
+        lum.unload_foliage(self.grass);
+        lum.unload_volumetric(self.smoke);
+    }
+}
+
+// #[derive(Default)]
+struct AppState {
+    // event_loop: EventLoop<()>,
+    window: Window,
+    lum: lum::renderer::Renderer,
+    meshes: AllMeshes,
+}
+impl AppState {
+    fn new(mut window: Window) -> Self {
+        let settings = Settings {
+            static_block_palette_size: 15,
+            ..Settings::default()
+        };
+
+        let mut pre_init_lum = Renderer::create().unwrap();
+        let grass = pre_init_lum.load_foliage(
+            "shaders/compiled/grass.vert.spv",
+            13,
+            100,
+        );
+
+        let mut lum = pre_init_lum.init(&settings, &mut window).unwrap(); 
+        let meshes = AllMeshes::new(&mut lum, grass);
+
+        let set_load = |lum: &mut Renderer, block: BlockID_t, path: &str| {
+            let mesh = lum.load_model(path);
+            lum.set_palette_block_mesh(block, mesh);
+        };
+
+        set_load(&mut lum, 1, "assets/dirt.vox");
+        set_load(&mut lum, 2, "assets/grass.vox");
+        set_load(&mut lum, 3, "assets/grassNdirt.vox");
+        set_load(&mut lum, 4, "assets/stone_dirt.vox");
+        set_load(&mut lum, 5, "assets/bush.vox");
+        set_load(&mut lum, 6, "assets/leaves.vox");
+        set_load(&mut lum, 7, "assets/iron.vox");
+        set_load(&mut lum, 8, "assets/lamp.vox");
+        set_load(&mut lum, 9, "assets/stone_brick.vox");
+        set_load(&mut lum, 10,"assets/stone_brick_cracked.vox");
+        set_load(&mut lum, 11,"assets/stone_pack.vox");
+        set_load(&mut lum, 12,"assets/bark.vox");
+        set_load(&mut lum, 13,"assets/wood.vox");
+        set_load(&mut lum, 14,"assets/planks.vox");
+        
+        Self {
+            window,
+            lum,
+            meshes,
+        }
+    }
+
+    pub fn destroy(mut self) {
+        println!("Shutting down renderer");
+        self.meshes.unload(&mut self.lum);
+        self.lum.destroy();
+    }
+
+    pub fn load_scene(&mut self, scene_file: &str) {
+        for zz in 0..self.lum.renderer.settings.world_size.z { 
+        for yy in 0..self.lum.renderer.settings.world_size.y {
+        for xx in 0..self.lum.renderer.settings.world_size.x {
+            let is_floor = zz <= 2;
+            if is_floor {
+                let block = &mut self.lum.renderer.current_world[(xx as usize, yy as usize, zz as usize)];
+                *block = 1;
+            }
+        }}}
+    }
+    
+    pub fn render(&mut self) {
+        self.lum.start_frame();
+        self.lum.draw_world();
+        self.lum.prepare_frame();
+        self.lum.end_frame();
+    }
+}
+
+impl ApplicationHandler for AppState {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        println!("Resumed")
+    }
+    
+    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+        if matches!(event, WindowEvent::CloseRequested) {
+            _event_loop.exit();
+        }
+    }
+    
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
+        // println!("Device event {:?}", event);
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        self.render();
+    }
+}
+
+fn main() {
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    let window_attributes = Window::default_attributes()
+        .with_title("Lumal");
+    #[allow(deprecated)] // cause winit is going crazy
+    let window = event_loop.create_window(window_attributes).unwrap();
+    let mut state = AppState::new(window);
+    state.load_scene("assets/scene");
+    let result = event_loop.run_app(&mut state);
+    state.destroy();
+    result.unwrap();
 }

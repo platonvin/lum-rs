@@ -1,13 +1,14 @@
-use lumal::{descriptors::{DescriptorInfo, RelativeDescriptorPos, ShortDescriptorInfo}, ring::Ring, ComputePipe, LumalRenderer, LumalSettings, RasterPipe};
-use vulkanalia::vk::{self, Extent2D, Handle};
-use vk::Sampler;
-use RelativeDescriptorPos::*;
+use std::mem;
+
+use internal_renderer::*;
+use lumal::{Renderer, LumalSettings};
+use vulkanalia::vk::{self};
 
 use crate::*;
 
 
-impl crate::LumRenderer {
-    pub fn create_all_buffers(lumal: &LumalRenderer, lum_settings: &LumSettings, lumal_settings: &LumalSettings) -> LumBuffers {
+impl InternalRenderer {
+    pub fn create_all_buffers(lumal: &Renderer, lum_settings: &Settings, lumal_settings: &LumalSettings) -> AllBuffers {
         let gpu_particles = lumal.create_buffer_rings (
             lumal_settings.fif,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -52,7 +53,7 @@ impl crate::LumRenderer {
                     (lum_settings.world_size.y as usize) * 
                     (lum_settings.world_size.z as usize) *  
             (mem::size_of::<BlockID_t>() as usize), true);
-        return LumBuffers {
+        return AllBuffers {
             staging_world: staging_world.unwrap(),
             light_uniform: light_uniform.unwrap(),
             uniform: uniform.unwrap(),
@@ -63,15 +64,15 @@ impl crate::LumRenderer {
         };
     }
 
-    pub fn destroy_all_buffers(&self) {
+    pub fn destroy_all_buffers(lumal: &Renderer, buffers: &AllBuffers) {
         println!("started destroying buffers");
-        self.lumal.destroy_buffer_ring(&self.buffers.staging_world);
-        self.lumal.destroy_buffer_ring(&self.buffers.light_uniform);
-        self.lumal.destroy_buffer_ring(&self.buffers.uniform);
-        self.lumal.destroy_buffer_ring(&self.buffers.ao_lut_uniform);
-        self.lumal.destroy_buffer_ring(&self.buffers.gpu_radiance_updates);
-        self.lumal.destroy_buffer_ring(&self.buffers.staging_radiance_updates);
-        self.lumal.destroy_buffer_ring(&self.buffers.gpu_particles);
+        lumal.destroy_buffer_ring(&buffers.staging_world);
+        lumal.destroy_buffer_ring(&buffers.light_uniform);
+        lumal.destroy_buffer_ring(&buffers.uniform);
+        lumal.destroy_buffer_ring(&buffers.ao_lut_uniform);
+        lumal.destroy_buffer_ring(&buffers.gpu_radiance_updates);
+        lumal.destroy_buffer_ring(&buffers.staging_radiance_updates);
+        lumal.destroy_buffer_ring(&buffers.gpu_particles);
         println!("destroyed buffers");
     }
 }

@@ -2,12 +2,12 @@ use std::ptr::null;
 
 use vk::{BufferMemoryBarrier, MemoryBarrier, WHOLE_SIZE};
 use vulkanalia::prelude::v1_3::*;
-use crate::{Buffer, Image, LumalRenderer};
+use crate::{Buffer, Image, Renderer};
 
 // just a wrapper for barriers that suits my needs
 // it is missing a lot but it does not matter anyways - drivers dont give a fuck about precise barriers
 
-impl LumalRenderer {
+impl Renderer {
     pub fn image_memory_barrier(
         &self,
         cmdbuf: &vk::CommandBuffer,

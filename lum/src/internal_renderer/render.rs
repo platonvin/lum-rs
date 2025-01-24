@@ -1,16 +1,21 @@
-use std::{mem::{self, transmute}, ops::Index, ptr};
+use crate::{assert_assume, consts::*, internal_renderer::*};
+use std::mem::{self, transmute};
 
+use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
-use internal_renderer::{ao_lut, fAABB, get_shift, iAABB};
-use vek::{num_traits::Float, transform, vec, Clamp, FrustumPlanes};
-use vk::{AccessFlags, DeviceV1_0, HasBuilder, Image, ImageLayout, KhrPushDescriptorExtension, PipelineBindPoint, PipelineStageFlags, ShaderStageFlags};
+// use multiversion::multiversion;
+use vek::{Clamp, FrustumPlanes};
+use vulkanalia::vk::{AccessFlags, DeviceV1_0, Handle, HasBuilder, KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags};
 
-use crate::*;
+use crate::{containers::Array3D, types::*};
+
+use super::InternalRenderer;
 
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
 
 #[derive(Debug, Clone, Copy)]
+#[pub_fields::pub_fields]
 pub struct Camera {
     camera_pos: vec3,
     camera_dir: vec3,
@@ -107,10 +112,11 @@ impl SunLight {
             near: -0.0,
             far: 2000.0,
         });
+        self.light_transform = projection * view;
     }
 }
 
-impl crate::LumRenderer {
+impl InternalRenderer {
     pub fn update_camera(&mut self) {
         self.camera.update_camera();
     }
@@ -262,86 +268,128 @@ impl crate::LumRenderer {
                 self.buffers.staging_world.current().allocation,
                 0,
                 size_to_copy as u64,
-            )
+            ).unwrap();
         };
     }
 
     pub fn update_radiance(&mut self) {
-        let mut command_buffer = self.cmdbufs.compute_command_buffers.current();
+        Self::_update_radiance(self);
+    }
+    
+    // #[multiversion(targets("x86_64+avx2"))]
+    fn _update_radiance(_self: &mut InternalRenderer) {
+        let command_buffer = _self.cmdbufs.compute_command_buffers.current();
 
         // set is like a hash_set, but optimized (no hashing, no collisions)
         // its literally 3d array of bools, each corresponding to "if set"
+        flame::start("set_init");
         let mut set = Array3D::<bool>::new_filled(
-            self.settings.world_size.x as usize,
-            self.settings.world_size.y as usize,
-            self.settings.world_size.z as usize,
+            _self.settings.world_size.x as usize,
+            _self.settings.world_size.y as usize,
+            _self.settings.world_size.z as usize,
             false, // each value in set corresponds to "if the block is already updated"
         );
 
-        self.radiance_updates.clear();
+        _self.radiance_updates.clear();
+        flame::end("set_init");
         
+        flame::start("push radiance updates");
+
+        // manual SIMD
+        let world_size : uvec4  = _self.settings.world_size.into(); 
+
         // push block into queue of update requests if the block has neighbours
-        for zz in 0_i32..self.settings.world_size.z as i32 {
-        for yy in 0_i32..self.settings.world_size.y as i32 {
-        for xx in 0_i32..self.settings.world_size.x as i32 {
+        // dbg!(self.settings.world_size);
+
+        assert_assume!(_self.settings.world_size.x > 0);
+        assert_assume!(_self.settings.world_size.x < i16::MAX as u32);
+        assert_assume!(_self.settings.world_size.y > 0);
+        assert_assume!(_self.settings.world_size.y < i16::MAX as u32);
+        assert_assume!(_self.settings.world_size.z > 0);
+        assert_assume!(_self.settings.world_size.z < i16::MAX as u32);
+
+        let world_size = ivec4::new (
+            _self.settings.world_size.x as i32,
+            _self.settings.world_size.y as i32,
+            _self.settings.world_size.z as i32,
+            0,
+        );
+        // just moved it up to help compiler
+        let world_size_minus_1 = world_size - ivec4::new(1, 1, 1, 0);
+        
+        for zz in 0.._self.settings.world_size.z {
+        for yy in 0.._self.settings.world_size.y {
+        for xx in 0.._self.settings.world_size.x {
+            // smarter algorithms resulted in less perfomance, at least in cpp 
             let mut sum_of_neighbours = 0;
 
             for dz in -1_i32..=1 {
             for dy in -1_i32..=1 {
             for dx in -1_i32..=1 {
-                let x = xx + dx;
-                let y = yy + dy;
-                let z = zz + dz;
-                if x < 0 || x >= self.settings.world_size.x as i32 {continue;}
-                if y < 0 || y >= self.settings.world_size.y as i32 {continue;}
-                if z < 0 || z >= self.settings.world_size.z as i32 {continue;}
-                let neighbor_block = self.current_world[(x as usize, y as usize, z as usize)];
+                let mut xyz0 = ivec4::new(
+                    xx as i32 + dx, 
+                    yy as i32 + dy, 
+                    zz as i32 + dz, 
+                    0
+                );
+
+                xyz0 = ivec4::clamp(xyz0, ivec4::zero(), world_size_minus_1);
+                // x = clamp(x, 0, self.settings.world_size.x as i32 - 1);
+                // y = clamp(y, 0, self.settings.world_size.y as i32 - 1);
+                // z = clamp(z, 0, self.settings.world_size.z as i32 - 1);
+
+                // let neighbor_block = self.current_world[(x as usize, y as usize, z as usize)];
+                let neighbor_block = _self.current_world[xyz0];
                 // we could add one, but it does not matter - we only need presence of neighbours
                 sum_of_neighbours += neighbor_block; 
             }}}
 
             if sum_of_neighbours > 0 {
-                self.radiance_updates.push(i8vec4::new(
+                _self.radiance_updates.push(i8vec4::new(
                     xx as i8,
                     yy as i8, 
                     zz as i8,
-                    0
+                    0 // padding
                 ));
                 set[(xx as usize, yy as usize, zz as usize)] = true;
             }
         }}}
 
+        flame::end("push radiance updates");
+
         // special updates are ones requested via API
-        for u in &self.special_radiance_updates {
+        for u in &_self.special_radiance_updates {
             // if not already updated in loop before, add it to the queue
             if !set[(u.x as usize, u.y as usize, u.z as usize)] {
-                self.radiance_updates.push(u.clone());
+                _self.radiance_updates.push(u.clone());
             }
         }
 
         drop(set);
 
-        let count_to_copy = self.radiance_updates.len();
+        flame::start("copy radiance updates");
+        let count_to_copy = _self.radiance_updates.len();
         let size_to_copy = count_to_copy * size_of::<i8vec4>();
         unsafe {
             std::ptr::copy_nonoverlapping(
-                self.radiance_updates.as_ptr(),
-                self.buffers.staging_radiance_updates.current().mapped.unwrap() as *mut i8vec4,
+                _self.radiance_updates.as_ptr(),
+                _self.buffers.staging_radiance_updates.current().mapped.unwrap() as *mut i8vec4,
                 count_to_copy, // converts to size automatically
             )
         };
+        flame::end("copy radiance updates");
 
-        self.lumal.buffer_memory_barrier(
+        _self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.staging_radiance_updates.current(),
+            &_self.buffers.staging_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
         );
-        self.lumal.buffer_memory_barrier(
+        _self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.gpu_radiance_updates.current(),
+            &_self.buffers.gpu_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -354,18 +402,22 @@ impl crate::LumRenderer {
             dst_offset: 0,
         };
 
-        unsafe {
-            self.lumal.device.cmd_copy_buffer(
-                *command_buffer,
-                self.buffers.staging_radiance_updates.current().buffer,
-                self.buffers.gpu_radiance_updates.current().buffer,
-                &[copy],
-            );
-        };
+        flame::start("cmd copy");
+        if count_to_copy > 0 {
+            unsafe {
+                _self.lumal.device.cmd_copy_buffer(
+                    *command_buffer,
+                    _self.buffers.staging_radiance_updates.current().buffer,
+                    _self.buffers.gpu_radiance_updates.current().buffer,
+                    &[copy],
+                );
+            };
+        }
+        flame::end("cmd copy");
 
-        self.lumal.buffer_memory_barrier(
+        _self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.gpu_radiance_updates.current(),
+            &_self.buffers.gpu_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -373,12 +425,12 @@ impl crate::LumRenderer {
         );
 
         // binds descriptor sets and pipeline itself
-        self.lumal.bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
+        _self.lumal.bind_compute_pipe(command_buffer, &_self.pipes.radiance_pipe);
 
         let magic_number = 2;
 
         #[repr(C)]// for push constants
-        #[derive(AsU8Slice)] // allow cast to &[u8]
+        #[derive(AsU8Slice)]// allow cast to &[u8]
         struct PushConstant {
             time: i32,
             iters: i32,
@@ -396,26 +448,26 @@ impl crate::LumRenderer {
         }
 
         let push_constant = PushConstant {
-            time: self.lumal.frame as i32,
+            time: _self.lumal.frame as i32,
             iters: 0,
             size: magic_number as i32,
-            shift: self.lumal.frame as i32 % magic_number as i32,
+            shift: _self.lumal.frame as i32 % magic_number as i32,
         };
 
         unsafe {
-            self.lumal.device.cmd_push_constants(
+            _self.lumal.device.cmd_push_constants(
                 *command_buffer,
-                self.pipes.radiance_pipe.line_layout,
+                _self.pipes.radiance_pipe.line_layout,
                 ShaderStageFlags::COMPUTE,
                 0,
                 push_constant.as_u8_slice(),
             );
         }
 
-        let wg_count = self.radiance_updates.len() / magic_number as usize;
+        let wg_count = _self.radiance_updates.len() / magic_number as usize;
 
         unsafe {
-            self.lumal.device.cmd_dispatch(
+            _self.lumal.device.cmd_dispatch(
                 *command_buffer,
                 // TOOD: current implementation just marches through the whole array skipping a lot of elements
                 // Why didn't i just pack work tightly?
@@ -425,9 +477,9 @@ impl crate::LumRenderer {
             )
         };
 
-        self.lumal.image_memory_barrier(
+        _self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.current(),
+            &_self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -441,7 +493,7 @@ impl crate::LumRenderer {
     }
 
     pub fn shift_radiance(&mut self, radiance_shift: ivec3) {
-        let mut command_buffer = self.cmdbufs.compute_command_buffers.current();
+        let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         let cam_shift = radiance_shift + 0;
 
@@ -616,7 +668,7 @@ impl crate::LumRenderer {
     }
 
     pub fn exec_copies(&mut self) {
-        let mut command_buffer = self.cmdbufs.compute_command_buffers.current();
+        let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         let clear_color = vk::ClearColorValue::default();
         let clear_range = vk::ImageSubresourceRange::builder()
@@ -821,7 +873,7 @@ impl crate::LumRenderer {
     }
 
     pub fn start_map(&mut self) {
-        let mut command_buffer = self.cmdbufs.compute_command_buffers.current();
+        let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         self.lumal.bind_compute_pipe(
             &command_buffer,
@@ -1080,11 +1132,11 @@ impl crate::LumRenderer {
         );
     }
 
-    fn is_face_visible(&mut self, normal: vec3, camera_dir: vec3) -> bool {
+    fn is_face_visible(&self, normal: vec3, camera_dir: vec3) -> bool {
         return (normal.dot(camera_dir) < 0.0);
     }
 
-    fn raygen_block_face(&mut self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
+    fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         // assert (buff.indexes.data());
         assert!(block_id > 0);
@@ -1133,8 +1185,10 @@ impl crate::LumRenderer {
         };
     }
 
-    pub fn raygen_block(&mut self, block_mesh: &InternalMeshModel, block_id: BlockID_t, shift: ivec3) {
+    pub fn raygen_block(&mut self, block_id: BlockID_t, shift: ivec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
+
+        let block_mesh = &self.block_palette_meshes[block_id as usize];
         unsafe {
             self.lumal.device.cmd_bind_vertex_buffers(
                 *command_buffer,
@@ -1516,7 +1570,7 @@ impl crate::LumRenderer {
                 self.buffers.gpu_particles.current().allocation,
                 0,
                 size_to_flush as u64,
-            );
+            ).unwrap();
         }
     }
 
@@ -1563,13 +1617,10 @@ impl crate::LumRenderer {
 
     pub fn updade_grass(&mut self, wind_direction: vec2) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
-        unsafe {
-            self.lumal.device.cmd_bind_pipeline(
-                *command_buffer,
-                vk::PipelineBindPoint::COMPUTE,
-                self.pipes.update_grass_pipe.line,
-            );
-        }
+        self.lumal.bind_compute_pipe(
+            command_buffer,
+            &self.pipes.update_grass_pipe,
+        );
 
         #[repr(C)]// for push constants
         #[derive(AsU8Slice)]// allow cast to &[u8]
@@ -1616,13 +1667,10 @@ impl crate::LumRenderer {
 
     pub fn updade_water(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
-        unsafe {
-            self.lumal.device.cmd_bind_pipeline(
-                *command_buffer,
-                vk::PipelineBindPoint::COMPUTE,
-                self.pipes.update_water_pipe.line,
-            );
-        }
+        self.lumal.bind_compute_pipe(
+            command_buffer,
+            &self.pipes.update_water_pipe,
+        );
 
         #[repr(C)]// for push constants
         #[derive(AsU8Slice)]// allow cast to &[u8]
@@ -1672,10 +1720,12 @@ impl crate::LumRenderer {
         let x_flip = self.camera.camera_dir.x < 0.0;
         let y_flip = self.camera.camera_dir.y < 0.0;
 
+        let pipe = &self.pipes.raygen_foliage_pipes[grass.stored_id as usize];
+        let desc = &self.foliage_descriptions[grass.stored_id as usize];
         // it is somewhat cached
         self.lumal.bind_raster_pipe(
             &command_buffers,
-            &grass.pipe,
+            pipe,
         );
 
         #[repr(C)]// for push constants
@@ -1703,14 +1753,14 @@ impl crate::LumRenderer {
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffers,
-                grass.pipe.line_layout,
+                pipe.line_layout,
                 ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )
         }
 
-        let verts_per_blade = grass.vertices;
+        let verts_per_blade = desc.vertices;
         let blade_per_instance = 1; //for triangle strip
         unsafe {
             self.lumal.device.cmd_draw(
@@ -1780,13 +1830,13 @@ impl crate::LumRenderer {
 
     pub fn end_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        unsafe { self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass) };
+        self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass);
     }
 
     pub fn start_2nd_spass(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        let ao_lut = Self::generate_lut::<8>(
+        let ao_lut = InternalRenderer::generate_lut::<8>(
             16.0 / 1000.0,
             vec2::new(
                 self.lumal.vulkan_data.swapchain_extent.width as f32,
@@ -1811,12 +1861,11 @@ impl crate::LumRenderer {
                 *command_buffer,
                 self.buffers.ao_lut_uniform.current().buffer,
                 0,
-                unsafe { // TODO: derive?
-                    std::slice::from_raw_parts(
-                        (&ao_lut as *const AoLut) as *const u8,
-                        std::mem::size_of::<AoLut>(),
-                    )
-                }
+                // TODO: derive?
+                std::slice::from_raw_parts(
+                    (&ao_lut as *const AoLut) as *const u8,
+                    std::mem::size_of::<AoLut>(),
+                )
             );
         }
 
@@ -1872,13 +1921,11 @@ impl crate::LumRenderer {
             near,
         ];
 
-        unsafe {
-            self.lumal.cmd_begin_renderpass(
-                command_buffer,
-                &self.rpasses.shade_rpass,
-                vk::SubpassContents::INLINE,
-            );
-        }
+        self.lumal.cmd_begin_renderpass(
+            command_buffer,
+            &self.rpasses.shade_rpass,
+            vk::SubpassContents::INLINE,
+        );
     }
 
     pub fn diffuse(&mut self) {
@@ -2092,10 +2139,7 @@ impl crate::LumRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         // Currently, there is no UI because it is getting abstracted away (l0l)
-        unsafe {
-            self.lumal
-                .cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
-        }
+        self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
     }
 
     pub fn end_frame(&mut self) {
@@ -2104,8 +2148,11 @@ impl crate::LumRenderer {
             // Otherwise copied images are in LAYOUT_UNDEFINED because copies did not happen yet
             // so, copy before using the copy (makes sense, right?)
             *self.cmdbufs.copy_command_buffers.current(),
+            // world-space things
             *self.cmdbufs.compute_command_buffers.current(),
+            // lightmap! yes, a single one. But we can always add more!
             *self.cmdbufs.lightmap_command_buffers.current(),
+            // per-pixel
             *self.cmdbufs.graphics_command_buffers.current(),
         ]);
 
