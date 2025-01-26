@@ -1,9 +1,11 @@
 use winit::window::Window;
 
+use crate::{internal_renderer::load::VoxelForContour, types::{uvec3, InternalMeshBlock}};
+
 use super::{
     containers::Array3D,
     internal_renderer::InternalRenderer,
-    types::{i16vec3, mat4, u8vec3, vec3, vec4, BlockID_t, InternalMeshFoliage, InternalMeshFoliageDesc, InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric, MatID_t, MeshTransform},
+    types::{i16vec3, ivec3, mat4, u8vec3, vec3, vec4, BlockID_t, InternalMeshFoliage, InternalMeshFoliageDesc, InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric, MatID_t, MeshTransform},
 };
 
 pub struct ModelRenderRequest {
@@ -117,11 +119,9 @@ impl Renderer {
         self.renderer.free_mesh(model);
     }
 
-    // so you would typically load_model first and then pass it to this function
-    // but sometimes you might want entities-that-are-not-blocks with same mesh, and then you .clone()
-    // Note: InternalMeshModel is just a handle (reference). If it has 10 clones, it still has to be unloaded 1 time
-    pub fn set_palette_block_mesh(&mut self, block: BlockID_t, mesh: InternalMeshModel) {
-        self.renderer.block_palette_meshes[block as usize] = mesh;
+    // loads a block (from file) into GPU-side mesh and CPU-side voxel data
+    pub fn load_block(&mut self, block: BlockID_t, path: &str) {
+        self.renderer.load_block_from_file(block, path);
     }
 
     // volumetrics can be loaded any time (no context on GPU). But please, load them in the same way as models / foliage
@@ -200,14 +200,14 @@ impl Renderer {
             self.block_que.push(BlockRenderRequest {
                 cam_dist: 0.0,
                 block: block,
-                pos: i16vec3::new(xx as i16, yy as i16, zz as i16),
+                pos: i16vec3::new(xx as i16, yy as i16, zz as i16) * 16,
             });
         }}}
     }
 
     pub fn prepare_frame(&mut self) {
-        self.renderer.update_camera();
-        self.renderer.update_light_transform();
+        // self.renderer.update_camera();
+        // self.renderer.update_light_transform();
         let cam = self.renderer.camera.camera_transform;
         Self::calculate_and_sort_by_cam_dist(&mut self.mesh_que, cam);  
         Self::calculate_and_sort_by_cam_dist(&mut self.block_que, cam);
@@ -220,6 +220,7 @@ impl Renderer {
         // yes, started here cause no reason not to group
         self.renderer.start_frame();
         self.renderer.start_blockify();
+            //
         self.renderer.end_blockify();
         self.renderer.shift_radiance(Default::default());
         self.renderer.update_radiance();

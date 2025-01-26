@@ -139,10 +139,10 @@ impl InternalRenderer {
             lum_settings.lightmap_extent,
             &[BlendAttachment::NoBlend],
             std::mem::size_of::<i16vec4>() as u32, //push size
-            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_ReadWrite,
+            DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(), // no stencil
         );
 
@@ -167,10 +167,10 @@ impl InternalRenderer {
             lum_settings.lightmap_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<quat>() + std::mem::size_of::<vec4>()) as u32, // push size
-            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_ReadWrite,
+            DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(), // no stencil
         );
 
@@ -190,7 +190,7 @@ impl InternalRenderer {
                 },
             ],
             &[AttrFormOffs {
-                format: vk::Format::R8G8B8_UINT,
+                format: vk::Format::R8G8B8_UINT, // TODO: automatic in macro
                 offset: offset_of!(PackedVoxelCircuit, pos),
             }],
             std::mem::size_of::<PackedVoxelCircuit>() as u32,
@@ -199,10 +199,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             12, // push size
-            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_ReadWrite,
+            DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(), // no stencil
         );
 
@@ -231,10 +231,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() * 3) as u32,
-            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_ReadWrite,
+            DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(),
         );
 
@@ -281,10 +281,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0,
-            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_ReadWrite,
+            DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(),
         );
 
@@ -310,10 +310,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() + (std::mem::size_of::<i32>() * 2)) as u32,
-            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_ReadWrite,
+            DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(),
         );
 
@@ -343,10 +343,10 @@ impl InternalRenderer {
                 lumal.vulkan_data.swapchain_extent,
                 &[BlendAttachment::NoBlend],
                 (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32, // push size
-                DepthTesting::DT_ReadWrite,
+                // DepthTesting::DT_ReadWrite,
+                DepthTesting::DT_None,
                 vk::CompareOp::LESS,
                 vk::CullModeFlags::NONE,
-                Discard::NoDiscard,
                 vk::StencilOpState::default(),
             );
         }
@@ -373,10 +373,10 @@ impl InternalRenderer {
             (std::mem::size_of::<ivec4>()
                 + (std::mem::size_of::<vec4>() * 4)
                 + std::mem::size_of::<mat4>()) as u32,
+            // DepthTesting::DT_None,
             DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(),
         );
 
@@ -402,14 +402,13 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0,
+            // DepthTesting::DT_None,
             DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(),
         );
 
-        // Porting fillStencilGlossyPipe
         lumal::trace!();
 
         lumal.create_raster_pipeline(
@@ -432,10 +431,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
+            // DepthTesting::DT_None,
             DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState {
                 fail_op: vk::StencilOp::REPLACE,
                 pass_op: vk::StencilOp::REPLACE,
@@ -447,7 +446,6 @@ impl InternalRenderer {
             },
         );
 
-        // Porting fillStencilSmokePipe
         lumal::trace!();
 
         lumal.create_raster_pipeline(
@@ -474,10 +472,10 @@ impl InternalRenderer {
             ],
             (std::mem::size_of::<vec3>() + std::mem::size_of::<i32>() + std::mem::size_of::<vec4>())
                 as u32,
-            DepthTesting::DT_Read,
+            // DepthTesting::DT_Read,
+            DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState {
                 fail_op: vk::StencilOp::KEEP,
                 pass_op: vk::StencilOp::REPLACE,
@@ -489,7 +487,6 @@ impl InternalRenderer {
             },
         );
 
-        // Porting glossyPipe
         lumal::trace!();
 
         lumal.create_raster_pipeline(
@@ -512,10 +509,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::BlendMix],
             (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32,
+            // DepthTesting::DT_None,
             DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState {
                 fail_op: vk::StencilOp::KEEP,
                 pass_op: vk::StencilOp::KEEP,
@@ -527,7 +524,6 @@ impl InternalRenderer {
             },
         );
 
-        // Porting smokePipe
         lumal::trace!();
 
         lumal.create_raster_pipeline(
@@ -550,10 +546,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0, // No push constants
+            // DepthTesting::DT_None,
             DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState {
                 fail_op: vk::StencilOp::KEEP,
                 pass_op: vk::StencilOp::KEEP,
@@ -587,10 +583,10 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
+            // DepthTesting::DT_None,
             DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
-            Discard::NoDiscard,
             vk::StencilOpState::default(), // no stencil
         );
 
@@ -634,7 +630,6 @@ impl InternalRenderer {
         //     DepthTesting::DT_None,
         //     vk::CompareOp::LESS,
         //     vk::CullModeFlags::NONE,
-        //     Discard::NoDiscard,
         //     vk::StencilOpState::default(), // no stencil
         // );
 

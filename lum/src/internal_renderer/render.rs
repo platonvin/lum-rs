@@ -38,9 +38,9 @@ impl Default for Camera {
             .normalized();
 
         Self {
-            camera_pos: vec3::new(60.0, 0.0, 194.0),
+            camera_pos: vec3::new(60.0, 0.0, 194.0) - camera_dir * 100.0,
             camera_dir,
-            camera_transform: Default::default(),
+            camera_transform: mat4::identity(),
             pixels_in_voxel,
             origin_view_size,
             view_size: origin_view_size / pixels_in_voxel,
@@ -85,6 +85,10 @@ impl Camera {
         self.horizline = self
             .camera_ray_dir_plane
             .cross(vec3::new(0.0, 0.0, 1.0))
+            .normalized();
+        self.vertiline = self
+            .horizline
+            .cross(self.camera_dir)
             .normalized();
     }
 }
@@ -134,9 +138,9 @@ impl InternalRenderer {
 
         self.lumal.start_frame(&[
             *self.cmdbufs.compute_command_buffers.current(),
-            *self.cmdbufs.lightmap_command_buffers.current(),
             *self.cmdbufs.graphics_command_buffers.current(),
             *self.cmdbufs.copy_command_buffers.current(),
+            *self.cmdbufs.lightmap_command_buffers.current(),
         ]);
     }
 
@@ -148,11 +152,11 @@ impl InternalRenderer {
         self.current_world.copy_data_from(&self.origin_world);
     }
 
-    pub fn index_block_xy (&self, n: i32) -> ivec2 {
-        let x = n % BLOCK_PALETTE_SIZE_X as i32;
-        let y = n / BLOCK_PALETTE_SIZE_X as i32;
-        assert!(y <= BLOCK_PALETTE_SIZE_Y as i32);
-        ivec2::new(x, y)
+    pub fn index_block_xy (&self, n: usize) -> uvec2 {
+        let x = n % BLOCK_PALETTE_SIZE_X as usize;
+        let y = n / BLOCK_PALETTE_SIZE_X as usize;
+        assert!(y <= BLOCK_PALETTE_SIZE_Y as usize);
+        uvec2::new(x as u32, y as u32)
     }
     
     // allocates temp block in palette for every block that intersects with every mesh blockified
@@ -201,8 +205,8 @@ impl InternalRenderer {
             let current_block = self.current_world[(xx as usize, yy as usize, zz as usize)];
             if (current_block as u32) < self.static_block_palette_size { // static
                 //add to copy queue
-                let src_block = self.index_block_xy(current_block as i32);
-                let dst_block = self.index_block_xy(self.palette_counter as i32);
+                let src_block = self.index_block_xy(current_block as usize);
+                let dst_block = self.index_block_xy(self.palette_counter as usize);
 
                 // do image copy on for non-zero-src blocks. Other things still done for every allocated block
                 // because zeroing is fast
@@ -226,13 +230,13 @@ impl InternalRenderer {
                             .depth(16)
                             .build();
                         static_block_copy.src_offset = vk::Offset3D::builder()
-                            .x(src_block.x * 16)
-                            .y(src_block.y * 16)
+                            .x(src_block.x as i32 * 16)
+                            .y(src_block.y as i32 * 16)
                             .z(0)
                             .build();
                         static_block_copy.dst_offset = vk::Offset3D::builder()
-                            .x(dst_block.x * 16)
-                            .y(dst_block.y * 16)
+                            .x(dst_block.x as i32 * 16)
+                            .y(dst_block.y as i32 * 16)
                             .z(0)
                             .build();
                     // TODO: more compact representation
@@ -251,16 +255,15 @@ impl InternalRenderer {
     }
 
     pub fn end_blockify(&mut self) {
-        let dimensions_to_copy = self.current_world.dimensions();
-        let count = dimensions_to_copy.0 * 
-                    dimensions_to_copy.1 * 
-                    dimensions_to_copy.2;
-        let size_to_copy = count * size_of::<BlockID_t>();
+        let count_to_copy = self.current_world.dimensions().0 * 
+                            self.current_world.dimensions().1 * 
+                            self.current_world.dimensions().2;
+        let size_to_copy = count_to_copy * size_of::<BlockID_t>();
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.current_world.data.as_ptr(),
                 self.buffers.staging_world.current().mapped.unwrap() as *mut BlockID_t,
-                count, // converts to size automatically
+                count_to_copy, // converts to size automatically
             )
         };
         unsafe {
@@ -277,49 +280,49 @@ impl InternalRenderer {
     }
     
     // #[multiversion(targets("x86_64+avx2"))]
-    fn _update_radiance(_self: &mut InternalRenderer) {
-        let command_buffer = _self.cmdbufs.compute_command_buffers.current();
+    fn _update_radiance(self: &mut InternalRenderer) {
+        let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         // set is like a hash_set, but optimized (no hashing, no collisions)
         // its literally 3d array of bools, each corresponding to "if set"
-        flame::start("set_init");
+        // flame::start("set_init");
         let mut set = Array3D::<bool>::new_filled(
-            _self.settings.world_size.x as usize,
-            _self.settings.world_size.y as usize,
-            _self.settings.world_size.z as usize,
+            self.settings.world_size.x as usize,
+            self.settings.world_size.y as usize,
+            self.settings.world_size.z as usize,
             false, // each value in set corresponds to "if the block is already updated"
         );
 
-        _self.radiance_updates.clear();
-        flame::end("set_init");
+        self.radiance_updates.clear();
+        // flame::end("set_init");
         
-        flame::start("push radiance updates");
+        // flame::start("push radiance updates");
 
         // manual SIMD
-        let world_size : uvec4  = _self.settings.world_size.into(); 
+        let world_size : uvec4  = self.settings.world_size.into(); 
 
         // push block into queue of update requests if the block has neighbours
         // dbg!(self.settings.world_size);
 
-        assert_assume!(_self.settings.world_size.x > 0);
-        assert_assume!(_self.settings.world_size.x < i16::MAX as u32);
-        assert_assume!(_self.settings.world_size.y > 0);
-        assert_assume!(_self.settings.world_size.y < i16::MAX as u32);
-        assert_assume!(_self.settings.world_size.z > 0);
-        assert_assume!(_self.settings.world_size.z < i16::MAX as u32);
+        assert_assume!(self.settings.world_size.x > 0);
+        assert_assume!(self.settings.world_size.x < i16::MAX as u32);
+        assert_assume!(self.settings.world_size.y > 0);
+        assert_assume!(self.settings.world_size.y < i16::MAX as u32);
+        assert_assume!(self.settings.world_size.z > 0);
+        assert_assume!(self.settings.world_size.z < i16::MAX as u32);
 
         let world_size = ivec4::new (
-            _self.settings.world_size.x as i32,
-            _self.settings.world_size.y as i32,
-            _self.settings.world_size.z as i32,
+            self.settings.world_size.x as i32,
+            self.settings.world_size.y as i32,
+            self.settings.world_size.z as i32,
             0,
         );
         // just moved it up to help compiler
         let world_size_minus_1 = world_size - ivec4::new(1, 1, 1, 0);
         
-        for zz in 0.._self.settings.world_size.z {
-        for yy in 0.._self.settings.world_size.y {
-        for xx in 0.._self.settings.world_size.x {
+        for zz in 0..self.settings.world_size.z {
+        for yy in 0..self.settings.world_size.y {
+        for xx in 0..self.settings.world_size.x {
             // smarter algorithms resulted in less perfomance, at least in cpp 
             let mut sum_of_neighbours = 0;
 
@@ -339,13 +342,13 @@ impl InternalRenderer {
                 // z = clamp(z, 0, self.settings.world_size.z as i32 - 1);
 
                 // let neighbor_block = self.current_world[(x as usize, y as usize, z as usize)];
-                let neighbor_block = _self.current_world[xyz0];
+                let neighbor_block = self.current_world[xyz0];
                 // we could add one, but it does not matter - we only need presence of neighbours
                 sum_of_neighbours += neighbor_block; 
             }}}
 
             if sum_of_neighbours > 0 {
-                _self.radiance_updates.push(i8vec4::new(
+                self.radiance_updates.push(i8vec4::new(
                     xx as i8,
                     yy as i8, 
                     zz as i8,
@@ -355,41 +358,41 @@ impl InternalRenderer {
             }
         }}}
 
-        flame::end("push radiance updates");
+        // flame::end("push radiance updates");
 
         // special updates are ones requested via API
-        for u in &_self.special_radiance_updates {
+        for u in &self.special_radiance_updates {
             // if not already updated in loop before, add it to the queue
             if !set[(u.x as usize, u.y as usize, u.z as usize)] {
-                _self.radiance_updates.push(u.clone());
+                self.radiance_updates.push(u.clone());
             }
         }
 
         drop(set);
 
-        flame::start("copy radiance updates");
-        let count_to_copy = _self.radiance_updates.len();
+        // flame::start("copy radiance updates");
+        let count_to_copy = self.radiance_updates.len();
         let size_to_copy = count_to_copy * size_of::<i8vec4>();
         unsafe {
             std::ptr::copy_nonoverlapping(
-                _self.radiance_updates.as_ptr(),
-                _self.buffers.staging_radiance_updates.current().mapped.unwrap() as *mut i8vec4,
+                self.radiance_updates.as_ptr(),
+                self.buffers.staging_radiance_updates.current().mapped.unwrap() as *mut i8vec4,
                 count_to_copy, // converts to size automatically
             )
         };
-        flame::end("copy radiance updates");
+        // flame::end("copy radiance updates");
 
-        _self.lumal.buffer_memory_barrier(
+        self.lumal.buffer_memory_barrier(
             command_buffer,
-            &_self.buffers.staging_radiance_updates.current(),
+            &self.buffers.staging_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
         );
-        _self.lumal.buffer_memory_barrier(
+        self.lumal.buffer_memory_barrier(
             command_buffer,
-            &_self.buffers.gpu_radiance_updates.current(),
+            &self.buffers.gpu_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -402,22 +405,22 @@ impl InternalRenderer {
             dst_offset: 0,
         };
 
-        flame::start("cmd copy");
+        // flame::start("cmd copy");
         if count_to_copy > 0 {
             unsafe {
-                _self.lumal.device.cmd_copy_buffer(
+                self.lumal.device.cmd_copy_buffer(
                     *command_buffer,
-                    _self.buffers.staging_radiance_updates.current().buffer,
-                    _self.buffers.gpu_radiance_updates.current().buffer,
+                    self.buffers.staging_radiance_updates.current().buffer,
+                    self.buffers.gpu_radiance_updates.current().buffer,
                     &[copy],
                 );
             };
         }
-        flame::end("cmd copy");
+        // flame::end("cmd copy");
 
-        _self.lumal.buffer_memory_barrier(
+        self.lumal.buffer_memory_barrier(
             command_buffer,
-            &_self.buffers.gpu_radiance_updates.current(),
+            &self.buffers.gpu_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -425,7 +428,7 @@ impl InternalRenderer {
         );
 
         // binds descriptor sets and pipeline itself
-        _self.lumal.bind_compute_pipe(command_buffer, &_self.pipes.radiance_pipe);
+        self.lumal.bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
 
         let magic_number = 2;
 
@@ -448,26 +451,26 @@ impl InternalRenderer {
         }
 
         let push_constant = PushConstant {
-            time: _self.lumal.frame as i32,
+            time: self.lumal.frame as i32,
             iters: 0,
             size: magic_number as i32,
-            shift: _self.lumal.frame as i32 % magic_number as i32,
+            shift: self.lumal.frame as i32 % magic_number as i32,
         };
 
         unsafe {
-            _self.lumal.device.cmd_push_constants(
+            self.lumal.device.cmd_push_constants(
                 *command_buffer,
-                _self.pipes.radiance_pipe.line_layout,
+                self.pipes.radiance_pipe.line_layout,
                 ShaderStageFlags::COMPUTE,
                 0,
                 push_constant.as_u8_slice(),
             );
         }
 
-        let wg_count = _self.radiance_updates.len() / magic_number as usize;
+        let wg_count = self.radiance_updates.len() / magic_number as usize;
 
         unsafe {
-            _self.lumal.device.cmd_dispatch(
+            self.lumal.device.cmd_dispatch(
                 *command_buffer,
                 // TOOD: current implementation just marches through the whole array skipping a lot of elements
                 // Why didn't i just pack work tightly?
@@ -477,9 +480,9 @@ impl InternalRenderer {
             )
         };
 
-        _self.lumal.image_memory_barrier(
+        self.lumal.image_memory_barrier(
             command_buffer,
-            &_self.independent_images.radiance_cache.current(),
+            &self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -1138,10 +1141,10 @@ impl InternalRenderer {
 
     fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        // assert (buff.indexes.data());
         assert!(block_id > 0);
         let sum = normal.x + normal.y + normal.z;
-        let sign = (sum > 0) as u8;
+        // u8 sign = (sum > 0) ? 0 : 1;
+        let sign = (sum <= 0) as u8;
         let absnorm = u8vec3::new(
             normal.x.abs() as u8,
             normal.y.abs() as u8,
@@ -1161,8 +1164,10 @@ impl InternalRenderer {
             inorm: u8vec4,
         }
         let push_constant = PushConstant {
-            inorm: u8vec4::new(pbn, 0, 0, 0),
-        };
+            inorm: u8vec4::new(pbn, 0, 0, 0), // TODO: what the hell was i smoking?
+        }; 
+        assert!(push_constant.as_u8_slice().len() == 4);
+
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
@@ -1171,7 +1176,7 @@ impl InternalRenderer {
                 8,
                 push_constant.as_u8_slice(),
             )
-        };
+        }; 
 
         unsafe { 
             self.lumal.device.cmd_draw_indexed(
@@ -1206,7 +1211,6 @@ impl InternalRenderer {
 
         #[repr(C)]// for push constants
         #[derive(AsU8Slice)]// allow cast to &[u8]
-        
         struct PushConstant {
             block: BlockID_t,
             shift: i16vec3,

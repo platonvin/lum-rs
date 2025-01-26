@@ -64,15 +64,15 @@ impl InternalRenderer {
         };
     }
 
-    pub fn destroy_all_buffers(lumal: &Renderer, buffers: &AllBuffers) {
+    pub fn destroy_all_buffers(lumal: &Renderer, buffers: AllBuffers) {
         println!("started destroying buffers");
-        lumal.destroy_buffer_ring(&buffers.staging_world);
-        lumal.destroy_buffer_ring(&buffers.light_uniform);
-        lumal.destroy_buffer_ring(&buffers.uniform);
-        lumal.destroy_buffer_ring(&buffers.ao_lut_uniform);
-        lumal.destroy_buffer_ring(&buffers.gpu_radiance_updates);
-        lumal.destroy_buffer_ring(&buffers.staging_radiance_updates);
-        lumal.destroy_buffer_ring(&buffers.gpu_particles);
+        lumal.destroy_buffer_ring(buffers.staging_world);
+        lumal.destroy_buffer_ring(buffers.light_uniform);
+        lumal.destroy_buffer_ring(buffers.uniform);
+        lumal.destroy_buffer_ring(buffers.ao_lut_uniform);
+        lumal.destroy_buffer_ring(buffers.gpu_radiance_updates);
+        lumal.destroy_buffer_ring(buffers.staging_radiance_updates);
+        lumal.destroy_buffer_ring(buffers.gpu_particles);
         println!("destroyed buffers");
     }
 }

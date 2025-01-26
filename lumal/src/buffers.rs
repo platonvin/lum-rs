@@ -1,12 +1,13 @@
 use crate::{ring::Ring, Buffer, Renderer}; // Import the LumalRenderer struct
-use std::ptr;
+use std::ptr::{self, copy_nonoverlapping};
 use anyhow::*; 
-use vulkanalia::vk::{self};
+use vulkanalia::vk::{self, BufferUsageFlags};
 
 use vulkanalia_vma::{self as vma};
 use vulkanalia_vma::Alloc;
 
 impl Renderer {
+    // creates a GPU buffer
     pub fn create_buffer(
         &self,
         usage: vk::BufferUsageFlags,
@@ -28,7 +29,7 @@ impl Renderer {
             next: ptr::null(),
             queue_family_indices: ptr::null(),
         };
-
+        
         let alloc_info = vma::AllocationOptions {
             flags: if host {
                 vma::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
@@ -98,7 +99,7 @@ impl Renderer {
         })
     }
 
-    pub fn destroy_buffer(&self, buf: &Buffer){
+    pub fn destroy_buffer(&self, buf: Buffer){
         unsafe { 
             // unmap if mapped
             match buf.mapped {
@@ -109,22 +110,49 @@ impl Renderer {
         };
     }
 
-    pub fn destroy_buffer_ring(&self, buffers: &Ring<Buffer>){
-        for buf in buffers {
+    pub fn destroy_buffer_ring(&self, buffers: Ring<Buffer>){
+        for buf in buffers.data {
             self.destroy_buffer(buf);
         }
     }
     
+    // creates a GPU buffer and copies elements into it
     pub fn create_elem_buffer<T>(
-        &self,
+        &mut self,
         elements: &[T],
         buffer_usage: vk::BufferUsageFlags,
     ) -> Buffer {
-        let size = std::mem::size_of::<T>() * elements.len();
-        return self.create_buffer(
+        let count = elements.len();
+        let size = count * std::mem::size_of::<T>();
+        let buffer = self.create_buffer(
             buffer_usage,
             size,
             false, // TODO: bool -> Enum
-        )
+        );
+
+        let staging_buffer = self.create_buffer(
+            BufferUsageFlags::TRANSFER_SRC,
+            size,
+            true
+        );
+
+        unsafe {
+            copy_nonoverlapping(
+                elements.as_ptr() as *const T,
+                staging_buffer.mapped.unwrap() as *mut T,
+                count,
+            );
+        }
+
+        self.copy_buffer_to_buffer_single_time(
+            staging_buffer.buffer,
+            buffer.buffer,
+            size as vk::DeviceSize,
+        );
+
+        self.destroy_buffer(staging_buffer);
+
+        buffer
     }
+    // create elem ring not implemented.
 }

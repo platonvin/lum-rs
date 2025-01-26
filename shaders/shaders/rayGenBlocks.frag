@@ -52,9 +52,13 @@ void main() {
     int _sign = 1 - 2 * int((normal_encoded >> 7) & 01);
     ivec3 inorm = ivec3(axis) * _sign;
     outMatNorm.yzw = uvec3((ivec3(inorm + 1) * 255) / 2);
-    // outMatNorm.x = 9;
 
     ivec3 ipos = ivec3(sample_point);
 
     outMatNorm.x = GetVoxel(int(sample_block), ipos).x;
+
+    // hc
+    // outMatNorm.x = 9;
+    // rnd!
+    // outMatNorm.x = uint(gl_FragCoord.x * 7.1 + gl_FragCoord.y * 4.3) % 256;
 }

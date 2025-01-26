@@ -3,10 +3,14 @@
 /temp.md
 *.spv
 /assets
-/temp2.md
+# mtg deck. Dont ask.
+/temp2.md 
+# perfomance tracing results
 /flame-graph.html
+# how else should i shorten this?
 /rust-anal.md
 out.txt
 analysis.json
 analysis.jsoncargo
 /tree.txt
+/temp3.md

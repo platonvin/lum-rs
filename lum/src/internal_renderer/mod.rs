@@ -41,8 +41,8 @@ const MATNORM_FORMAT:vk::Format = vk::Format::R8G8B8A8_UINT;
 const RADIANCE_FORMAT:vk::Format = vk::Format::A2B10G10R10_UNORM_PACK32;
 const SECONDARY_DEPTH_FORMAT:vk::Format = vk::Format::R16_SFLOAT;
 static mut CHOSEN_DEPTH_FORMAT:vk::Format = vk::Format::UNDEFINED;
-const BLOCK_PALETTE_SIZE_X:u32 = 64;
-const BLOCK_PALETTE_SIZE_Y:u32 = 64;
+const BLOCK_PALETTE_SIZE_X:u32 = 16;
+const BLOCK_PALETTE_SIZE_Y:u32 = 16;
 const FRAMES_IN_FLIGHT:usize = 2;
 
 #[derive(Default)]
@@ -204,7 +204,7 @@ pub struct InternalRenderer {
     // CPU side material palette in vector (not in image like on GPU)
     material_palette: Vec<Material>, // its fixed size but its fine
     block_palette_voxels: Vec<BlockVoxels>, // its fixed size but its fine
-    block_palette_meshes: Vec<InternalMeshModel>, // its fixed size but its fine
+    block_palette_meshes: Vec<InternalMeshBlock>, // its fixed size but its fine
 }
 const DEPTH_FORMAT_SPARE :vk::Format = vk::Format::D24_UNORM_S8_UINT; //TODO somehow D32 faster than vk::Format::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED :vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
@@ -306,7 +306,7 @@ impl InternalRenderer {
             special_radiance_updates: vec![],
             particles: vec![],
             material_palette: vec![Material::default(); 256],
-            block_palette_voxels: vec![[0; 16*16*16]; lum_settings.static_block_palette_size as usize],
+            block_palette_voxels: vec![[[[0; 16]; 16]; 16]; lum_settings.static_block_palette_size as usize],
             block_copies_queue: vec![],
             block_clear_queue: vec![],
             foliage_descriptions: vec![],
@@ -330,7 +330,7 @@ impl InternalRenderer {
         lumal.device.device_wait_idle().unwrap();
         Self::destroy_independent_images(&mut lumal, &mut self.independent_images);
         Self::destroy_dependent_images(&mut lumal, &mut self.dependent_images);
-        Self::destroy_all_buffers(&mut lumal, &mut self.buffers);
+        Self::destroy_all_buffers(&mut lumal, self.buffers);
 
         lumal.process_deletion_queues_untill_all_done();
 

@@ -50,7 +50,7 @@ pub struct BlockWithMesh {
 }
 
 #[repr(C)]
-#[derive(as_u8_slice_derive::AsU8Slice, Default, Clone, Copy)]
+#[derive(as_u8_slice_derive::AsU8Slice, Default, Clone, Copy, Debug)]
 pub struct Material {
     pub albedo: vec3,
     pub transparency: f32,
@@ -67,6 +67,7 @@ pub struct Particle {
     pub mat_id: MatID_t,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AoLut {
     pub world_shift: vec3,
@@ -95,6 +96,7 @@ pub struct PackedVoxelQuad {
     pub mat_id: MatID,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelCircuit {
     pub pos: u8vec3,
@@ -130,6 +132,13 @@ pub struct InternalMeshModel {
     pub triangles: FaceBuffers,
     pub voxels: lumal::Image,
     pub size: uvec3, // integer because in voxels
+}
+
+#[derive(Debug, Default, Clone)]
+// handle (reference) to a block triangles. 
+// You can clone it but still need to unload one time
+pub struct InternalMeshBlock {
+    pub triangles: FaceBuffers,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -178,7 +187,7 @@ pub struct MeshTransform {
     pub translation: vec3,
 }
 
-pub type BlockVoxels = [Voxel; 16*16*16];
+pub type BlockVoxels = [[[Voxel; 16]; 16]; 16];
 
 #[derive(Debug)]
 pub struct Block {

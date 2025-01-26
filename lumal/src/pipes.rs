@@ -159,7 +159,6 @@ impl Renderer {
         depth_test: DepthTesting,
         depth_compare_op: vk::CompareOp,
         culling: vk::CullModeFlags,
-        discard: Discard,
         stencil: vk::StencilOpState,
     ) {
         assert!(pipe.render_pass != vk::RenderPass::null());
@@ -189,57 +188,56 @@ impl Renderer {
         // Create color blend state
         let color_blend_attachments: Vec<vk::PipelineColorBlendAttachmentState> = blends
             .iter()
-            .map(|blend| match blend {
-                BlendAttachment::NoBlend => vk::PipelineColorBlendAttachmentState {
+            .map(|blend_attach| {
+                let mut vk_blend = vk::PipelineColorBlendAttachmentState {
                     blend_enable: vk::FALSE,
-                    src_color_blend_factor: vk::BlendFactor::ONE,
-                    dst_color_blend_factor: vk::BlendFactor::ZERO,
-                    color_blend_op: vk::BlendOp::ADD,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
                     color_write_mask: vk::ColorComponentFlags::all(),
-                },
-                BlendAttachment::BlendMix => vk::PipelineColorBlendAttachmentState {
-                    blend_enable: vk::TRUE,
                     src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
                     dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                    color_blend_op: vk::BlendOp::ADD,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
-                    color_write_mask: vk::ColorComponentFlags::all(),
-                },
-                BlendAttachment::BlendSub => vk::PipelineColorBlendAttachmentState {
-                    blend_enable: vk::TRUE,
-                    src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-                    dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                    color_blend_op: vk::BlendOp::SUBTRACT,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
-                    color_write_mask: vk::ColorComponentFlags::all(),
-                },
-                BlendAttachment::BlendReplaceIfGreater => vk::PipelineColorBlendAttachmentState {
-                    blend_enable: vk::TRUE,
-                    src_color_blend_factor: vk::BlendFactor::ONE,
-                    dst_color_blend_factor: vk::BlendFactor::ZERO,
-                    color_blend_op: vk::BlendOp::MAX,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
-                    color_write_mask: vk::ColorComponentFlags::all(),
-                },
-                BlendAttachment::BlendReplaceIfLess => vk::PipelineColorBlendAttachmentState {
-                    blend_enable: vk::TRUE,
-                    src_color_blend_factor: vk::BlendFactor::ONE,
-                    dst_color_blend_factor: vk::BlendFactor::ZERO,
-                    color_blend_op: vk::BlendOp::MIN,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
-                    color_write_mask: vk::ColorComponentFlags::all(),
-                },
+                    src_alpha_blend_factor: vk::BlendFactor::SRC_ALPHA,
+                    dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                    ..Default::default()
+                };
+
+                if *blend_attach == BlendAttachment::NoBlend {
+                    vk_blend.blend_enable = vk::FALSE;
+                } else {
+                    vk_blend.blend_enable = vk::TRUE;
+                }
+
+                match blend_attach {
+                    BlendAttachment::BlendMix => {
+                        vk_blend.alpha_blend_op = vk::BlendOp::ADD;
+                        vk_blend.color_blend_op = vk::BlendOp::ADD;
+                    },
+                    BlendAttachment::BlendSub => {
+                        vk_blend.src_color_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.dst_color_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.src_alpha_blend_factor = vk::BlendFactor::SRC_ALPHA;
+                        vk_blend.dst_alpha_blend_factor = vk::BlendFactor::ONE_MINUS_SRC_ALPHA;
+                        vk_blend.color_blend_op = vk::BlendOp::SUBTRACT;
+                        vk_blend.alpha_blend_op = vk::BlendOp::ADD;
+                    },
+                    BlendAttachment::BlendReplaceIfGreater => {
+                        vk_blend.src_color_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.dst_color_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.color_blend_op = vk::BlendOp::MAX;
+                        vk_blend.src_alpha_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.dst_alpha_blend_factor = vk::BlendFactor::ZERO;
+                        vk_blend.alpha_blend_op = vk::BlendOp::ADD;
+                    },
+                    BlendAttachment::BlendReplaceIfLess => {
+                        vk_blend.src_color_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.dst_color_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.color_blend_op = vk::BlendOp::MIN;
+                        vk_blend.src_alpha_blend_factor = vk::BlendFactor::ONE;
+                        vk_blend.dst_alpha_blend_factor = vk::BlendFactor::ZERO;
+                        vk_blend.alpha_blend_op = vk::BlendOp::ADD;
+                    },
+                    BlendAttachment::NoBlend => {},
+                };
+
+                vk_blend
             })
             .collect();
     
@@ -427,14 +425,8 @@ impl Renderer {
     }
     
     fn stencil_is_empty (stencil: vk::StencilOpState) -> bool {
-        return
-            (stencil.fail_op == vk::StencilOp::KEEP) &&
-            (stencil.pass_op == vk::StencilOp::KEEP) &&
-            (stencil.depth_fail_op == vk::StencilOp::KEEP) &&
-            (stencil.compare_op == vk::CompareOp::NEVER) &&
-            (stencil.compare_mask == 0) &&
-            (stencil.write_mask == 0) &&
-            (stencil.reference == 0);
+        let default = vk::StencilOpState::default();
+        return (stencil == default);
     }
     
 

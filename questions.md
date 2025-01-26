@@ -54,3 +54,19 @@ unknown:
     pointers casting kinda sucks (needed for vulkan)
     i was casting *Option<SomeType> and it was too late when i realized
     
+
+damn every library in rust is written by idiots
+    missing key features
+    rename for the sake of rename
+    changes api every 1/30 version
+    im not spending 1 day resolving linking
+    im spending 1 day finding working crate
+
+vulkanalia:
+    names are like vulkan, but
+        10% chance removed prefix
+        50% chance namespace is useless (and harmful!)
+            vk::someflag::value is not better than VK_SOMEFLAG_VALUE if you cant use vk::someflag
+                why renaming then?
+        50% chance to use builders
+        80% chance to use slices (and 20% chance to use pointers. Im not even angry anymore, im done)

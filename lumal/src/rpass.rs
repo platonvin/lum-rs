@@ -81,7 +81,10 @@ impl Renderer {
                 layout: vk::ImageLayout::GENERAL,
             };
 
-            img2ref.insert(images.as_ptr(), i as u32); 
+            let images_slice = images.as_slice().as_ptr(); // Assuming Ring has as_slice()
+            // let first_image_ptr = images_slice.as_ptr() as *const Image;
+            img2ref.insert(images_slice, i);
+            // img2ref.insert(images.as_ptr(), i as u32); 
             clears.push(attachment.clear);
         }
         trace!();
@@ -96,7 +99,8 @@ impl Renderer {
         for (i, spass_attach) in spass_attachs.iter().enumerate() {
             if let Some(depth) = spass_attach.a_depth {
                 assert!(!(depth).is_empty());
-                let index = img2ref[&depth.as_ptr()] as usize;
+                let index = *img2ref.get(&depth.as_slice().as_ptr()).unwrap();
+                // dbg!(index);
                 sas_refs[i].a_depth = Some(arefs[index])
             } else {
                 sas_refs[i].a_depth = None;
@@ -104,14 +108,16 @@ impl Renderer {
             for color in spass_attach.a_color {
                 if let Some(color_ring) = color {
                     assert!(!(color_ring).is_empty());
-                    let index = img2ref[&color_ring.as_ptr()] as usize;
+                    let index = *img2ref.get(&color_ring.as_slice().as_ptr()).unwrap();
+                    // dbg!(index);
                     sas_refs[i].a_color.push(arefs[index]);
                 }
             }
             for input in spass_attach.a_input {
                 if let Some(input_ring) = input {
                     assert!(!(input_ring).is_empty());
-                    let index = img2ref[&input_ring.as_ptr()] as usize;
+                    let index = *img2ref.get(&input_ring.as_slice().as_ptr()).unwrap();
+                    // dbg!(index);
                     sas_refs[i].a_input.push(arefs[index]);
                 }
             }

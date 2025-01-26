@@ -28,3 +28,16 @@ utilize copy queue
 RUST-ANALYZER:
     suggest variable with attention to type
     
+
+package profile:
+Rust -> LLVM IR
+C++ -> LLVM IR
+Souper : LLVM IR -> LLVM IR 
+Clang cross-lang LTO : LLVM IR -> asm
+PGO
+
+macro-driven pipelines:
+    compile spv if not compiled
+    auto format
+    auto attributes
+    push constants as array of structs

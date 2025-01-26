@@ -6,14 +6,8 @@
 
 [dependencies]
     lum = { path = "../lum" } # Dependency on lum crate
-    lumal = { path = "../lumal" } # Dependency on lumal crate
     shaders = { path = "../shaders" } # Dependency on shaders crate (just compiles all of them)
-    vulkanalia = { version = "0.25.0", features = [
-        "libloading",
-        "provisional",
-        "window",
-    ] }
-    vulkanalia-vma = { version = "0.2.0" }
     winit = "0.30.8"
     anyhow = "1"
+    rand = "0.8.5"
     flame = "0.2.2"

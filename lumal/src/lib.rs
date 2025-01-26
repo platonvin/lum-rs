@@ -24,7 +24,6 @@ use std::{collections::HashSet, default};
 use std::ffi::CStr;
 use std::mem::{size_of, size_of_val};
 use std::os::raw::c_void;
-use std::ptr::copy_nonoverlapping as memcpy;
 use std::process::exit;
 use vulkanalia::{bytecode::Bytecode, loader::{LibloadingLoader, LIBRARY}};
 use vulkanalia::prelude::v1_3::*;
@@ -495,6 +494,7 @@ impl Renderer {
             next: std::ptr::null(),
         };
         unsafe {
+            // grapics is also capable of compute and transfer btw
             self.device.queue_submit(self.vulkan_data.graphics_queue, &[submit_info], vk::Fence::null()).unwrap();
             // yep unoptimal but you are not supposed to use this at all
             self.device.queue_wait_idle(self.vulkan_data.graphics_queue).unwrap();
@@ -577,12 +577,12 @@ impl Renderer {
         let command_buffer = self.begin_single_time_command_buffer();
         let copy_region = vk::BufferImageCopy::builder()
             .image_extent(extent)
-            .image_subresource(vk::ImageSubresourceLayers::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .layer_count(1)
-                .mip_level(0)
-                .base_array_layer(0)
-                .build())
+            .image_subresource(vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
             .buffer_offset(0)
             .build();
         unsafe {
@@ -592,6 +592,28 @@ impl Renderer {
                 img.image,
                 vk::ImageLayout::GENERAL,
                 &[copy_region],
+            );
+        };
+        self.end_single_time_command_buffer(command_buffer);
+    }
+
+    pub fn copy_buffer_to_buffer_single_time(
+        &mut self,
+        src_buffer: vk::Buffer,
+        dst_buffer: vk::Buffer,
+        size: vk::DeviceSize,
+    ) {
+        let command_buffer = self.begin_single_time_command_buffer();
+        unsafe {
+            self.device.cmd_copy_buffer(
+                command_buffer,
+                src_buffer,
+                dst_buffer,
+                &[vk::BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size,
+                }],
             );
         };
         self.end_single_time_command_buffer(command_buffer);

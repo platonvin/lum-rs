@@ -242,4 +242,9 @@ void main(void){
 
     final_color = (2.0*incoming_light+stored_mat.emmitance + sunlight) * stored_mat.color;
     frame_color = vec4(encode_color(final_color),1);
+
+    // frame_color = vec4(vec3(load_mat() != 0),.5);
+    // frame_color = vec4(encode_color(vec3(stored_mat.color)),1);
+    // frame_color = vec4(vec3(1),1);
+    // frame_color = vec4(encode_color(vec3(1,1,1)),1);
 }

@@ -7,6 +7,7 @@ use anyhow::*;
 
 use vulkanalia::prelude::v1_3::*;
 
+#[derive(PartialEq, Eq)]
 pub enum BlendAttachment {
     NoBlend,
     BlendMix,
@@ -41,15 +42,15 @@ impl LoadStoreOp {
             LoadStoreOp::DontCare => vk::AttachmentLoadOp::DONT_CARE,
             LoadStoreOp::Clear => vk::AttachmentLoadOp::CLEAR,
             LoadStoreOp::Load => vk::AttachmentLoadOp::LOAD,
-            LoadStoreOp::Store => unreachable!(),
+            LoadStoreOp::Store => panic!(),
         }
     }
     pub(crate) fn to_vk_store(&self) -> vk::AttachmentStoreOp {
         match self {
             LoadStoreOp::DontCare => vk::AttachmentStoreOp::DONT_CARE,
             LoadStoreOp::Store => vk::AttachmentStoreOp::STORE,
-            LoadStoreOp::Clear => unreachable!(),
-            LoadStoreOp::Load => unreachable!(),
+            LoadStoreOp::Clear => panic!(),
+            LoadStoreOp::Load => panic!(),
         }
     }
 }

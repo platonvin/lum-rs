@@ -50,7 +50,19 @@ where
             x < self.x_size && y < self.y_size && z < self.z_size,
             "Index out of bounds"
         );
-        x * self.y_size * self.z_size + y * self.z_size + z
+        // optimal for
+        // for x in 0..x_size {
+        //     for y in 0..y_size {
+        //         for z in 0..z_size {
+        // indexing
+        // x * self.y_size * self.z_size + y * self.z_size + z
+
+        // optimal for
+        // for z in 0..x_size {
+        //     for y in 0..y_size {
+        //         for x in 0..z_size {
+        // indexing
+        x + y * self.x_size + z * self.x_size * self.y_size
     }
 
     /// Returns the dimensions of the array.

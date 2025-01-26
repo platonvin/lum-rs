@@ -12,13 +12,20 @@ cargo-features = ["profile-rustflags"]
     ]
 
 [profile.dev]
-    opt-level = 0
-    codegen-units = 16
-    lto = "off"
+    opt-level = 3
+    codegen-units = 12
+    lto = false
     panic = "unwind"
     overflow-checks = true
     incremental = true
-    debug = "line-directives-only"
+    debug = true
+
+[profile.dev.package.lum]
+    opt-level = 0
+[profile.dev.package.lumal]
+    opt-level = 0
+[profile.dev.package.examples]
+    opt-level = 0
 
 [profile.release]
     opt-level = 3           # "s" is 5 times slower lol. TODO: investigate
@@ -26,6 +33,15 @@ cargo-features = ["profile-rustflags"]
     codegen-units = 8
     lto = "thin"
     overflow-checks = false # TODO: unchecked math (UB on overflow)
+
+[profile.nsight]
+    inherits = "release"
+    opt-level = 3           # "s" is 5 times slower lol. TODO: investigate
+    panic = "unwind"
+    codegen-units = 12
+    lto = "off"
+    overflow-checks = false # TODO: unchecked math (UB on overflow)
+    debug = false
 
 # Highest possible optimizations
 [profile.native]
@@ -39,6 +55,7 @@ cargo-features = ["profile-rustflags"]
     strip = "symbols"
 
 # TODO: profile package?
+# TODO: multiverse?
 [profile.distribution]
     inherits = "release"
     opt-level = 3

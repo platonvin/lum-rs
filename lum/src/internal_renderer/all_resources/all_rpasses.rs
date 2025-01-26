@@ -109,8 +109,9 @@ impl InternalRenderer {
         );
         assert!(gbuffer_rpass.render_pass != vk::RenderPass::null());
         assert!(pipes.raygen_models_pipe.render_pass != vk::RenderPass::null());
+        
         // Third render pass
-        lumal::trace!();
+        println!("creating rpass: shade");
         let shade_rpass = lumal.create_render_pass(
             &[
                 AttachmentDescription {
@@ -238,7 +239,8 @@ impl InternalRenderer {
                 // },
             ],
         );
-        lumal::trace!();
+
+        println!("created all passes");
 
         return AllRenderPasses {
             lightmap_rpass,
