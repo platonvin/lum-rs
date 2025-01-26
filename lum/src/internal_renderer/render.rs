@@ -732,6 +732,8 @@ impl InternalRenderer {
             vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
         );
         
+        // TODO: multi-raw copy
+        assert!(self.static_block_palette_size < BLOCK_PALETTE_SIZE_X);
         let static_block_palette_copy = vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers::builder()
                 .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -746,19 +748,17 @@ impl InternalRenderer {
                 .mip_level(0)
                 .build(),
             extent: vk::Extent3D::builder()
+                // TODO: multi-raw copy
                 .width (16 * self.static_block_palette_size)
+                // .height(16 * self.static_block_palette_size)
                 .height(16)
                 .depth (16)
                 .build(),
             src_offset: vk::Offset3D::builder()
-                .x(0)
-                .y(0)
-                .z(0)
+                .x(0).y(0).z(0)
                 .build(),
             dst_offset: vk::Offset3D::builder()
-                .x(0)
-                .y(0)
-                .z(0)
+                .x(0).y(0).z(0)
                 .build(),
         };
 
@@ -1144,7 +1144,11 @@ impl InternalRenderer {
         assert!(block_id > 0);
         let sum = normal.x + normal.y + normal.z;
         // u8 sign = (sum > 0) ? 0 : 1;
-        let sign = (sum <= 0) as u8;
+        let neg_sign = match (sum > 0) {
+            true => 0,
+            false => 1,
+        };
+
         let absnorm = u8vec3::new(
             normal.x.abs() as u8,
             normal.y.abs() as u8,
@@ -1152,15 +1156,17 @@ impl InternalRenderer {
         );
         assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
         let pbn = {
-            sign << 7 |
-            absnorm.x << 0 |
-            absnorm.y << 1 |
-            absnorm.z << 2
+            (neg_sign << 7) |
+            (absnorm.x << 0) |
+            (absnorm.y << 1) |
+            (absnorm.z << 2)
         };
         //signBit_4EmptyBits_xBit_yBit_zBit
         #[repr(C)]// for push constants
         #[derive(AsU8Slice)]// allow cast to &[u8]
         struct PushConstant {
+            // block: BlockID_t, // passed before separately
+            // shift: i16vec3, // passed before separately
             inorm: u8vec4,
         }
         let push_constant = PushConstant {
@@ -1390,7 +1396,7 @@ impl InternalRenderer {
         // let _ :i64 = 0x0_c001_babe_face; // why did i port this?
     }
 
-    fn lightmap_block_face(&mut self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
+    fn lightmap_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
         unsafe {
             self.lumal.device.cmd_draw_indexed(
@@ -1404,8 +1410,10 @@ impl InternalRenderer {
         }
     }
 
-    pub fn lightmap_block(&mut self, block_mesh: &InternalMeshModel, block_id: BlockID_t, shift: ivec3) {
+    pub fn lightmap_block(&mut self, block_id: BlockID_t, shift: ivec3) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
+
+        let block_mesh = &self.block_palette_meshes[block_id as usize];
         unsafe {
             self.lumal.device.cmd_bind_vertex_buffers(
                 *command_buffer,

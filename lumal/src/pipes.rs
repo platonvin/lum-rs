@@ -3,7 +3,7 @@ use crate::{read_file, ring::Ring, ComputePipe, RasterPipe, RenderPass};
 use crate::*;
 use descriptors::*;
 
-use vulkanalia::vk::{self, Cast, DeviceV1_3, DynamicState};
+use vulkanalia::vk::{self, Cast, CompareOp, DeviceV1_3, DynamicState, StencilOp};
 use vulkanalia::prelude::v1_3::*;
 use std::{error, ffi::CStr};
 use bytemuck;
@@ -363,11 +363,11 @@ impl Renderer {
         };
 
         let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
-            depth_test_enable: (depth_test != DepthTesting::DT_None) as u32,
+            depth_test_enable: (depth_test == DepthTesting::DT_Read || depth_test == DepthTesting::DT_ReadWrite) as u32,
             depth_write_enable: (depth_test == DepthTesting::DT_Write || depth_test == DepthTesting::DT_ReadWrite) as u32, 
             depth_compare_op: depth_compare_op,
             depth_bounds_test_enable: vk::FALSE,
-            stencil_test_enable: Self::stencil_is_empty(stencil) as u32,
+            stencil_test_enable: ! Self::stencil_is_empty(stencil) as u32,
             front: stencil,
             back: stencil,
             max_depth_bounds: 1.0,
@@ -425,8 +425,13 @@ impl Renderer {
     }
     
     fn stencil_is_empty (stencil: vk::StencilOpState) -> bool {
-        let default = vk::StencilOpState::default();
-        return (stencil == default);
+        (stencil.fail_op == StencilOp::KEEP) &&
+        (stencil.pass_op == StencilOp::KEEP) &&
+        (stencil.depth_fail_op == StencilOp::KEEP) &&
+        (stencil.compare_op == CompareOp::NEVER) &&
+        (stencil.compare_mask == 0) &&
+        (stencil.write_mask == 0) &&
+        (stencil.reference == 0)
     }
     
 

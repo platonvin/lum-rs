@@ -14,6 +14,7 @@ impl InternalRenderer {
         let base_sampler_info = vk::SamplerCreateInfo {
             s_type: vk::StructureType::SAMPLER_CREATE_INFO,
             next: std::ptr::null(),
+            flags: vk::SamplerCreateFlags::empty(),
             mag_filter: vk::Filter::NEAREST,
             min_filter: vk::Filter::NEAREST,
             mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -29,7 +30,7 @@ impl InternalRenderer {
             max_lod: 0.0,
             border_color: vk::BorderColor::FLOAT_OPAQUE_BLACK,
             unnormalized_coordinates: vk::FALSE,
-            ..Default::default()
+            // ..Default::default()
         };
 
         // Nearest Sampler
@@ -40,7 +41,7 @@ impl InternalRenderer {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
             ..base_sampler_info
-        };
+        }; 
         let linear_sampler = create_sampler(linear_sampler_info);
 
         // Linear Tiled Sampler
@@ -48,7 +49,9 @@ impl InternalRenderer {
             address_mode_u: vk::SamplerAddressMode::MIRRORED_REPEAT,
             address_mode_v: vk::SamplerAddressMode::MIRRORED_REPEAT,
             address_mode_w: vk::SamplerAddressMode::MIRRORED_REPEAT,
-            ..linear_sampler_info
+            mag_filter: vk::Filter::LINEAR,
+            min_filter: vk::Filter::LINEAR,
+            ..base_sampler_info
         };
         let linear_sampler_tiled = create_sampler(linear_sampler_tiled_info);
         let linear_sampler_tiled_mirrored = create_sampler(linear_sampler_tiled_info);
@@ -75,9 +78,13 @@ impl InternalRenderer {
 
         // Unnormalized Nearest Sampler
         let unnorm_nearest_info = vk::SamplerCreateInfo {
+            address_mode_u: vk::SamplerAddressMode::REPEAT,
+            address_mode_v: vk::SamplerAddressMode::REPEAT,
+            address_mode_w: vk::SamplerAddressMode::REPEAT,
+            unnormalized_coordinates: vk::FALSE,
             mag_filter: vk::Filter::NEAREST,
             min_filter: vk::Filter::NEAREST,
-            ..unnorm_linear_info
+            ..base_sampler_info
         };
         let unnorm_nearest = create_sampler(unnorm_nearest_info);
 
@@ -86,10 +93,12 @@ impl InternalRenderer {
             address_mode_u: vk::SamplerAddressMode::MIRRORED_REPEAT,
             address_mode_v: vk::SamplerAddressMode::MIRRORED_REPEAT,
             address_mode_w: vk::SamplerAddressMode::MIRRORED_REPEAT,
+            mag_filter: vk::Filter::NEAREST,
+            min_filter: vk::Filter::NEAREST,
             compare_enable: vk::TRUE,
             border_color: vk::BorderColor::FLOAT_OPAQUE_WHITE,
             compare_op: vk::CompareOp::LESS,
-            ..unnorm_nearest_info
+            ..base_sampler_info
         };
         let shadow_sampler = create_sampler(shadow_sampler_info);
 

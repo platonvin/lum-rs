@@ -233,6 +233,10 @@ impl Renderer {
         self.renderer.end_compute();
         self.renderer.start_lightmap();
         self.renderer.lightmap_start_blocks();
+            for brr in &self.block_que {
+                let ipos = super::types::ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
+                self.renderer.lightmap_block(brr.block, ipos);
+            }
         // self.renderer.lightmap_block(&mesh, 0, Default::default());
         self.renderer.lightmap_start_models();
         // self.renderer.lightmap_model(&mesh, Default::default());

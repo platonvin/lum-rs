@@ -139,8 +139,8 @@ impl InternalRenderer {
             lum_settings.lightmap_extent,
             &[BlendAttachment::NoBlend],
             std::mem::size_of::<i16vec4>() as u32, //push size
-            // DepthTesting::DT_ReadWrite,
-            DepthTesting::DT_None,
+            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
@@ -167,8 +167,8 @@ impl InternalRenderer {
             lum_settings.lightmap_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<quat>() + std::mem::size_of::<vec4>()) as u32, // push size
-            // DepthTesting::DT_ReadWrite,
-            DepthTesting::DT_None,
+            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
@@ -199,8 +199,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             12, // push size
-            // DepthTesting::DT_ReadWrite,
-            DepthTesting::DT_None,
+            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
@@ -231,8 +231,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() * 3) as u32,
-            // DepthTesting::DT_ReadWrite,
-            DepthTesting::DT_None,
+            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -281,8 +281,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0,
-            // DepthTesting::DT_ReadWrite,
-            DepthTesting::DT_None,
+            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -310,8 +310,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() + (std::mem::size_of::<i32>() * 2)) as u32,
-            // DepthTesting::DT_ReadWrite,
-            DepthTesting::DT_None,
+            DepthTesting::DT_ReadWrite,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -343,8 +343,8 @@ impl InternalRenderer {
                 lumal.vulkan_data.swapchain_extent,
                 &[BlendAttachment::NoBlend],
                 (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32, // push size
-                // DepthTesting::DT_ReadWrite,
-                DepthTesting::DT_None,
+                DepthTesting::DT_ReadWrite,
+                // DepthTesting::DT_None,
                 vk::CompareOp::LESS,
                 vk::CullModeFlags::NONE,
                 vk::StencilOpState::default(),
@@ -373,8 +373,8 @@ impl InternalRenderer {
             (std::mem::size_of::<ivec4>()
                 + (std::mem::size_of::<vec4>() * 4)
                 + std::mem::size_of::<mat4>()) as u32,
-            // DepthTesting::DT_None,
             DepthTesting::DT_None,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -402,8 +402,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0,
-            // DepthTesting::DT_None,
             DepthTesting::DT_None,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -431,8 +431,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
-            // DepthTesting::DT_None,
             DepthTesting::DT_None,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -472,8 +472,8 @@ impl InternalRenderer {
             ],
             (std::mem::size_of::<vec3>() + std::mem::size_of::<i32>() + std::mem::size_of::<vec4>())
                 as u32,
-            // DepthTesting::DT_Read,
-            DepthTesting::DT_None,
+            DepthTesting::DT_Read,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -509,8 +509,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::BlendMix],
             (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32,
-            // DepthTesting::DT_None,
             DepthTesting::DT_None,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -546,8 +546,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0, // No push constants
-            // DepthTesting::DT_None,
             DepthTesting::DT_None,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -583,8 +583,8 @@ impl InternalRenderer {
             lumal.vulkan_data.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
-            // DepthTesting::DT_None,
             DepthTesting::DT_None,
+            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil

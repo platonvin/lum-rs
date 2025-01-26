@@ -115,7 +115,7 @@ impl AppState {
                 let block = &mut self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
                 // why the hell when i cast it to 16 breaks
                 // reminder math was a mistake
-                let bid = rand::random::<u16>() as u16 % 15;
+                let mut bid = rand::random::<u16>() as u16 % 15;
                 // bid = 5;
                 *block = bid as i16;
             }

@@ -74,17 +74,18 @@ impl super::InternalRenderer {
                 staging_buffer.buffer,
                 palette,
                 vk::Extent3D {
-                    width: block_palette_prepared.dimensions().0 as u32,
+                     width: block_palette_prepared.dimensions().0 as u32,
                     height: block_palette_prepared.dimensions().1 as u32,
-                    depth: block_palette_prepared.dimensions().2 as u32,
+                     depth: block_palette_prepared.dimensions().2 as u32,
                 },
             );
         }
 
         self.lumal.destroy_buffer(staging_buffer);
     }
-
+    
     pub fn update_material_palette_to_gpu(&mut self) {
+        // we do not write it to intermediate buffer cuz its already in right layout - 6 float rows one by one 256 total
         assert!(self.material_palette.len() > 0);
         // dbg!(&self.material_palette);
         dbg!(&self.material_palette.len());
@@ -127,6 +128,8 @@ impl super::InternalRenderer {
         // dbg!(scene.materials.len());
         // dbg!(self.material_palette.len());
 
+        assert!(scene.palette.len() == scene.materials.len() && scene.materials.len() == self.material_palette.len());
+
         // fill Albedo and transparency only, cause thats how it works
         for (i, material) in self.material_palette.iter_mut().enumerate() {
             let mv_col = &scene.palette[i];
@@ -144,7 +147,12 @@ impl super::InternalRenderer {
 
         // now fill emission and roughness
         for mv_mat in scene.materials.iter() {
-            let actual_mat_idx = mv_mat.id as usize - 1;
+            // there is 256 non-zero materials, which is stupid, so i cutoff the last one
+            // dbg!(mv_mat.id);
+            let actual_mat_idx = mv_mat.id as usize;
+            if actual_mat_idx >= self.material_palette.len() {
+                break;
+            }
 
             // dbg!(actual_mat_idx);
             let material = &mut self.material_palette[actual_mat_idx];
@@ -213,6 +221,7 @@ impl super::InternalRenderer {
         assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
 
         if extrude_palette && !self.has_palette {
+            println!("Extruding palette");
             self.extract_palette_from_scene(&scene);
             self.has_palette = true;
         }

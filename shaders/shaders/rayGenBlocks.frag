@@ -22,7 +22,11 @@ ivec3 voxel_in_palette(ivec3 relative_voxel_pos, int block_id) {
     int block_x = block_id % BLOCK_PALETTE_SIZE_X;
     int block_y = block_id / BLOCK_PALETTE_SIZE_X;
 
-    return relative_voxel_pos + ivec3(16*block_x, 16*block_y, 0);
+    // ivec3 remapped_rvp = relative_voxel_pos.xyz;
+    // remapped_rvp.z = 16 - remapped_rvp.z;
+    // remapped_rvp = 16 - remapped_rvp;
+    // return remapped_rvp + ivec3(16*block_x, 16*block_y, 0);
+    return relative_voxel_pos + ivec3(16*block_x, 16*block_y, 0); 
 }
 
 ivec3 voxel_in_bit_palette(ivec3 relative_voxel_pos, int block_id) {
@@ -36,7 +40,6 @@ int GetVoxel(in int block_id, ivec3 relative_voxel_pos){
     int voxel;
     ivec3 voxel_pos = voxel_in_palette(relative_voxel_pos, block_id);
     voxel = int(texelFetch(blockPalette, (voxel_pos), 0).r);
-
     return (voxel);
 }
 
@@ -52,13 +55,15 @@ void main() {
     int _sign = 1 - 2 * int((normal_encoded >> 7) & 01);
     ivec3 inorm = ivec3(axis) * _sign;
     outMatNorm.yzw = uvec3((ivec3(inorm + 1) * 255) / 2);
+    // outMatNorm.x = 9;
 
     ivec3 ipos = ivec3(sample_point);
 
     outMatNorm.x = GetVoxel(int(sample_block), ipos).x;
 
-    // hc
-    // outMatNorm.x = 9;
-    // rnd!
-    // outMatNorm.x = uint(gl_FragCoord.x * 7.1 + gl_FragCoord.y * 4.3) % 256;
+
+    // int voxel;
+    // ivec3 voxel_pos = voxel_in_palette(ipos, int(sample_block));
+    // voxel = int(texelFetch(blockPalette, (voxel_pos), 0).r);
+    // outMatNorm = uvec4(voxel, voxel_pos % 256);
 }

@@ -41,8 +41,8 @@ const MATNORM_FORMAT:vk::Format = vk::Format::R8G8B8A8_UINT;
 const RADIANCE_FORMAT:vk::Format = vk::Format::A2B10G10R10_UNORM_PACK32;
 const SECONDARY_DEPTH_FORMAT:vk::Format = vk::Format::R16_SFLOAT;
 static mut CHOSEN_DEPTH_FORMAT:vk::Format = vk::Format::UNDEFINED;
-const BLOCK_PALETTE_SIZE_X:u32 = 16;
-const BLOCK_PALETTE_SIZE_Y:u32 = 16;
+const BLOCK_PALETTE_SIZE_X:u32 = 64;
+const BLOCK_PALETTE_SIZE_Y:u32 = 64;
 const FRAMES_IN_FLIGHT:usize = 2;
 
 #[derive(Default)]
