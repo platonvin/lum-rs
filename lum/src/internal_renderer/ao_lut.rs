@@ -2,11 +2,14 @@ use std::f32::consts::PI;
 
 use internal_renderer::InternalRenderer;
 
-use crate::*;
-use crate::types::*;
+use crate::{types::*, *};
 
 impl InternalRenderer {
-    fn get_world_shift_from_clip_shift(clip_shift: vec2, horizline_scaled: vec3, vertiline_scaled: vec3) -> vec3 {
+    fn get_world_shift_from_clip_shift(
+        clip_shift: vec2,
+        horizline_scaled: vec3,
+        vertiline_scaled: vec3,
+    ) -> vec3 {
         horizline_scaled * clip_shift.x + vertiline_scaled * clip_shift.y
     }
 
@@ -37,7 +40,11 @@ impl InternalRenderer {
 
             let screen_shift = vec2::new(angle.sin(), angle.cos()) * radius;
             let clip_shift = screen_shift * 2.0;
-            let world_shift = Self::get_world_shift_from_clip_shift(clip_shift, horizline_scaled, vertiline_scaled);
+            let world_shift = Self::get_world_shift_from_clip_shift(
+                clip_shift,
+                horizline_scaled,
+                vertiline_scaled,
+            );
 
             let weight = 1.0 - normalized_radius * normalized_radius;
             let weight_normalized = (weight / total_weight) * 0.7;
@@ -50,6 +57,6 @@ impl InternalRenderer {
             };
         });
 
-        return lut
+        return lut;
     }
 }

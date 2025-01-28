@@ -1,16 +1,21 @@
 use internal_renderer::*;
-use lumal::{Renderer, LumalSettings};
+use lumal::{LumalSettings, Renderer};
 use vulkanalia::vk::{self};
 
 use crate::*;
 
 impl InternalRenderer {
-    pub fn create_all_samplers(lumal: &Renderer, lum_settings: &Settings, lumal_settings: &LumalSettings) -> AllSamplers {
-
+    pub fn create_all_samplers(
+        lumal: &Renderer,
+        lum_settings: &Settings,
+        lumal_settings: &LumalSettings,
+    ) -> AllSamplers {
         let create_sampler = |info: vk::SamplerCreateInfo| -> vk::Sampler {
-            lumal.create_sampler(&info).expect("Failed to create sampler")
+            lumal
+                .create_sampler(&info)
+                .expect("Failed to create sampler")
         };
-        
+
         let base_sampler_info = vk::SamplerCreateInfo {
             s_type: vk::StructureType::SAMPLER_CREATE_INFO,
             next: std::ptr::null(),
@@ -41,7 +46,7 @@ impl InternalRenderer {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
             ..base_sampler_info
-        }; 
+        };
         let linear_sampler = create_sampler(linear_sampler_info);
 
         // Linear Tiled Sampler
@@ -111,9 +116,9 @@ impl InternalRenderer {
             shadow_sampler,
             unnorm_linear,
             unnorm_nearest,
-        }
-    }   
-        
+        };
+    }
+
     pub fn destroy_all_samplers(lumal: &mut Renderer, samplers: &mut AllSamplers) {
         lumal.destroy_sampler(samplers.nearest_sampler);
         lumal.destroy_sampler(samplers.linear_sampler);

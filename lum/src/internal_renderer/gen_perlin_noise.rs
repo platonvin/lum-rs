@@ -63,6 +63,7 @@ impl super::InternalRenderer {
 
         lumal.end_single_time_command_buffer(cmb);
     }
+
     pub fn gen_perlin_3d(&mut self) {
         let lumal = &mut self.lumal;
 

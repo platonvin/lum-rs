@@ -1,19 +1,14 @@
 use crate::{ring::Ring, Buffer, Renderer}; // Import the LumalRenderer struct
+use anyhow::*;
 use std::ptr::{self, copy_nonoverlapping};
-use anyhow::*; 
 use vulkanalia::vk::{self, BufferUsageFlags};
 
-use vulkanalia_vma::{self as vma};
 use vulkanalia_vma::Alloc;
+use vulkanalia_vma::{self as vma};
 
 impl Renderer {
     // creates a GPU buffer
-    pub fn create_buffer(
-        &self,
-        usage: vk::BufferUsageFlags,
-        size: usize,
-        host: bool,
-    ) -> Buffer {
+    pub fn create_buffer(&self, usage: vk::BufferUsageFlags, size: usize, host: bool) -> Buffer {
         // buffers.allocate(self.vulkan_data.settings.fif as usize);
         // buffers = Ring::new(self.vulkan_data.settings.fif as usize, Buffer::default());
 
@@ -29,7 +24,7 @@ impl Renderer {
             next: ptr::null(),
             queue_family_indices: ptr::null(),
         };
-        
+
         let alloc_info = vma::AllocationOptions {
             flags: if host {
                 vma::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
@@ -45,10 +40,13 @@ impl Renderer {
             ..Default::default()
         };
 
-        let (vk_buffer, allocation) = unsafe { self
-            .allocator.as_ref().unwrap()
-            .create_buffer(buffer_info, &alloc_info)
-        }.unwrap();
+        let (vk_buffer, allocation) = unsafe {
+            self.allocator
+                .as_ref()
+                .unwrap()
+                .create_buffer(buffer_info, &alloc_info)
+        }
+        .unwrap();
 
         // TODO: Integrated CPU memory utilization
         // TODO: what if it fails? Different set of flags?
@@ -67,7 +65,7 @@ impl Renderer {
         Buffer {
             buffer: vk_buffer,
             allocation,
-            mapped: mapped
+            mapped: mapped,
         }
     }
 
@@ -84,11 +82,7 @@ impl Renderer {
 
         // Initialize each image and push to the vector.
         for _ in 0..ring_size {
-            let buffer = self.create_buffer(
-                usage,
-                biffer_size,
-                host,
-            );
+            let buffer = self.create_buffer(usage, biffer_size, host);
             buffers.push(buffer);
         }
 
@@ -99,23 +93,30 @@ impl Renderer {
         })
     }
 
-    pub fn destroy_buffer(&self, buf: Buffer){
-        unsafe { 
+    pub fn destroy_buffer(&self, buf: Buffer) {
+        unsafe {
             // unmap if mapped
             match buf.mapped {
-                Some(_) => self.allocator.as_ref().unwrap().unmap_memory(buf.allocation),
-                None => {}, // do nothing
+                Some(_) => self
+                    .allocator
+                    .as_ref()
+                    .unwrap()
+                    .unmap_memory(buf.allocation),
+                None => {} // do nothing
             }
-            self.allocator.as_ref().unwrap().destroy_buffer(buf.buffer, buf.allocation); 
+            self.allocator
+                .as_ref()
+                .unwrap()
+                .destroy_buffer(buf.buffer, buf.allocation);
         };
     }
 
-    pub fn destroy_buffer_ring(&self, buffers: Ring<Buffer>){
+    pub fn destroy_buffer_ring(&self, buffers: Ring<Buffer>) {
         for buf in buffers.data {
             self.destroy_buffer(buf);
         }
     }
-    
+
     // creates a GPU buffer and copies elements into it
     pub fn create_elem_buffer<T>(
         &mut self,
@@ -130,11 +131,7 @@ impl Renderer {
             false, // TODO: bool -> Enum
         );
 
-        let staging_buffer = self.create_buffer(
-            BufferUsageFlags::TRANSFER_SRC,
-            size,
-            true
-        );
+        let staging_buffer = self.create_buffer(BufferUsageFlags::TRANSFER_SRC, size, true);
 
         unsafe {
             copy_nonoverlapping(

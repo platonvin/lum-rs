@@ -61,7 +61,11 @@ fn main() {
             continue;
         }
 
-        println!("Compiling shader: {} -> {}", path.display(), out_path.display());
+        println!(
+            "Compiling shader: {} -> {}",
+            path.display(),
+            out_path.display()
+        );
         let status = Command::new("glslc")
             .arg(&path)
             .arg("-o")

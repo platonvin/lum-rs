@@ -3,19 +3,18 @@
 #![allow(unused_mut)]
 #![allow(unused_parens)]
 #![feature(stmt_expr_attributes)]
+#![feature(custom_inner_attributes)]
 
-/*
- * This is a glue-file
- * files that start with "all_" are initializing / destroying resources (packed in structs)
- * internal_renderer is where all the gpu commands are submitted
- * renderer is a wrapper around internal_renderer that is more stable and easier to use
-*/
+// This is a glue-file
+// files that start with "all_" are initializing / destroying resources (packed in structs)
+// internal_renderer is where all the gpu commands are submitted
+// renderer is a wrapper around internal_renderer that is more stable and easier to use
 
 pub mod consts;
-pub mod types;
 pub mod containers;
 pub mod internal_renderer;
 pub mod renderer;
+pub mod types;
 
 // this is basically safier version of assert! that is checked in debug mode
 // in release mode opens into just assume!
@@ -32,5 +31,26 @@ macro_rules! assert_assume {
                 std::hint::assert_unchecked($cond);
             }
         }
+    };
+}
+
+#[macro_export]
+macro_rules! for_zyx {
+    // Handle ivec3 argument with a closure
+    ($dims:expr, $body:expr) => {
+        for zz in 0..$dims.z {
+        for yy in 0..$dims.y {
+        for xx in 0..$dims.x {
+            $body(xx, yy, zz)
+        }}}
+    };
+
+    // Handle 3 separate integers with a closure
+    ($z_dim:expr, $y_dim:expr, $x_dim:expr, $body:expr) => {
+        for zz in 0..$z_dim {
+        for yy in 0..$y_dim {
+        for xx in 0..$x_dim {
+            $body(xx, yy, zz)
+        }}}
     };
 }

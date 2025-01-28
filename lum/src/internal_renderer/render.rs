@@ -5,7 +5,10 @@ use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
 // use multiversion::multiversion;
 use vek::{Clamp, FrustumPlanes};
-use vulkanalia::vk::{AccessFlags, DeviceV1_0, Handle, HasBuilder, KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags};
+use vulkanalia::vk::{
+    AccessFlags, DeviceV1_0, Handle, HasBuilder, KhrPushDescriptorExtension, PipelineStageFlags,
+    ShaderStageFlags,
+};
 
 use crate::{containers::Array3D, types::*};
 
@@ -75,23 +78,21 @@ impl Camera {
             left: -self.view_size.x / 2.0,
             right: self.view_size.x / 2.0,
             bottom: self.view_size.y / 2.0,
-            top:   -self.view_size.y / 2.0,
+            top: -self.view_size.y / 2.0,
             near: -0.0,
             far: 2000.0,
         }); // => *(2000.0/2) for decoding
-        // dbg!(&projection);
+            // dbg!(&projection);
         self.camera_transform = projection * view;
-        self.camera_ray_dir_plane = vec3::new(self.camera_dir.x, self.camera_dir.y, 0.0).normalized();
+        self.camera_ray_dir_plane =
+            vec3::new(self.camera_dir.x, self.camera_dir.y, 0.0).normalized();
 
         self.horizline = self
             .camera_ray_dir_plane
             .cross(vec3::new(0.0, 0.0, 1.0))
             .normalized();
 
-        self.vertiline = self
-            .camera_dir
-            .cross(self.horizline)
-            .normalized();
+        self.vertiline = self.camera_dir.cross(self.horizline).normalized();
     }
 }
 
@@ -103,7 +104,7 @@ impl SunLight {
             f32::from((world_size.x * (16 as u32)) as i16),
             f32::from((world_size.y * (16 as u32)) as i16),
             0.0,
-        ) / 2.0 
+        ) / 2.0
             - (1.0 * 16.0 * self.light_dir);
 
         let view = mat4::look_at_lh(light_pos, light_pos + self.light_dir, up);
@@ -146,7 +147,7 @@ impl InternalRenderer {
         ]);
     }
 
-    pub fn start_blockify(&mut self){
+    pub fn start_blockify(&mut self) {
         self.block_copies_queue.clear();
         self.palette_counter = 0;
 
@@ -154,28 +155,28 @@ impl InternalRenderer {
         self.current_world.copy_data_from(&self.origin_world);
     }
 
-    pub fn index_block_xy (&self, n: usize) -> uvec2 {
+    pub fn index_block_xy(&self, n: usize) -> uvec2 {
         let x = n % BLOCK_PALETTE_SIZE_X as usize;
         let y = n / BLOCK_PALETTE_SIZE_X as usize;
         assert!(y <= BLOCK_PALETTE_SIZE_Y as usize);
         uvec2::new(x as u32, y as u32)
     }
-    
+
     // allocates temp block in palette for every block that intersects with every mesh blockified
     pub fn blockify_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
         let rotate = vek::Mat4::from(trans.rotation);
-        let shift = vek::Mat4::<f32>::identity().translated_3d(trans.translation);  
-        // let 
-        let border_in_voxel = get_shift(shift * rotate, mesh.size);   
+        let shift = vek::Mat4::<f32>::identity().translated_3d(trans.translation);
+        // let
+        let border_in_voxel = get_shift(shift * rotate, mesh.size);
 
         let mut border = iAABB {
             min: ivec3::new(
-                (border_in_voxel.min.x - 1.0) as i32 / 16 ,
-                (border_in_voxel.min.y - 1.0) as i32 / 16 ,
-                (border_in_voxel.min.z - 1.0) as i32 / 16 ,
+                (border_in_voxel.min.x - 1.0) as i32 / 16,
+                (border_in_voxel.min.y - 1.0) as i32 / 16,
+                (border_in_voxel.min.z - 1.0) as i32 / 16,
             ),
             max: ivec3::new(
-                (border_in_voxel.max.x + 1.0) as i32 / 16, 
+                (border_in_voxel.max.x + 1.0) as i32 / 16,
                 (border_in_voxel.max.y + 1.0) as i32 / 16,
                 (border_in_voxel.max.z + 1.0) as i32 / 16,
             ),
@@ -186,9 +187,9 @@ impl InternalRenderer {
             border.min,
             ivec3::zero(),
             ivec3::new(
-                self.settings.world_size.x as i32  - 1,
-                self.settings.world_size.y as i32  - 1,
-                self.settings.world_size.z as i32  - 1,
+                self.settings.world_size.x as i32 - 1,
+                self.settings.world_size.y as i32 - 1,
+                self.settings.world_size.z as i32 - 1,
             ),
         );
         border.max = ivec3::clamped(
@@ -202,64 +203,70 @@ impl InternalRenderer {
         );
 
         for zz in border.min.z..=border.max.z {
-        for yy in border.min.y..=border.max.y {
-        for xx in border.min.x..=border.max.x {
-            let current_block = self.current_world[(xx as usize, yy as usize, zz as usize)];
-            if (current_block as u32) < self.static_block_palette_size { // static
-                //add to copy queue
-                let src_block = self.index_block_xy(current_block as usize);
-                let dst_block = self.index_block_xy(self.palette_counter as usize);
+            for yy in border.min.y..=border.max.y {
+                for xx in border.min.x..=border.max.x {
+                    let current_block = self.current_world[(xx as usize, yy as usize, zz as usize)];
+                    if (current_block as u32) < self.static_block_palette_size {
+                        // static
+                        //add to copy queue
+                        let src_block = self.index_block_xy(current_block as usize);
+                        let dst_block = self.index_block_xy(self.palette_counter as usize);
 
-                // do image copy on for non-zero-src blocks. Other things still done for every allocated block
-                // because zeroing is fast
-                if(current_block != 0){
-                    let mut static_block_copy = vk::ImageCopy::default();
-                        static_block_copy.src_subresource = vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .mip_level(0)
-                            .build();
-                        static_block_copy.dst_subresource = vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .mip_level(0)
-                            .build();
-                        static_block_copy.extent = vk::Extent3D::builder()
-                            .width(16)
-                            .height(16)
-                            .depth(16)
-                            .build();
-                        static_block_copy.src_offset = vk::Offset3D::builder()
-                            .x(src_block.x as i32 * 16)
-                            .y(src_block.y as i32 * 16)
-                            .z(0)
-                            .build();
-                        static_block_copy.dst_offset = vk::Offset3D::builder()
-                            .x(dst_block.x as i32 * 16)
-                            .y(dst_block.y as i32 * 16)
-                            .z(0)
-                            .build();
-                    // TODO: more compact representation
-                    self.block_copies_queue.push(static_block_copy);
+                        // do image copy on for non-zero-src blocks. Other things still done for every allocated block
+                        // because zeroing is fast
+                        if (current_block != 0) {
+                            let mut static_block_copy = vk::ImageCopy::default();
+                            static_block_copy.src_subresource =
+                                vk::ImageSubresourceLayers::builder()
+                                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                                    .base_array_layer(0)
+                                    .layer_count(1)
+                                    .mip_level(0)
+                                    .build();
+                            static_block_copy.dst_subresource =
+                                vk::ImageSubresourceLayers::builder()
+                                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                                    .base_array_layer(0)
+                                    .layer_count(1)
+                                    .mip_level(0)
+                                    .build();
+                            static_block_copy.extent = vk::Extent3D::builder()
+                                .width(16)
+                                .height(16)
+                                .depth(16)
+                                .build();
+                            static_block_copy.src_offset = vk::Offset3D::builder()
+                                .x(src_block.x as i32 * 16)
+                                .y(src_block.y as i32 * 16)
+                                .z(0)
+                                .build();
+                            static_block_copy.dst_offset = vk::Offset3D::builder()
+                                .x(dst_block.x as i32 * 16)
+                                .y(dst_block.y as i32 * 16)
+                                .z(0)
+                                .build();
+                            // TODO: more compact representation
+                            self.block_copies_queue.push(static_block_copy);
+                        }
+
+                        self.current_world[(xx as usize, yy as usize, zz as usize)] =
+                            self.palette_counter as BlockID_t;
+                        self.palette_counter += 1;
+
+                        // if(current_block == 0) zero_blocks++;
+                        // else just_blocks++;
+                    } else {
+                        //already new block, just leave it
+                    }
                 }
-
-                self.current_world[(xx as usize, yy as usize, zz as usize)] = self.palette_counter as BlockID_t;
-                self.palette_counter += 1;
-
-                // if(current_block == 0) zero_blocks++;
-                // else just_blocks++;
-            } else {
-                //already new block, just leave it
             }
-        }}}
+        }
     }
 
     pub fn end_blockify(&mut self) {
-        let count_to_copy = self.current_world.dimensions().0 * 
-                            self.current_world.dimensions().1 * 
-                            self.current_world.dimensions().2;
+        let count_to_copy = self.current_world.dimensions().0
+            * self.current_world.dimensions().1
+            * self.current_world.dimensions().2;
         let size_to_copy = count_to_copy * size_of::<BlockID_t>();
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -269,11 +276,16 @@ impl InternalRenderer {
             )
         };
         unsafe {
-            self.lumal.allocator.as_ref().unwrap().flush_allocation(
-                self.buffers.staging_world.current().allocation,
-                0,
-                size_to_copy as u64,
-            ).unwrap();
+            self.lumal
+                .allocator
+                .as_ref()
+                .unwrap()
+                .flush_allocation(
+                    self.buffers.staging_world.current().allocation,
+                    0,
+                    size_to_copy as u64,
+                )
+                .unwrap();
         };
     }
 
@@ -281,7 +293,7 @@ impl InternalRenderer {
         // separation for multiverse
         Self::_update_radiance(self);
     }
-    
+
     // #[multiversion(targets("x86_64+avx2"))]
     fn _update_radiance(self: &mut InternalRenderer) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
@@ -298,11 +310,11 @@ impl InternalRenderer {
 
         self.radiance_updates.clear();
         // flame::end("set_init");
-        
+
         // flame::start("push radiance updates");
 
         // manual SIMD
-        let world_size : uvec4  = self.settings.world_size.into(); 
+        let world_size: uvec4 = self.settings.world_size.into();
 
         // push block into queue of update requests if the block has neighbours
         // dbg!(self.settings.world_size);
@@ -314,7 +326,7 @@ impl InternalRenderer {
         assert_assume!(self.settings.world_size.z > 0);
         assert_assume!(self.settings.world_size.z < i16::MAX as u32);
 
-        let world_size = ivec4::new (
+        let world_size = ivec4::new(
             self.settings.world_size.x as i32,
             self.settings.world_size.y as i32,
             self.settings.world_size.z as i32,
@@ -322,44 +334,41 @@ impl InternalRenderer {
         );
         // just moved it up to help compiler
         let world_size_minus_1 = world_size - ivec4::new(1, 1, 1, 0);
-        
+
         for zz in 0..self.settings.world_size.z {
-        for yy in 0..self.settings.world_size.y {
-        for xx in 0..self.settings.world_size.x {
-            // smarter algorithms resulted in less perfomance, at least in cpp 
-            let mut sum_of_neighbours = 0;
+            for yy in 0..self.settings.world_size.y {
+                for xx in 0..self.settings.world_size.x {
+                    // smarter algorithms resulted in less perfomance, at least in cpp
+                    let mut sum_of_neighbours = 0;
 
-            for dz in -1_i32..=1 {
-            for dy in -1_i32..=1 {
-            for dx in -1_i32..=1 {
-                let mut xyz0 = ivec4::new(
-                    xx as i32 + dx, 
-                    yy as i32 + dy, 
-                    zz as i32 + dz, 
-                    0
-                );
+                    for dz in -1_i32..=1 {
+                        for dy in -1_i32..=1 {
+                            for dx in -1_i32..=1 {
+                                let mut xyz0 =
+                                    ivec4::new(xx as i32 + dx, yy as i32 + dy, zz as i32 + dz, 0);
 
-                xyz0 = ivec4::clamp(xyz0, ivec4::zero(), world_size_minus_1);
-                // x = clamp(x, 0, self.settings.world_size.x as i32 - 1);
-                // y = clamp(y, 0, self.settings.world_size.y as i32 - 1);
-                // z = clamp(z, 0, self.settings.world_size.z as i32 - 1);
+                                xyz0 = ivec4::clamp(xyz0, ivec4::zero(), world_size_minus_1);
+                                // x = clamp(x, 0, self.settings.world_size.x as i32 - 1);
+                                // y = clamp(y, 0, self.settings.world_size.y as i32 - 1);
+                                // z = clamp(z, 0, self.settings.world_size.z as i32 - 1);
 
-                // let neighbor_block = self.current_world[(x as usize, y as usize, z as usize)];
-                let neighbor_block = self.current_world[xyz0];
-                // we could add one, but it does not matter - we only need presence of neighbours
-                sum_of_neighbours += neighbor_block; 
-            }}}
+                                // let neighbor_block = self.current_world[(x as usize, y as usize, z as usize)];
+                                let neighbor_block = self.current_world[xyz0];
+                                // we could add one, but it does not matter - we only need presence of neighbours
+                                sum_of_neighbours += neighbor_block;
+                            }
+                        }
+                    }
 
-            if sum_of_neighbours > 0 {
-                self.radiance_updates.push(i8vec4::new(
-                    xx as i8,
-                    yy as i8, 
-                    zz as i8,
-                    0 // padding
-                ));
-                set[(xx as usize, yy as usize, zz as usize)] = true;
+                    if sum_of_neighbours > 0 {
+                        self.radiance_updates.push(i8vec4::new(
+                            xx as i8, yy as i8, zz as i8, 0, // padding
+                        ));
+                        set[(xx as usize, yy as usize, zz as usize)] = true;
+                    }
+                }
             }
-        }}}
+        }
 
         // flame::end("push radiance updates");
 
@@ -379,7 +388,11 @@ impl InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.radiance_updates.as_ptr(),
-                self.buffers.staging_radiance_updates.current().mapped.unwrap() as *mut i8vec4,
+                self.buffers
+                    .staging_radiance_updates
+                    .current()
+                    .mapped
+                    .unwrap() as *mut i8vec4,
                 count_to_copy, // converts to size automatically
             )
         };
@@ -431,12 +444,13 @@ impl InternalRenderer {
         );
 
         // binds descriptor sets and pipeline itself
-        self.lumal.bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
+        self.lumal
+            .bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
 
         let magic_number = 2;
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             time: i32,
             iters: i32,
@@ -468,7 +482,7 @@ impl InternalRenderer {
                 *command_buffer,
                 // TOOD: current implementation just marches through the whole array skipping a lot of elements
                 // Why didn't i just pack work tightly?
-                wg_count as u32, 
+                wg_count as u32,
                 1,
                 1,
             )
@@ -481,12 +495,13 @@ impl InternalRenderer {
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            GENERAL, GENERAL, // Most of images are in GENERAL because:
-            // 1. Highly optimized GPU code uses images in multiple ways, which restricts to GENERAL only
-            // 2. When it does not, gained perfomance is negligible compared to the (my) work required to manage layouts
-            // 3. Most popular GPU's dont give a fuck about layouts (NVIDIA)
-            // 4. Even AMD did not gain any perfomance in my tests (at some point, i did whole thing with correct layouts and barriers and it was the same perfomance)
-            // 5. anyways, there is still reason to do it, but only when all other optimizations are done
+            GENERAL,
+            GENERAL, // Most of images are in GENERAL because:
+                     // 1. Highly optimized GPU code uses images in multiple ways, which restricts to GENERAL only
+                     // 2. When it does not, gained perfomance is negligible compared to the (my) work required to manage layouts
+                     // 3. Most popular GPU's dont give a fuck about layouts (NVIDIA)
+                     // 4. Even AMD did not gain any perfomance in my tests (at some point, i did whole thing with correct layouts and barriers and it was the same perfomance)
+                     // 5. anyways, there is still reason to do it, but only when all other optimizations are done
         );
     }
 
@@ -496,12 +511,13 @@ impl InternalRenderer {
         let cam_shift = radiance_shift + 0;
 
         if cam_shift.x.abs() >= self.settings.world_size.x as i32
-        || cam_shift.y.abs() >= self.settings.world_size.y as i32
-        || cam_shift.z.abs() >= self.settings.world_size.z as i32 {
+            || cam_shift.y.abs() >= self.settings.world_size.y as i32
+            || cam_shift.z.abs() >= self.settings.world_size.z as i32
+        {
             return; // then its pointless (zero-volume intersection). We can set it to zero os some pre-computed value in future, tho
         }
 
-        let process_axis = |shift : i32, world_size : i32| -> ivec2 {
+        let process_axis = |shift: i32, world_size: i32| -> ivec2 {
             let self_src_offset;
             let self_dst_offset;
             let extent = shift.abs();
@@ -521,14 +537,14 @@ impl InternalRenderer {
         };
 
         let self_src_offset = ivec3::new(
-            process_axis(cam_shift.x, self.settings.world_size.x as i32).x, 
-            process_axis(cam_shift.y, self.settings.world_size.y as i32).x, 
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).x
+            process_axis(cam_shift.x, self.settings.world_size.x as i32).x,
+            process_axis(cam_shift.y, self.settings.world_size.y as i32).x,
+            process_axis(cam_shift.z, self.settings.world_size.z as i32).x,
         );
         let self_dst_offset = ivec3::new(
-            process_axis(cam_shift.x, self.settings.world_size.x as i32).y, 
-            process_axis(cam_shift.y, self.settings.world_size.y as i32).y, 
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).y
+            process_axis(cam_shift.x, self.settings.world_size.x as i32).y,
+            process_axis(cam_shift.y, self.settings.world_size.y as i32).y,
+            process_axis(cam_shift.z, self.settings.world_size.z as i32).y,
         );
 
         let intersection_size = uvec3::new(
@@ -574,7 +590,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
             command_buffer,
@@ -583,9 +600,10 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
-        
+
         // copy to temp
         unsafe {
             self.lumal.device.cmd_copy_image(
@@ -605,7 +623,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
             command_buffer,
@@ -614,25 +633,26 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         // copy back (setting up region)
-            copy_region.extent = vk::Extent3D::builder()
-                .width(intersection_size.x)
-                .height(intersection_size.y)
-                .depth(intersection_size.z)
-                .build();
-            copy_region.src_offset = vk::Offset3D::builder()
-                .x(0) // we want 0,0,0 to end up in shift
-                .y(0)
-                .z(0)
-                .build();
-            copy_region.dst_offset = vk::Offset3D::builder()
-                .x(self_dst_offset.x) // well, this is how to tell it to end up in (shift)
-                .y(self_dst_offset.y)
-                .z(self_dst_offset.z)
-                .build();
+        copy_region.extent = vk::Extent3D::builder()
+            .width(intersection_size.x)
+            .height(intersection_size.y)
+            .depth(intersection_size.z)
+            .build();
+        copy_region.src_offset = vk::Offset3D::builder()
+            .x(0) // we want 0,0,0 to end up in shift
+            .y(0)
+            .z(0)
+            .build();
+        copy_region.dst_offset = vk::Offset3D::builder()
+            .x(self_dst_offset.x) // well, this is how to tell it to end up in (shift)
+            .y(self_dst_offset.y)
+            .z(self_dst_offset.z)
+            .build();
         // actually copy back
         unsafe {
             self.lumal.device.cmd_copy_image(
@@ -652,7 +672,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
             command_buffer,
@@ -661,7 +682,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
     }
 
@@ -685,7 +707,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
             &command_buffer,
@@ -694,7 +717,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         unsafe {
@@ -704,7 +728,7 @@ impl InternalRenderer {
                 vk::ImageLayout::GENERAL,
                 &clear_color,
                 &[clear_range],
-            ) 
+            )
         };
 
         // sync
@@ -715,7 +739,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
             &command_buffer,
@@ -724,9 +749,10 @@ impl InternalRenderer {
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
-        
+
         // TODO: multi-raw copy
         assert!(self.static_block_palette_size < BLOCK_PALETTE_SIZE_X);
         let static_block_palette_copy = vk::ImageCopy {
@@ -744,24 +770,23 @@ impl InternalRenderer {
                 .build(),
             extent: vk::Extent3D::builder()
                 // TODO: multi-raw copy
-                .width (16 * self.static_block_palette_size)
+                .width(16 * self.static_block_palette_size)
                 // .height(16 * self.static_block_palette_size)
                 .height(16)
-                .depth (16)
+                .depth(16)
                 .build(),
-            src_offset: vk::Offset3D::builder()
-                .x(0).y(0).z(0)
-                .build(),
-            dst_offset: vk::Offset3D::builder()
-                .x(0).y(0).z(0)
-                .build(),
+            src_offset: vk::Offset3D::builder().x(0).y(0).z(0).build(),
+            dst_offset: vk::Offset3D::builder().x(0).y(0).z(0).build(),
         };
 
         // copy static blocks back (to zeroed). So clean version of palette now
         unsafe {
             self.lumal.device.cmd_copy_image(
                 *command_buffer,
-                self.independent_images.origin_block_palette.previous().image, // we zeroed current, but previous stayed the same, so we grap static palette from there
+                self.independent_images
+                    .origin_block_palette
+                    .previous()
+                    .image, // we zeroed current, but previous stayed the same, so we grap static palette from there
                 vk::ImageLayout::GENERAL,
                 self.independent_images.origin_block_palette.current().image,
                 vk::ImageLayout::GENERAL,
@@ -777,7 +802,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
             &command_buffer,
@@ -786,21 +812,28 @@ impl InternalRenderer {
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         // Execute actual block copy for each allocated temporal block
         // TODO: maybe we should copy from current to current, cause these blocks are allocated, and we just copy (clone)
         // the static blocks to allocated ones. So they never intersect. Maybe its faster
-        if !self.block_copies_queue.is_empty() { // idk if copying 0 is allowed
-            unsafe { self.lumal.device.cmd_copy_image(
-                *command_buffer,
-                self.independent_images.origin_block_palette.previous().image,
-                vk::ImageLayout::GENERAL,
-                self.independent_images.origin_block_palette.current().image,
-                vk::ImageLayout::GENERAL,
-                self.block_copies_queue.as_slice(),
-            ) };
+        if !self.block_copies_queue.is_empty() {
+            // idk if copying 0 is allowed
+            unsafe {
+                self.lumal.device.cmd_copy_image(
+                    *command_buffer,
+                    self.independent_images
+                        .origin_block_palette
+                        .previous()
+                        .image,
+                    vk::ImageLayout::GENERAL,
+                    self.independent_images.origin_block_palette.current().image,
+                    vk::ImageLayout::GENERAL,
+                    self.block_copies_queue.as_slice(),
+                )
+            };
         }
 
         // sync
@@ -811,7 +844,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
             &command_buffer,
@@ -820,7 +854,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         // copy the entire world buffer to the world image (there is no direct way so intermediate copy (buffer) is needed)
@@ -845,7 +880,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         unsafe {
@@ -866,17 +902,16 @@ impl InternalRenderer {
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
     }
 
     pub fn start_map(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
-        self.lumal.bind_compute_pipe(
-            &command_buffer,
-            &self.pipes.map_pipe,
-        );
+        self.lumal
+            .bind_compute_pipe(&command_buffer, &self.pipes.map_pipe);
     }
 
     pub fn map_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
@@ -899,13 +934,13 @@ impl InternalRenderer {
                 self.pipes.map_pipe.line_layout,
                 1,
                 &[model_voxels_write],
-            ) 
+            )
         };
 
         let rotate = vek::Mat4::from(trans.rotation);
-        let shift = vek::Mat4::<f32>::identity().translated_3d(trans.translation);  
+        let shift = vek::Mat4::<f32>::identity().translated_3d(trans.translation);
         let transform = shift * rotate;
-        let border_in_voxel = get_shift(shift * rotate, mesh.size);   
+        let border_in_voxel = get_shift(shift * rotate, mesh.size);
 
         let mut border_in_voxel = get_shift(transform, mesh.size);
 
@@ -916,29 +951,24 @@ impl InternalRenderer {
                 border_in_voxel.min.z.floor() as i32,
             ),
             max: ivec3::new(
-                border_in_voxel.max.x.ceil() as i32, 
+                border_in_voxel.max.x.ceil() as i32,
                 border_in_voxel.max.y.ceil() as i32,
                 border_in_voxel.max.z.ceil() as i32,
             ),
         };
 
         let map_area = border.max - border.min;
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             trans: mat4,
             shift: ivec4,
         }
         let push_constant = PushConstant {
             trans: transform,
-            shift: ivec4::new(
-                border.min.x,
-                border.min.y,
-                border.min.z,
-                0,
-            ),
+            shift: ivec4::new(border.min.x, border.min.y, border.min.z, 0),
         };
-        
+
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
@@ -969,7 +999,8 @@ impl InternalRenderer {
             vk::PipelineStageFlags::FRAGMENT_SHADER,
             AccessFlags::SHADER_WRITE,
             AccessFlags::SHADER_READ,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
     }
 
@@ -980,9 +1011,9 @@ impl InternalRenderer {
 
     pub fn start_lightmap(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
-        
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct BufferPatch {
             trans: mat4,
         }
@@ -1028,38 +1059,32 @@ impl InternalRenderer {
 
     pub fn lightmap_start_blocks(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
-        
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.lightmap_blocks_pipe,
-        );
+
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.lightmap_blocks_pipe);
     }
 
     pub fn lightmap_start_models(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
-        
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.lightmap_models_pipe,
-        );
+
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.lightmap_models_pipe);
     }
 
     pub fn end_lightmap(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
-        unsafe { 
-            self.lumal.cmd_end_renderpass(
-                command_buffer,
-                &mut self.rpasses.lightmap_rpass,
-            ) 
+        unsafe {
+            self.lumal
+                .cmd_end_renderpass(command_buffer, &mut self.rpasses.lightmap_rpass)
         };
     }
 
     pub fn start_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct BufferPatch {
             trans_w2s: mat4,
             campos: vec4,
@@ -1077,13 +1102,41 @@ impl InternalRenderer {
 
         let buffer_patch = BufferPatch {
             trans_w2s: self.camera.camera_transform,
-            campos: vec4::new(self.camera.camera_pos.x, self.camera.camera_pos.y, self.camera.camera_pos.z, 0.0),
-            camdir: vec4::new(self.camera.camera_dir.x, self.camera.camera_dir.y, self.camera.camera_dir.z, 0.0),
-            horizline_scaled: vec4::new(horizline_scaled.x, horizline_scaled.y, horizline_scaled.z, 0.0),
-            vertiline_scaled: vec4::new(vertiline_scaled.x, vertiline_scaled.y, vertiline_scaled.z, 0.0),
-            global_light_dir: vec4::new(self.light.light_dir.x, self.light.light_dir.y, self.light.light_dir.z, 0.0),
+            campos: vec4::new(
+                self.camera.camera_pos.x,
+                self.camera.camera_pos.y,
+                self.camera.camera_pos.z,
+                0.0,
+            ),
+            camdir: vec4::new(
+                self.camera.camera_dir.x,
+                self.camera.camera_dir.y,
+                self.camera.camera_dir.z,
+                0.0,
+            ),
+            horizline_scaled: vec4::new(
+                horizline_scaled.x,
+                horizline_scaled.y,
+                horizline_scaled.z,
+                0.0,
+            ),
+            vertiline_scaled: vec4::new(
+                vertiline_scaled.x,
+                vertiline_scaled.y,
+                vertiline_scaled.z,
+                0.0,
+            ),
+            global_light_dir: vec4::new(
+                self.light.light_dir.x,
+                self.light.light_dir.y,
+                self.light.light_dir.z,
+                0.0,
+            ),
             lightmap_proj: self.light.light_transform,
-            size: vec2::new(self.lumal.vulkan_data.swapchain_extent.width as f32, self.lumal.vulkan_data.swapchain_extent.height as f32),
+            size: vec2::new(
+                self.lumal.vulkan_data.swapchain_extent.width as f32,
+                self.lumal.vulkan_data.swapchain_extent.height as f32,
+            ),
             timeseed: self.lumal.frame as i32,
         };
         // dbg!(self.lumal.frame);
@@ -1097,7 +1150,7 @@ impl InternalRenderer {
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
         );
-        
+
         unsafe {
             self.lumal.device.cmd_update_buffer(
                 *command_buffer,
@@ -1120,7 +1173,7 @@ impl InternalRenderer {
         self.lumal.cmd_begin_renderpass(
             command_buffer,
             // gbuffer is also somewhat referred to as raygen (cause generated gbuffer is used as source for raytrace)
-            &self.rpasses.gbuffer_rpass, 
+            &self.rpasses.gbuffer_rpass,
             vk::SubpassContents::INLINE,
         );
     }
@@ -1128,10 +1181,8 @@ impl InternalRenderer {
     pub fn raygen_start_blocks(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.raygen_blocks_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.raygen_blocks_pipe);
     }
 
     fn is_face_visible(&self, normal: vec3, camera_dir: vec3) -> bool {
@@ -1154,15 +1205,10 @@ impl InternalRenderer {
             normal.z.abs() as u8,
         );
         assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
-        let pbn = {
-            (neg_sign << 7) |
-            (absnorm.x << 0) |
-            (absnorm.y << 1) |
-            (absnorm.z << 2)
-        };
+        let pbn = { (neg_sign << 7) | (absnorm.x << 0) | (absnorm.y << 1) | (absnorm.z << 2) };
         //signBit_4EmptyBits_xBit_yBit_zBit
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             // block: BlockID_t, // passed before separately
             // shift: i16vec3, // passed before separately
@@ -1170,7 +1216,7 @@ impl InternalRenderer {
         }
         let push_constant = PushConstant {
             inorm: u8vec4::new(pbn, 0, 0, 0), // TODO: what the hell was i smoking?
-        }; 
+        };
         assert!(push_constant.as_u8_slice().len() == 4);
 
         unsafe {
@@ -1181,17 +1227,12 @@ impl InternalRenderer {
                 8,
                 push_constant.as_u8_slice(),
             )
-        }; 
+        };
 
-        unsafe { 
-            self.lumal.device.cmd_draw_indexed(
-                *command_buffer,
-                buff.icount,
-                1,
-                buff.offset,
-                0,
-                0,
-            ) 
+        unsafe {
+            self.lumal
+                .device
+                .cmd_draw_indexed(*command_buffer, buff.icount, 1, buff.offset, 0, 0)
         };
     }
 
@@ -1214,8 +1255,8 @@ impl InternalRenderer {
             );
         };
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             block: BlockID_t,
             shift: i16vec3,
@@ -1239,7 +1280,7 @@ impl InternalRenderer {
 
         // loving macros. IDK if C is better, i am not nearly as good in Rust as i am in C, but still cool
         macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
-            ($__normal:expr, $__face:ident) => { 
+            ($__normal:expr, $__face:ident) => {
                 let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
                 let inorm = ivec3::new($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
                 if self.is_face_visible(fnorm, self.camera.camera_dir) {
@@ -1250,12 +1291,12 @@ impl InternalRenderer {
 
         // draw every face (separately). This allows per-face culling
         // damn, my rasterization is really optimized
-        // on 1660s it takes like 0.11 for all blocks (few thouthands) to raster 
-        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new( 1, 0, 0), Pzz);
+        // on 1660s it takes like 0.11 for all blocks (few thouthands) to raster
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
-        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0,  1, 0), zPz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
-        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0,  1), zzP); 
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
     }
 
@@ -1267,20 +1308,18 @@ impl InternalRenderer {
                 .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE)
         };
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.raygen_models_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.raygen_models_pipe);
     }
 
     fn raygen_model_face(&mut self, normal: vec3, buff: &IndexedVertices) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             inorm: vec4,
-        } 
+        }
         let push_constant = PushConstant {
             inorm: vec4::new(normal.x, normal.y, normal.z, 0.0),
         };
@@ -1296,14 +1335,9 @@ impl InternalRenderer {
         };
 
         unsafe {
-            self.lumal.device.cmd_draw_indexed(
-                *command_buffer,
-                buff.icount,
-                1,
-                buff.offset,
-                0,
-                0,
-            )
+            self.lumal
+                .device
+                .cmd_draw_indexed(*command_buffer, buff.icount, 1, buff.offset, 0, 0)
         }
     }
 
@@ -1329,7 +1363,7 @@ impl InternalRenderer {
             vec4 fnormal; //not encoded
         */
         #[repr(C)] // for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             rot: quat,
             shift: vec4,
@@ -1378,34 +1412,29 @@ impl InternalRenderer {
         }
 
         macro_rules! CHECK_AND_DRAW_MODEL_FACE {
-            ($__normal:expr, $__face:ident) => { 
+            ($__normal:expr, $__face:ident) => {
                 let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
-                if self.is_face_visible(model_trans.rotation*fnorm, self.camera.camera_dir) {
+                if self.is_face_visible(model_trans.rotation * fnorm, self.camera.camera_dir) {
                     self.raygen_model_face(fnorm, &model_mesh.triangles.$__face);
                 }
             };
         }
 
-        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new ( 1, 0, 0), Pzz);
-        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (-1, 0, 0), Nzz);
-        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0,  1, 0), zPz);
-        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0, -1, 0), zNz);
-        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0, 0,  1), zzP);
-        CHECK_AND_DRAW_MODEL_FACE! (i8vec3::new (0, 0, -1), zzN);
+        CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(1, 0, 0), Pzz);
+        CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(-1, 0, 0), Nzz);
+        CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, 1, 0), zPz);
+        CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, -1, 0), zNz);
+        CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, 0, 1), zzP);
+        CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, 0, -1), zzN);
         // let _ :i64 = 0x0_c001_babe_face; // why did i port this?
     }
 
     fn lightmap_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
         unsafe {
-            self.lumal.device.cmd_draw_indexed(
-                *command_buffer,
-                buff.icount,
-                1,
-                buff.offset,
-                0,
-                0,
-            )
+            self.lumal
+                .device
+                .cmd_draw_indexed(*command_buffer, buff.icount, 1, buff.offset, 0, 0)
         }
     }
 
@@ -1432,8 +1461,8 @@ impl InternalRenderer {
             i16vec3 shift;
             i8vec4 inorm;
         */
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             shift: i16vec4,
         }
@@ -1451,7 +1480,7 @@ impl InternalRenderer {
         };
 
         macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
-            ($__normal:expr, $__face:ident) => { 
+            ($__normal:expr, $__face:ident) => {
                 let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
                 let inorm = ivec3::new($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
                 if self.is_face_visible(fnorm, self.camera.camera_dir) {
@@ -1460,11 +1489,11 @@ impl InternalRenderer {
             };
         }
 
-        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new( 1, 0, 0), Pzz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
-        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0,  1, 0), zPz);
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
-        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0,  1), zzP); 
+        CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
     }
 
@@ -1472,14 +1501,9 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_draw_indexed(
-                *command_buffer,
-                buff.icount,
-                1,
-                buff.offset,
-                0,
-                0,
-            )
+            self.lumal
+                .device
+                .cmd_draw_indexed(*command_buffer, buff.icount, 1, buff.offset, 0, 0)
         }
     }
 
@@ -1505,7 +1529,7 @@ impl InternalRenderer {
             vec4 fnormal; //not encoded
         */
         #[repr(C)] // for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             rot: quat,
             shift: vec4,
@@ -1532,20 +1556,20 @@ impl InternalRenderer {
         }
 
         macro_rules! CHECK_AND_LIGHTMAP_MODEL_FACE {
-            ($__normal:expr, $__face:ident) => { 
+            ($__normal:expr, $__face:ident) => {
                 let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
-                if self.is_face_visible(model_trans.rotation*fnorm, self.camera.camera_dir) {
+                if self.is_face_visible(model_trans.rotation * fnorm, self.camera.camera_dir) {
                     self.lightmap_model_face(fnorm, &model_mesh.triangles.$__face);
                 }
             };
         }
 
-        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new ( 1, 0, 0), Pzz);
-        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (-1, 0, 0), Nzz);
-        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0,  1, 0), zPz);
-        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0, -1, 0), zNz);
-        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0, 0,  1), zzP);
-        CHECK_AND_LIGHTMAP_MODEL_FACE! (i8vec3::new (0, 0, -1), zzN);
+        CHECK_AND_LIGHTMAP_MODEL_FACE!(i8vec3::new(1, 0, 0), Pzz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE!(i8vec3::new(-1, 0, 0), Nzz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE!(i8vec3::new(0, 1, 0), zPz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE!(i8vec3::new(0, -1, 0), zNz);
+        CHECK_AND_LIGHTMAP_MODEL_FACE!(i8vec3::new(0, 0, 1), zzP);
+        CHECK_AND_LIGHTMAP_MODEL_FACE!(i8vec3::new(0, 0, -1), zzN);
     }
 
     pub fn update_particles(&mut self) {
@@ -1577,11 +1601,16 @@ impl InternalRenderer {
 
         let size_to_flush = capped_particle_count * size_of::<Particle>();
         unsafe {
-            self.lumal.allocator.as_ref().unwrap().flush_allocation(
-                self.buffers.gpu_particles.current().allocation,
-                0,
-                size_to_flush as u64,
-            ).unwrap();
+            self.lumal
+                .allocator
+                .as_ref()
+                .unwrap()
+                .flush_allocation(
+                    self.buffers.gpu_particles.current().allocation,
+                    0,
+                    size_to_flush as u64,
+                )
+                .unwrap();
         }
     }
 
@@ -1589,14 +1618,15 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        if !self.particles.is_empty() { // just for safity
-            self.lumal.bind_raster_pipe(
-                &command_buffer,
-                &self.pipes.raygen_particles_pipe,
-            );
+        if !self.particles.is_empty() {
+            // just for safity
+            self.lumal
+                .bind_raster_pipe(&command_buffer, &self.pipes.raygen_particles_pipe);
             unsafe {
                 self.lumal.device.cmd_bind_vertex_buffers(
                     *command_buffer,
@@ -1604,13 +1634,9 @@ impl InternalRenderer {
                     &[self.buffers.gpu_particles.current().buffer],
                     &[0],
                 );
-                self.lumal.device.cmd_draw(
-                    *command_buffer,
-                    self.particles.len() as u32,
-                    1,
-                    0,
-                    0,
-                );
+                self.lumal
+                    .device
+                    .cmd_draw(*command_buffer, self.particles.len() as u32, 1, 0, 0);
             }
         }
     }
@@ -1618,7 +1644,9 @@ impl InternalRenderer {
     pub fn raygen_start_grass(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
         // self.lumal.bind_raster_pipe(
         //     &command_buffer,
@@ -1628,13 +1656,11 @@ impl InternalRenderer {
 
     pub fn updade_grass(&mut self, wind_direction: vec2) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
-        self.lumal.bind_compute_pipe(
-            command_buffer,
-            &self.pipes.update_grass_pipe,
-        );
+        self.lumal
+            .bind_compute_pipe(command_buffer, &self.pipes.update_grass_pipe);
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             wind_direction: vec2,
             _wtf_is_this: vec2,
@@ -1663,11 +1689,13 @@ impl InternalRenderer {
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::SHADER_WRITE,
             AccessFlags::SHADER_WRITE | AccessFlags::SHADER_READ,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         unsafe {
-            self.lumal.device.cmd_dispatch( //2x8 2x8 1x1
+            self.lumal.device.cmd_dispatch(
+                //2x8 2x8 1x1
                 *command_buffer,
                 (self.settings.world_size.x * 2 + 7) / 8,
                 (self.settings.world_size.y * 2 + 7) / 8,
@@ -1678,13 +1706,11 @@ impl InternalRenderer {
 
     pub fn updade_water(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
-        self.lumal.bind_compute_pipe(
-            command_buffer,
-            &self.pipes.update_water_pipe,
-        );
+        self.lumal
+            .bind_compute_pipe(command_buffer, &self.pipes.update_water_pipe);
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             wind_direction: vec2,
             time: f32,
@@ -1711,11 +1737,13 @@ impl InternalRenderer {
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::SHADER_WRITE,
             AccessFlags::SHADER_WRITE | AccessFlags::SHADER_READ,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         unsafe {
-            self.lumal.device.cmd_dispatch( //2x8 2x8 1x1
+            self.lumal.device.cmd_dispatch(
+                //2x8 2x8 1x1
                 *command_buffer,
                 (self.settings.world_size.x * 2 + 7) / 8,
                 (self.settings.world_size.y * 2 + 7) / 8,
@@ -1724,7 +1752,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn raygen_map_grass(&mut self, grass: &InternalMeshFoliage, pos: vec3) {
+    pub fn raygen_map_grass(&mut self, grass: &InternalMeshFoliage, pos: &vec3) {
         let command_buffers = self.cmdbufs.graphics_command_buffers.current();
 
         let size = 10;
@@ -1734,13 +1762,10 @@ impl InternalRenderer {
         let pipe = &self.pipes.raygen_foliage_pipes[grass.stored_id as usize];
         let desc = &self.foliage_descriptions[grass.stored_id as usize];
         // it is somewhat cached
-        self.lumal.bind_raster_pipe(
-            &command_buffers,
-            pipe,
-        );
+        self.lumal.bind_raster_pipe(&command_buffers, pipe);
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             shift: vec4,
             _size: i32,
@@ -1749,12 +1774,7 @@ impl InternalRenderer {
             yf: i32,
         }
         let push_constant = PushConstant {
-            shift: vec4::new(
-                pos.x,
-                pos.y,
-                pos.z,
-                0.0,
-            ),
+            shift: vec4::new(pos.x as f32, pos.y as f32, pos.z as f32, 0.0),
             _size: size as i32,
             _time: self.lumal.frame as i32,
             xf: x_flip as i32, // TODO: compress
@@ -1787,19 +1807,21 @@ impl InternalRenderer {
     pub fn raygen_start_water(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        unsafe { self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE) };
-        
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.raygen_water_pipe,
-        );
+        unsafe {
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE)
+        };
+
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.raygen_water_pipe);
     }
 
-    pub fn raygen_map_water(&mut self, water: &InternalMeshLiquid, pos: vec3) {
+    pub fn raygen_map_water(&mut self, water: &InternalMeshLiquid, pos: &vec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         let quality_size = 32;
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             shift: vec4,
             _size: i32,
@@ -1807,12 +1829,7 @@ impl InternalRenderer {
         }
 
         let push_constant = PushConstant {
-            shift: vec4::new(
-                pos.x,
-                pos.y,
-                pos.z,
-                0.0,
-            ),
+            shift: vec4::new(pos.x, pos.y, pos.z, 0.0),
             _size: quality_size as i32,
             _time: self.lumal.frame as i32,
         };
@@ -1841,7 +1858,8 @@ impl InternalRenderer {
 
     pub fn end_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass);
+        self.lumal
+            .cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass);
     }
 
     pub fn start_2nd_spass(&mut self) {
@@ -1876,7 +1894,7 @@ impl InternalRenderer {
                 std::slice::from_raw_parts(
                     (&ao_lut as *const AoLut) as *const u8,
                     std::mem::size_of::<AoLut>(),
-                )
+                ),
             );
         }
 
@@ -1942,13 +1960,11 @@ impl InternalRenderer {
     pub fn diffuse(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.diffuse_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.diffuse_pipe);
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             v1: vec4,
             v2: vec4,
@@ -1961,13 +1977,13 @@ impl InternalRenderer {
                 self.camera.camera_pos.y,
                 self.camera.camera_pos.z,
                 transmuted_frame, // kinda rnd source afair
-            ),  
+            ),
             v2: vec4::new(
                 self.camera.camera_dir.x,
                 self.camera.camera_dir.y,
                 self.camera.camera_dir.z,
                 0.0,
-            ), 
+            ),
             lp: self.light.light_transform,
         };
         unsafe {
@@ -1980,7 +1996,8 @@ impl InternalRenderer {
             )
         };
 
-        unsafe { // you may wonder - why no bound buffer? Answer: its fullscreen triangle
+        unsafe {
+            // you may wonder - why no bound buffer? Answer: its fullscreen triangle
             self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
         } // btw, every such call is fullscreen triangle
     }
@@ -1989,15 +2006,16 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.ao_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.ao_pipe);
 
-        unsafe { // fullscreen triangle
+        unsafe {
+            // fullscreen triangle
             self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
         }
     }
@@ -2006,15 +2024,16 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.fill_stencil_glossy_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.fill_stencil_glossy_pipe);
 
-        unsafe { // fullscreen triangle
+        unsafe {
+            // fullscreen triangle
             self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
         }
     }
@@ -2023,30 +2042,25 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.fill_stencil_smoke_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.fill_stencil_smoke_pipe);
     }
 
-    pub fn raygen_map_smoke(&mut self, smoke: &InternalMeshVolumetric, pos: vec3) {
+    pub fn raygen_map_smoke(&mut self, smoke: &InternalMeshVolumetric, pos: &vec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             center_size: vec4,
         }
         let push_constant = PushConstant {
-            center_size: vec4::new(
-                pos.x * 16.0,
-                pos.y * 16.0,
-                pos.z * 16.0,
-                32.0,
-            ),
+            center_size: vec4::new(pos.x * 16.0, pos.y * 16.0, pos.z * 16.0, 32.0),
         };
 
         unsafe {
@@ -2059,7 +2073,8 @@ impl InternalRenderer {
             )
         };
 
-        unsafe { // least optimized cube in the world. If GPU programmers used twitter, i would be getting canceled for this
+        unsafe {
+            // least optimized cube in the world. If GPU programmers used twitter, i would be getting canceled for this
             self.lumal.device.cmd_draw(*command_buffer, 36, 1, 0, 0);
         }
     }
@@ -2068,15 +2083,16 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.smoke_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.smoke_pipe);
 
-        unsafe { // fullscreen triangle
+        unsafe {
+            // fullscreen triangle
             self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
         }
     }
@@ -2085,16 +2101,16 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.glossy_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.glossy_pipe);
 
-        #[repr(C)]// for push constants
-        #[derive(AsU8Slice)]// allow cast to &[u8]
+        #[repr(C)] // for push constants
+        #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             v1: vec4,
             v2: vec4,
@@ -2105,13 +2121,13 @@ impl InternalRenderer {
                 self.camera.camera_pos.y,
                 self.camera.camera_pos.z,
                 0.0,
-            ),  
+            ),
             v2: vec4::new(
                 self.camera.camera_dir.x,
                 self.camera.camera_dir.y,
                 self.camera.camera_dir.z,
                 0.0,
-            ), 
+            ),
         };
 
         unsafe {
@@ -2124,7 +2140,8 @@ impl InternalRenderer {
             )
         };
 
-        unsafe { // fullscreen triangle
+        unsafe {
+            // fullscreen triangle
             self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
         }
     }
@@ -2133,15 +2150,16 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal
+                .device
+                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal.bind_raster_pipe(
-            &command_buffer,
-            &self.pipes.tonemap_pipe,
-        );
+        self.lumal
+            .bind_raster_pipe(&command_buffer, &self.pipes.tonemap_pipe);
 
-        unsafe { // fullscreen triangle
+        unsafe {
+            // fullscreen triangle
             self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
         }
     }
@@ -2150,7 +2168,8 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         // Currently, there is no UI because it is getting abstracted away (l0l)
-        self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
+        self.lumal
+            .cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
     }
 
     pub fn end_frame(&mut self) {
@@ -2179,7 +2198,7 @@ impl InternalRenderer {
         self.dependent_images.stencil_view_for_ds.move_next();
         self.dependent_images.far_depth.move_next(); //represents how much should smoke traversal for
         self.dependent_images.near_depth.move_next(); //represents how much should smoke traversal for
-        // self.dependent_images.mask_frame.move_next(); //where lowres renders to. Blends with highres afterwards
+                                                      // self.dependent_images.mask_frame.move_next(); //where lowres renders to. Blends with highres afterwards
         self.buffers.staging_world.move_next();
         self.independent_images.world.move_next(); //can i really use just one?
         self.independent_images.origin_block_palette.move_next();

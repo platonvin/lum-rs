@@ -1,11 +1,20 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use lum::{internal_renderer::Settings, renderer::Renderer, types::{u8vec3, BlockID_t, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric}};
-use winit::application::ApplicationHandler;
-use winit::event::{DeviceEvent, DeviceId, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::window::{Window, WindowId};
+use lum::{
+    internal_renderer::Settings,
+    renderer::Renderer,
+    types::{
+        u8vec3, vec3, BlockID_t, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel,
+        InternalMeshVolumetric, MeshTransform,
+    },
+};
+use winit::{
+    application::ApplicationHandler,
+    event::{DeviceEvent, DeviceId, WindowEvent},
+    event_loop::{ActiveEventLoop, EventLoop},
+    window::{Window, WindowId},
+};
 
 // i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityEnum -> LumMeshModel
 // #[derive(Default)]
@@ -20,6 +29,15 @@ struct AllMeshes {
     grass: InternalMeshFoliage,
     smoke: InternalMeshVolumetric,
 }
+#[derive(Default)]
+struct AllTransforms {
+    tank_body: MeshTransform,
+    tank_head: MeshTransform,
+    tank_rf_leg: MeshTransform,
+    tank_lb_leg: MeshTransform,
+    tank_lf_leg: MeshTransform,
+    tank_rb_leg: MeshTransform,
+}
 
 impl AllMeshes {
     fn new(lum: &mut Renderer, grass: InternalMeshFoliage) -> Self {
@@ -31,9 +49,9 @@ impl AllMeshes {
             tank_lb_leg: lum.load_model("assets/tank_rf_lb_leg.vox"),
             tank_lf_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
             tank_rb_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
-            water: lum.load_liquid(17, 16),
-            grass : grass,
-            smoke: lum.load_volumetric(0.5, 0.1, u8vec3::new(0, 0, 0)),
+            water: lum.load_liquid(69, 42),
+            grass: grass,
+            smoke: lum.load_volumetric(1.0, 0.5, u8vec3::new(0, 0, 0)),
         }
     }
 
@@ -56,6 +74,7 @@ struct AppState {
     window: Window,
     lum: lum::renderer::Renderer,
     meshes: AllMeshes,
+    transforms: AllTransforms,
 }
 impl AppState {
     fn new(mut window: Window) -> Self {
@@ -72,7 +91,7 @@ impl AppState {
             100,
         );
 
-        let mut lum = pre_init_lum.init(&settings, &mut window).unwrap(); 
+        let mut lum = pre_init_lum.init(&settings, &mut window).unwrap();
         let meshes = AllMeshes::new(&mut lum, grass);
 
         lum.load_block(1, "assets/dirt.vox");
@@ -85,19 +104,20 @@ impl AppState {
         lum.load_block(7, "assets/iron.vox");
         lum.load_block(8, "assets/lamp.vox");
         lum.load_block(9, "assets/stone_brick.vox");
-        lum.load_block(10,"assets/stone_brick_cracked.vox");
-        lum.load_block(11,"assets/stone_pack.vox");
-        lum.load_block(12,"assets/bark.vox");
-        lum.load_block(13,"assets/wood.vox");
-        lum.load_block(14,"assets/planks.vox");
+        lum.load_block(10, "assets/stone_brick_cracked.vox");
+        lum.load_block(11, "assets/stone_pack.vox");
+        lum.load_block(12, "assets/bark.vox");
+        lum.load_block(13, "assets/wood.vox");
+        lum.load_block(14, "assets/planks.vox");
 
         lum.renderer.update_block_palette_to_gpu();
         lum.renderer.update_material_palette_to_gpu();
-        
+
         Self {
             window,
             lum,
             meshes,
+            transforms: Default::default(),
         }
     }
 
@@ -108,27 +128,37 @@ impl AppState {
     }
 
     pub fn load_scene(&mut self, scene_file: &str) {
-        for zz in 0..self.lum.renderer.settings.world_size.z { 
-        for yy in 0..self.lum.renderer.settings.world_size.y {
-        for xx in 0..self.lum.renderer.settings.world_size.x {
-            let is_floor = zz <= 1;
-            if zz == 0 {
-                let block = &mut self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
-                // let mut bid = rand::random::<u16>() as u16 % 15;
-                *block = 1;
-            }
-            if zz == 1 {
-                let block = &mut self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
-                if rand::random::<i32>() % 12 == 0 {
-                    *block = 6;
+        for zz in 0..self.lum.renderer.settings.world_size.z {
+            for yy in 0..self.lum.renderer.settings.world_size.y {
+                for xx in 0..self.lum.renderer.settings.world_size.x {
+                    let is_floor = zz <= 1;
+                    if zz == 0 {
+                        let block = &mut self.lum.renderer.origin_world
+                            [(xx as usize, yy as usize, zz as usize)];
+                        // let mut bid = rand::random::<u16>() as u16 % 15;
+                        *block = 1;
+                    }
+                    if zz == 1 {
+                        let block = &mut self.lum.renderer.origin_world
+                            [(xx as usize, yy as usize, zz as usize)];
+                        if rand::random::<i32>() % 12 == 0 {
+                            *block = 6;
+                        }
+                    }
                 }
             }
-        }}}
+        }
     }
-    
+
     pub fn render(&mut self) {
+        self.transforms.tank_body.translation = vec3::new(13.1, 14.1, 3.1) * 16.0;
+
         self.lum.start_frame();
+
         self.lum.draw_world();
+        self.lum
+            .draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
+
         self.lum.prepare_frame();
         self.lum.end_frame();
     }
@@ -138,14 +168,24 @@ impl ApplicationHandler for AppState {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         println!("Resumed")
     }
-    
-    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+
+    fn window_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
         if matches!(event, WindowEvent::CloseRequested) {
             _event_loop.exit();
         }
     }
-    
-    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
         // println!("Device event {:?}", event);
     }
 

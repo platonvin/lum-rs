@@ -1,6 +1,13 @@
 #![feature(core_intrinsics)]
 #![allow(non_camel_case_types)]
-use std::ops::{Add, Sub, Mul, Div};
+
+//! This crate provides a wrapper around primitive integer types that implements
+/// let a = UncheckedInt::new(100u32);
+/// let b = UncheckedInt::new(50u32);
+/// let c = a + b; // Unchecked addition
+/// println!("{:?}", c.get());
+///
+use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UncheckedInt<T>(pub T);
@@ -133,7 +140,7 @@ macro_rules! impl_unchecked_arithmetic {
                 }
 
                 unsafe fn unchecked_div(self, other: Self) -> Self {
-                    // MORE UB TO THE GOD OF UB 
+                    // MORE UB TO THE GOD OF UB
                     if other == 0 {
                         std::hint::unreachable_unchecked();
                     }
@@ -190,12 +197,3 @@ mod tests {
         let _ = a / b;
     }
 }
-
-
-// fn main() {
-//     let a = UncheckedInt::new(100u32);
-//     let b = UncheckedInt::new(50u32);
-
-//     let c = a + b; // Unchecked addition
-//     println!("{:?}", c.get());
-// }

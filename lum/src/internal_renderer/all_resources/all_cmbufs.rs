@@ -1,10 +1,14 @@
 use internal_renderer::*;
-use lumal::{Renderer, LumalSettings};
+use lumal::{LumalSettings, Renderer};
 
 use crate::*;
 
 impl InternalRenderer {
-    pub fn create_all_command_buffers(lumal: &Renderer, lum_settings: &Settings, lumal_settings: &LumalSettings) -> AllCommandBuffers {
+    pub fn create_all_command_buffers(
+        lumal: &Renderer,
+        lum_settings: &Settings,
+        lumal_settings: &LumalSettings,
+    ) -> AllCommandBuffers {
         let compute_command_buffers = lumal.create_command_buffer();
         let lightmap_command_buffers = lumal.create_command_buffer();
         let graphics_command_buffers = lumal.create_command_buffer();

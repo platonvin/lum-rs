@@ -1,11 +1,11 @@
 // vector that has index that moves by one untile reaches the end and then wraps
 // primarly used for CPU-GPU resources, where GPU operates on previous frame resources, and CPU operates on current (frame resources)
 
-use std::ops::{Index, IndexMut};
-use crate::MAX_FRAMES_IN_FLIGHT; // lol
+use crate::MAX_FRAMES_IN_FLIGHT;
+use std::ops::{Index, IndexMut}; // lol
 
 #[derive(Clone, Debug, Default)]
-pub struct Ring<T : Default + Clone> {
+pub struct Ring<T: Default + Clone> {
     pub data: Vec<T>,
     pub index: usize,
 }
@@ -13,17 +13,16 @@ pub struct Ring<T : Default + Clone> {
 impl<T: std::default::Default + Clone> Ring<T> {
     /// Creates a new `Ring` with a given size and initial value for all elements.
     pub fn new(size: usize, initial_value: T) -> Self
-    where T: Clone, {
-        Self { 
+    where
+        T: Clone,
+    {
+        Self {
             data: vec![initial_value; size],
             index: 0,
         }
     }
     pub fn from_vec(data: Vec<T>) -> Self {
-        Self {
-            data,
-            index: 0,
-        }
+        Self { data, index: 0 }
     }
     pub fn resize(&mut self, size: usize, initial_value: T) {
         self.data.resize(size, initial_value);
@@ -34,12 +33,12 @@ impl<T: std::default::Default + Clone> Ring<T> {
 
     /// Returns the current element in the Ring.
     pub fn current(&self) -> &T {
-        return &self.data[self.index]
+        return &self.data[self.index];
     }
     pub fn previous(&self) -> &T {
         let index = self.index + self.data.len() - 1;
         let wrapped_index = index % self.data.len();
-        return &self.data[wrapped_index]
+        return &self.data[wrapped_index];
     }
 
     /// Mutably access the current element in the Ring.
@@ -86,23 +85,23 @@ impl<T: std::default::Default + Clone> Ring<T> {
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
-    
+
     pub fn as_mut_ptr(&mut self) -> *mut Ring<T> {
         return self;
     }
-    
+
     pub fn as_mut_ref(&self) -> *const () {
         return self as *const Ring<T> as *const ();
     }
-    
+
     pub fn as_ptr(&self) -> *const () {
         return self as *const Ring<T> as *const ();
     }
-    
+
     pub fn as_slice(&self) -> &[T] {
         return self.data.as_slice();
     }
-    
+
     pub fn iter(&self) -> RingIterator<T> {
         return RingIterator {
             ring: self,
@@ -128,7 +127,7 @@ impl<T: std::default::Default + Clone> IndexMut<usize> for Ring<T> {
 }
 
 /// Iterator for `Ring`.
-pub struct RingIterator<'a, T : Default + Clone> {
+pub struct RingIterator<'a, T: Default + Clone> {
     ring: &'a Ring<T>,
     position: usize,
 }
@@ -159,15 +158,12 @@ impl<'a, T: std::default::Default + Clone> Iterator for RingIterator<'a, T> {
     }
 }
 
-impl <'a, T: std::default::Default + Clone> FromIterator<T> for Ring<T> {
+impl<'a, T: std::default::Default + Clone> FromIterator<T> for Ring<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut data = Vec::new();
         for item in iter {
             data.push(item);
         }
-        Self {
-            data,
-            index: 0,
-        }
+        Self { data, index: 0 }
     }
 }

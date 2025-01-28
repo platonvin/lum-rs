@@ -34,9 +34,8 @@ pub type mat4 = vek::Mat4<f32>;
 // pub type dmat4 = vek::Mat4<f32>;
 pub type quat = vek::quaternion::Quaternion<f32>;
 
-
 #[allow(non_camel_case_types)]
-pub type BlockID_t = i16; 
+pub type BlockID_t = i16;
 #[allow(non_camel_case_types)]
 pub type MatID_t = u8;
 // TODO: enum with empty / non-empty using NonZeroU8
@@ -107,7 +106,7 @@ pub struct PackedVoxelCircuit {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct IndexedVertices {
     pub offset: u32, // yes, they are all stored in same buffer and accessed with offset
-    pub icount: u32, 
+    pub icount: u32,
 }
 
 #[allow(non_snake_case)]
@@ -126,7 +125,7 @@ pub struct FaceBuffers {
 }
 
 #[derive(Debug, Default, Clone)]
-// handle (reference) to a mesh. 
+// handle (reference) to a mesh.
 // You can clone it but still need to unload one time
 pub struct InternalMeshModel {
     pub triangles: FaceBuffers,
@@ -135,7 +134,7 @@ pub struct InternalMeshModel {
 }
 
 #[derive(Debug, Default, Clone)]
-// handle (reference) to a block triangles. 
+// handle (reference) to a block triangles.
 // You can clone it but still need to unload one time
 pub struct InternalMeshBlock {
     pub triangles: FaceBuffers,
@@ -148,7 +147,7 @@ pub struct InternalMeshFoliageDesc {
 
     // Stored separately cause im fell in love with ecs
     // pub pipe: lumal::RasterPipe,
-    
+
     // how many vertices will be in per-blade drawcall
     pub vertices: u32,
     // how many blades is there in a block (linear)
@@ -181,7 +180,7 @@ pub struct InternalUiMesh {
     pub image: *mut lumal::Image,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct MeshTransform {
     pub rotation: quat,
     pub translation: vec3,
@@ -194,7 +193,6 @@ pub struct Block {
     pub voxels: BlockVoxels,
     pub mesh: InternalMeshModel,
 }
-
 
 // Conversion function from UVec3 to vk::Extent3D
 pub fn uvec3_to_extent3d(vec: uvec3) -> vk::Extent3D {

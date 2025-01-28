@@ -1,4 +1,6 @@
 {
     "rust-analyzer.checkOnSave": true,
-    "rust-analyzer.inlayHints.typeHints.enable": true,
+    "[toml]": { // i dont want it in cargo.toml
+        "editor.formatOnSave": false
+    }
 }

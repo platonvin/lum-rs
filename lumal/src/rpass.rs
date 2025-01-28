@@ -2,11 +2,10 @@ use std::{collections::HashMap, f64::consts::E, ptr::null};
 
 use crate::Renderer;
 use crate::{
-    trace,
     atrace,
     descriptors::{AttachmentDescription, LoadStoreOp, SubpassAttachmentRefs, SubpassDescription},
     ring::Ring,
-    Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe, RenderPass,
+    trace, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe, RenderPass,
 };
 use anyhow::*;
 use vulkanalia::vk::{self, DeviceV1_3, Framebuffer};
@@ -15,10 +14,7 @@ use crate::function;
 use vulkanalia::prelude::v1_3::*;
 
 impl Renderer {
-    pub fn destroy_render_pass(
-        &mut self,
-        rpass: &mut RenderPass,
-    ) {
+    pub fn destroy_render_pass(&mut self, rpass: &mut RenderPass) {
         assert!(rpass.render_pass != vk::RenderPass::null());
         assert!(rpass.framebuffers.len() != 0);
         for framebuffer in rpass.framebuffers.into_iter() {
@@ -27,7 +23,7 @@ impl Renderer {
                 self.device.destroy_framebuffer(*framebuffer, None);
             }
         }
-        
+
         unsafe {
             self.device.destroy_render_pass(rpass.render_pass, None);
         }
@@ -64,9 +60,10 @@ impl Renderer {
                 store_op: attachment.store.to_vk_store(),
                 stencil_load_op: attachment.sload.to_vk_load(),
                 stencil_store_op: attachment.sstore.to_vk_store(),
-                initial_layout: 
-                    if (attachment.load  == LoadStoreOp::DontCare || attachment.load  == LoadStoreOp::Clear)
-                    && (attachment.sload == LoadStoreOp::DontCare || attachment.sload == LoadStoreOp::Clear)
+                initial_layout: if (attachment.load == LoadStoreOp::DontCare
+                    || attachment.load == LoadStoreOp::Clear)
+                    && (attachment.sload == LoadStoreOp::DontCare
+                        || attachment.sload == LoadStoreOp::Clear)
                 {
                     vk::ImageLayout::UNDEFINED
                 } else {
@@ -82,9 +79,9 @@ impl Renderer {
             };
 
             let images_slice = images.as_slice().as_ptr(); // Assuming Ring has as_slice()
-            // let first_image_ptr = images_slice.as_ptr() as *const Image;
+                                                           // let first_image_ptr = images_slice.as_ptr() as *const Image;
             img2ref.insert(images_slice, i);
-            // img2ref.insert(images.as_ptr(), i as u32); 
+            // img2ref.insert(images.as_ptr(), i as u32);
             clears.push(attachment.clear);
         }
         trace!();
@@ -125,17 +122,15 @@ impl Renderer {
         trace!();
 
         assert!(subpasses.len() == sas_refs.len());
-        for (i, sas) in sas_refs.iter_mut().enumerate() { 
+        for (i, sas) in sas_refs.iter_mut().enumerate() {
             subpasses[i].color_attachment_count = sas.a_color.len() as u32;
-            subpasses[i].color_attachments =      sas.a_color.as_ptr();
+            subpasses[i].color_attachments = sas.a_color.as_ptr();
             subpasses[i].input_attachment_count = sas.a_input.len() as u32;
-            subpasses[i].input_attachments =      sas.a_input.as_ptr();
+            subpasses[i].input_attachments = sas.a_input.as_ptr();
             // we cant just reference attachment hidden in Option because its literally not what we want
             // aka we want *a_depth, not *Option<a_depth> cause there is (might be) more bits (from enum)
             subpasses[i].depth_stencil_attachment = match sas.a_depth {
-                Some(_) => {
-                    sas.a_depth.as_mut().unwrap()
-                },
+                Some(_) => sas.a_depth.as_mut().unwrap(),
                 None => null(),
             }
         }
@@ -143,8 +138,8 @@ impl Renderer {
         trace!();
 
         for i in 0..spass_attachs.len() {
-            for pipe in &mut *spass_attachs[i].pipes { 
-                pipe.subpass_id = i as i32; 
+            for pipe in &mut *spass_attachs[i].pipes {
+                pipe.subpass_id = i as i32;
             }
         }
         trace!();
@@ -157,14 +152,14 @@ impl Renderer {
         let create_info = vk::RenderPassCreateInfo {
             s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
             attachment_count: adescs.len() as u32,
-            attachments:      adescs.as_ptr(),
+            attachments: adescs.as_ptr(),
             subpass_count: subpasses.len() as u32,
-            subpasses:     subpasses.as_ptr(),
+            subpasses: subpasses.as_ptr(),
             dependency_count: dependencies.len() as u32,
-            dependencies:     dependencies.as_ptr(),
+            dependencies: dependencies.as_ptr(),
             ..Default::default()
         };
-        
+
         trace!();
         // call Vulkan function to actually create the render pass
         let render_pass = unsafe {
@@ -176,15 +171,15 @@ impl Renderer {
         trace!();
 
         // Pipes (which are abstractions of Vulkan pipelines) need to know the render pass
-        // for pipe in &mut *spass_attachs[0].pipes { 
+        // for pipe in &mut *spass_attachs[0].pipes {
         //     pipe.render_pass = render_pass;
         // }
         for i in 0..spass_attachs.len() {
-            for pipe in &mut *spass_attachs[i].pipes { 
+            for pipe in &mut *spass_attachs[i].pipes {
                 pipe.render_pass = render_pass;
             }
         }
-        
+
         // This is the metadata i store in my render pass abstraction. It helps (me).
         rpass.render_pass = render_pass;
         rpass.extent = vk::Extent2D {
@@ -192,10 +187,8 @@ impl Renderer {
             height: (attachments[0].images.as_ref().unwrap())[0].extent.height,
         };
 
-        let binding: Vec<&Ring<Image>> = attachments
-            .iter()
-            .filter_map(|desc| desc.images)
-            .collect();
+        let binding: Vec<&Ring<Image>> =
+            attachments.iter().filter_map(|desc| desc.images).collect();
         let fb_images: &[&Ring<Image>] = binding.as_slice();
         trace!();
 
@@ -322,13 +315,10 @@ impl Renderer {
                 extent: render_pass.extent,
             })
             .clear_values(render_pass.clear_colors.as_slice());
-        
+
         unsafe {
-            self.device.cmd_begin_render_pass(
-                *command_buffer,
-                &begin_info,
-                inline,
-            );
+            self.device
+                .cmd_begin_render_pass(*command_buffer, &begin_info, inline);
             self.cmd_set_viewport(
                 *command_buffer,
                 render_pass.extent.width,
@@ -337,7 +327,11 @@ impl Renderer {
         }
     }
 
-    pub fn cmd_end_renderpass(&self, command_buffer: &vk::CommandBuffer, render_pass: &mut RenderPass) {
+    pub fn cmd_end_renderpass(
+        &self,
+        command_buffer: &vk::CommandBuffer,
+        render_pass: &mut RenderPass,
+    ) {
         unsafe {
             self.device.cmd_end_render_pass(*command_buffer);
         }

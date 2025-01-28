@@ -1,12 +1,10 @@
-
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, VoxelVisibility};
 use internal_renderer::*;
 use lumal::{BufferDeletion, ImageDeletion};
-use rand::Rng;
+// use rand::Rng;
 use vulkanalia::vk::{self, Handle};
 
-use crate::*;
-use crate::types::*;
+use crate::{types::*, *};
 
 fn from_addr<'b, T>(address: *const T) -> &'b T {
     unsafe { &*(address as *const T) }
@@ -14,8 +12,9 @@ fn from_addr<'b, T>(address: *const T) -> &'b T {
 
 impl super::InternalRenderer {
     // Palette on CPU side is (should) be represented as a POD array
-    // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is due to perfomance win + hw limitations
-    // E.g. just doing 16*len x 16 x 16 will not work cause 16xlen will be too big size for some gpus
+    // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is
+    // due to perfomance win + hw limitations E.g. just doing 16*len x 16 x 16
+    // will not work cause 16xlen will be too big size for some gpus
     pub fn update_block_palette_to_gpu(&mut self) {
         assert!(self.block_palette_voxels.len() == self.static_block_palette_size as usize);
         // create 3d array to be copied to gpu-side image after it is filled
@@ -23,40 +22,30 @@ impl super::InternalRenderer {
             (16 * BLOCK_PALETTE_SIZE_X) as usize,
             (16 * BLOCK_PALETTE_SIZE_Y) as usize,
             16,
-            0 as Voxel
+            0 as Voxel,
         );
-
-        // dbg!(&self.block_palette_voxels);
 
         for (i, block) in self.block_palette_voxels.iter().enumerate() {
             let block_xy = self.index_block_xy(i);
-            for x in 0..16 {
-            for y in 0..16 {
-            for z in 0..16 {
+            for_zyx!(16, 16, 16, |x, y, z| {
                 let vox = block[x as usize][y as usize][z as usize];
                 block_palette_prepared[(
                     x + ((block_xy.x as usize) * 16),
                     y + ((block_xy.y as usize) * 16),
-                    z
+                    z,
                 )] = vox;
-            }}}
+            });
         }
 
+        #[rustfmt::skip]
         let buffer_count = block_palette_prepared.dimensions().0
                          * block_palette_prepared.dimensions().1
                          * block_palette_prepared.dimensions().2;
         let buffer_size = buffer_count * std::mem::size_of::<Voxel>();
 
-        // dbg!(&buffer_count);
-
-        let staging_buffer = self.lumal.create_buffer(
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            buffer_size,
-            true,
-        );
-
-        // dbg!(&block_palette_prepared);
-        // dbg!(&block_palette_prepared.data);
+        let staging_buffer =
+            self.lumal
+                .create_buffer(vk::BufferUsageFlags::TRANSFER_SRC, buffer_size, true);
 
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -66,9 +55,15 @@ impl super::InternalRenderer {
             );
         };
 
-        unsafe { self.lumal.allocator.as_ref().unwrap().flush_allocation(staging_buffer.allocation, 0, buffer_size as u64).unwrap() };
+        unsafe {
+            self.lumal
+                .allocator
+                .as_ref()
+                .unwrap()
+                .flush_allocation(staging_buffer.allocation, 0, buffer_size as u64)
+                .unwrap()
+        };
 
-        
         for block_palette in self.independent_images.origin_block_palette.iter() {
             assert!(block_palette_prepared.dimensions().0 == block_palette.extent.width as usize);
             assert!(block_palette_prepared.dimensions().1 == block_palette.extent.height as usize);
@@ -77,18 +72,19 @@ impl super::InternalRenderer {
                 staging_buffer.buffer,
                 block_palette,
                 vk::Extent3D {
-                     width: block_palette_prepared.dimensions().0 as u32,
+                    width: block_palette_prepared.dimensions().0 as u32,
                     height: block_palette_prepared.dimensions().1 as u32,
-                     depth: block_palette_prepared.dimensions().2 as u32,
+                    depth: block_palette_prepared.dimensions().2 as u32,
                 },
             );
         }
 
         self.lumal.destroy_buffer(staging_buffer);
     }
-    
+
     pub fn update_material_palette_to_gpu(&mut self) {
-        // we do not write it to intermediate buffer cuz its already in right layout - 6 float rows one by one 256 total
+        // we do not write it to intermediate buffer cuz its already in right layout - 6
+        // float rows one by one 256 total
         assert!(self.material_palette.len() > 0);
         // dbg!(&self.material_palette);
         dbg!(&self.material_palette.len());
@@ -97,11 +93,9 @@ impl super::InternalRenderer {
 
         // dbg!(&self.material_palette);
 
-        let staging_buffer = self.lumal.create_buffer(
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            buffer_size,
-            true,
-        );
+        let staging_buffer =
+            self.lumal
+                .create_buffer(vk::BufferUsageFlags::TRANSFER_SRC, buffer_size, true);
 
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -129,7 +123,10 @@ impl super::InternalRenderer {
     #[deprecated]
     pub fn extract_palette_from_scene(&mut self, scene: &dot_vox::DotVoxData) {
         assert!(self.material_palette.len() == scene.materials.len());
-        assert!(scene.palette.len() == scene.materials.len() && scene.materials.len() == self.material_palette.len());
+        assert!(
+            scene.palette.len() == scene.materials.len()
+                && scene.materials.len() == self.material_palette.len()
+        );
 
         // now fill emission and roughness
         for (i, mv_mat) in scene.materials.iter().enumerate() {
@@ -193,9 +190,8 @@ impl super::InternalRenderer {
         // self.material_palette[0].roughness = 0.0;
 
         // dbg!(&self.material_palette);
-
     }
-    
+
     pub fn extract_palette_from_scene_ogt(&mut self, scene: &ogt_vox::ogt_vox_scene) {
         for i in 0..scene.materials.matl.len() {
             self.material_palette[i].albedo = vec3::new(
@@ -213,12 +209,14 @@ impl super::InternalRenderer {
                     self.material_palette[i].roughness = 1.0;
                 }
                 ogt_vox::ogt_matl_type_matl_type_emit => {
-                    self.material_palette[i].emmitness = scene.materials.matl[i].emit * (2.0 + scene.materials.matl[i].flux * 4.0);
+                    self.material_palette[i].emmitness =
+                        scene.materials.matl[i].emit * (2.0 + scene.materials.matl[i].flux * 4.0);
                     self.material_palette[i].roughness = 0.5;
                 }
                 ogt_vox::ogt_matl_type_matl_type_metal => {
                     self.material_palette[i].emmitness = 0.0;
-                    self.material_palette[i].roughness = scene.materials.matl[i].rough + (1.0 - scene.materials.matl[i].metal) / 2.0;
+                    self.material_palette[i].roughness =
+                        scene.materials.matl[i].rough + (1.0 - scene.materials.matl[i].metal) / 2.0;
                 }
                 _ => {
                     dbg!("Unknown material type");
@@ -234,12 +232,18 @@ impl super::InternalRenderer {
 
     pub fn extract_palette_from_file_ogt(&mut self, scene_file: &str) {
         let scene_data = std::fs::read(scene_file).unwrap();
-        let scene = unsafe { ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0) };
+        let scene = unsafe {
+            ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
+        };
         self.extract_palette_from_scene_ogt(from_addr(scene));
     }
 
-
-    pub fn load_mesh_from_file(&mut self, mesh_file: &str, make_vertices: bool, extrude_palette: bool) -> InternalMeshModel{
+    pub fn load_mesh_from_file(
+        &mut self,
+        mesh_file: &str,
+        make_vertices: bool,
+        extrude_palette: bool,
+    ) -> InternalMeshModel {
         let scene = dot_vox::load(mesh_file).unwrap();
         assert!(scene.models.len() == 1); // only one model per file supported for now
         let model = &scene.models[0];
@@ -250,13 +254,20 @@ impl super::InternalRenderer {
             self.extract_palette_from_scene(&scene);
             self.has_palette = true;
         }
-        
+
         return self.load_mesh_from_memory(model, true);
     }
 
-    pub fn load_mesh_from_file_ogt(&mut self, mesh_file: &str, make_vertices: bool, extrude_palette: bool) -> InternalMeshModel{
+    pub fn load_mesh_from_file_ogt(
+        &mut self,
+        mesh_file: &str,
+        make_vertices: bool,
+        extrude_palette: bool,
+    ) -> InternalMeshModel {
         let scene_data = std::fs::read(mesh_file).unwrap();
-        let scene = unsafe { ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0) };
+        let scene = unsafe {
+            ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
+        };
         let scene = from_addr(scene);
         assert!(scene.num_models == 1); // only one model per file supported for now
         let model = unsafe { &(**scene.models.offset(0).offset(0)) };
@@ -267,7 +278,7 @@ impl super::InternalRenderer {
             self.extract_palette_from_scene_ogt(&scene);
             self.has_palette = true;
         }
-        
+
         return self.load_mesh_from_memory_ogt(model, true);
     }
 
@@ -279,7 +290,7 @@ impl super::InternalRenderer {
         let size = uvec3 {
             x: model.size_x,
             y: model.size_y,
-            z: model.size_z
+            z: model.size_z,
         };
 
         let mut padded_voxel_data = Array3D::<VoxelForContour>::new(
@@ -287,15 +298,23 @@ impl super::InternalRenderer {
             (size.x + 2) as usize,
             (size.y + 2) as usize,
             (size.z + 2) as usize,
-        ); padded_voxel_data.data.fill(VoxelForContour(0));
+        );
+        padded_voxel_data.data.fill(VoxelForContour(0));
 
         for xx in 0..size.x {
-        for yy in 0..size.y {
-        for zz in 0..size.z {
-            let voxel = unsafe { *model.voxel_data.offset((xx + yy * size.x + zz * size.x * size.y) as isize) };
-            // some padding for generator
-            padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] = VoxelForContour(voxel);
-        }}};
+            for yy in 0..size.y {
+                for zz in 0..size.z {
+                    let voxel = unsafe {
+                        *model
+                            .voxel_data
+                            .offset((xx + yy * size.x + zz * size.x * size.y) as isize)
+                    };
+                    // some padding for generator
+                    padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] =
+                        VoxelForContour(voxel);
+                }
+            }
+        }
 
         let pvd_data_slice = unsafe {
             std::slice::from_raw_parts(
@@ -314,26 +333,28 @@ impl super::InternalRenderer {
             size,
         };
     }
-    
+
     pub fn load_mesh_from_memory(
         &mut self,
         model: &dot_vox::Model,
         make_vertices: bool,
     ) -> InternalMeshModel {
         assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
-        // They do not necessarily have to be equal, e.g. for big grid single-voxel model is len()==1
-        // assert!(model.voxels.len() == (model.size.x * model.size.y * model.size.z) as usize);
-        
+        // They do not necessarily have to be equal, e.g. for big grid single-voxel
+        // model is len()==1 assert!(model.voxels.len() == (model.size.x *
+        // model.size.y * model.size.z) as usize);
+
         let size = uvec3 {
             x: model.size.x,
             y: model.size.y,
             z: model.size.z,
         };
-        
+
         let padded_voxel_data = make_padded_array(&model.voxels, size);
         // let plain_voxel_data =
 
-        // we need 3d array as slice of u8s but we also need a separate type for trait. Here we are
+        // we need 3d array as slice of u8s but we also need a separate type for trait.
+        // Here we are
         let pvd_data_slice = unsafe {
             std::slice::from_raw_parts(
                 padded_voxel_data.data.as_ptr() as *const Voxel,
@@ -364,7 +385,9 @@ impl super::InternalRenderer {
 
     pub fn load_block_from_file_ogt(&mut self, block: BlockID_t, path: &str) {
         let scene_data = std::fs::read(path).unwrap();
-        let scene = unsafe { ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0) };
+        let scene = unsafe {
+            ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
+        };
         let scene = from_addr(scene);
         assert!(scene.num_models == 1); // only one model per file supported for now
         let model = unsafe { &(**scene.models.offset(0).offset(0)) };
@@ -373,42 +396,42 @@ impl super::InternalRenderer {
         self.load_block_from_memory_ogt(block, model);
     }
 
-    pub fn load_block_from_memory_ogt(&mut self, block_id: BlockID_t, model: &ogt_vox::ogt_vox_model) {
-        let size = uvec3::new(
-            model.size_x,
-            model.size_y,
-            model.size_z,
-        );
+    pub fn load_block_from_memory_ogt(
+        &mut self,
+        block_id: BlockID_t,
+        model: &ogt_vox::ogt_vox_model,
+    ) {
+        let size = uvec3::new(model.size_x, model.size_y, model.size_z);
 
         let mut padded_voxel_data = Array3D::<VoxelForContour>::new(
             // +2 cause padding of 1 from each side
             (size.x + 2) as usize,
             (size.y + 2) as usize,
             (size.z + 2) as usize,
-        ); padded_voxel_data.data.fill(VoxelForContour(0));
+        );
+        padded_voxel_data.data.fill(VoxelForContour(0));
 
         for xx in 0..size.x {
-        for yy in 0..size.y {
-        for zz in 0..size.z {
-            let voxel = unsafe { *model.voxel_data.offset((xx + yy * size.x + zz * size.x * size.y) as isize) };
-            // some padding for generator
-            padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] = VoxelForContour(voxel);
-        }}};
+            for yy in 0..size.y {
+                for zz in 0..size.z {
+                    let voxel = unsafe {
+                        *model
+                            .voxel_data
+                            .offset((xx + yy * size.x + zz * size.x * size.y) as isize)
+                    };
+                    // some padding for generator
+                    padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] =
+                        VoxelForContour(voxel);
+                }
+            }
+        }
 
         // yep, there is padding. Its to reuse memory. TODO: find nicer approach
         assert!(size.x == 16 && size.y == 16 && size.z == 16);
-        for zz in 0..size.z {
-        for yy in 0..size.y {
-        for xx in 0..size.x {
-            self.block_palette_voxels[block_id as usize]
-                [xx as usize][yy as usize][zz as usize] =
-                padded_voxel_data[(
-                    (xx + 1) as usize, 
-                    (yy + 1) as usize, 
-                    (zz + 1) as usize)
-                ].0;
-        }}}
-
+        for_zyx!(size, |xx, yy, zz| {
+            self.block_palette_voxels[block_id as usize][xx as usize][yy as usize][zz as usize] =
+                padded_voxel_data[((xx + 1) as usize, (yy + 1) as usize, (zz + 1) as usize)].0;
+        });
 
         let triangles = self.make_contour_vertices(size, padded_voxel_data);
 
@@ -417,30 +440,19 @@ impl super::InternalRenderer {
 
     // does not return a mesh because you should only access it via BlockID_t
     pub fn load_block_from_memory(&mut self, block: BlockID_t, model: &dot_vox::Model) {
-        let size = uvec3::new(
-            model.size.x,
-            model.size.y,
-            model.size.z,
-        );
+        let size = uvec3::new(model.size.x, model.size.y, model.size.z);
 
         let mut array = make_padded_array(&model.voxels, size);
         // yep, there is padding. Its to reuse memory. TODO: find nicer approach
         let padding = uvec3::new(1, 1, 1);
-        
+
         assert!(size.x == 16 && size.y == 16 && size.z == 16);
         let target_block = block as usize;
-        for zz in 0..size.z {
-        for yy in 0..size.y {
-        for xx in 0..size.x {
-            self.block_palette_voxels[target_block]
-                [xx as usize][yy as usize][zz as usize] =
-                array[(
-                    (xx + padding.x) as usize, 
-                    (yy + padding.y) as usize, 
-                    (zz + padding.z) as usize)
-                ].0;
-        }}}
 
+        for_zyx!(size, |xx, yy, zz| {
+            self.block_palette_voxels[target_block][xx as usize][yy as usize][zz as usize] =
+                array[((xx + 1) as usize, (yy + 1) as usize, (zz + 1) as usize)].0;
+        });
 
         let triangles = self.make_contour_vertices(size, array);
 
@@ -448,36 +460,33 @@ impl super::InternalRenderer {
     }
 
     pub fn make_contour_vertices(
-        &mut self, 
+        &mut self,
         // real size. TODO: do i need this?
-        size: vek::Vec3<u32>, 
+        size: vek::Vec3<u32>,
         // 3d array with 1 padding
-        padded_voxel_data: Array3D<VoxelForContour>
+        padded_voxel_data: Array3D<VoxelForContour>,
     ) -> FaceBuffers {
         let mut buffer = GreedyQuadsBuffer::new(padded_voxel_data.data.len());
-    
+
         lumal::trace!();
         // TODO: issue on block_mesh bad readme example
-        let chunk_shape = block_mesh::ndshape::RuntimeShape::<u32, 3>::new([
-            size.x + 2,
-            size.y + 2,
-            size.z + 2,
-        ]);
-            
+        let chunk_shape =
+            block_mesh::ndshape::RuntimeShape::<u32, 3>::new([size.x + 2, size.y + 2, size.z + 2]);
+
         lumal::trace!();
         let faces = block_mesh::RIGHT_HANDED_Y_UP_CONFIG.faces;
         greedy_quads(
             &padded_voxel_data.data.as_slice(),
             &chunk_shape,
             [0; 3],
-            [size.x+1, size.y+1, size.z+1],
+            [size.x + 1, size.y + 1, size.z + 1],
             &faces,
-            &mut buffer
+            &mut buffer,
         );
         lumal::trace!();
-    
+
         assert!(buffer.quads.num_quads() > 0);
-    
+
         let num_indices = buffer.quads.num_quads() * 6;
         let num_vertices = buffer.quads.num_quads() * 4;
         // [0,1,2] [1,2,3] - indices of vertices in vertex array
@@ -486,10 +495,10 @@ impl super::InternalRenderer {
         let mut indices = Vec::with_capacity(num_indices);
         let mut positions = Vec::with_capacity(num_vertices);
         let mut normals = Vec::with_capacity(num_vertices);
-        
+
         lumal::trace!();
-        // problem with block_mesh is that even tho it is voxel, values are still in floats
-        // so for now we repack & convert them
+        // problem with block_mesh is that even tho it is voxel, values are still in
+        // floats so for now we repack & convert them
         // TODO: fork, fix and optimize
         for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
             for quad in group.into_iter() {
@@ -499,13 +508,14 @@ impl super::InternalRenderer {
             }
         }
         lumal::trace!();
-    
+
         assert!(positions.len() == normals.len());
         // positions only!
-        // normals are passed as push constants and defined in high-level (look down below)
+        // normals are passed as push constants and defined in high-level (look down
+        // below)
         let mut circ_verts = vec![PackedVoxelCircuit::default(); positions.len()];
         for i in 0..positions.len() {
-            let u8pos = u8vec3::new (
+            let u8pos = u8vec3::new(
                 // substract 1 cause contour 1 padding
                 positions[i][0] as u8 - 1,
                 positions[i][1] as u8 - 1,
@@ -513,23 +523,24 @@ impl super::InternalRenderer {
             );
             circ_verts[i].pos = u8pos;
         }
-    
-        #[allow(non_snake_case)] let mut verts_idxs_Pzz = Vec::with_capacity(positions.len());
-        #[allow(non_snake_case)] let mut verts_idxs_Nzz = Vec::with_capacity(positions.len());
-        #[allow(non_snake_case)] let mut verts_idxs_zPz = Vec::with_capacity(positions.len());
-        #[allow(non_snake_case)] let mut verts_idxs_zNz = Vec::with_capacity(positions.len());
-        #[allow(non_snake_case)] let mut verts_idxs_zzP = Vec::with_capacity(positions.len());
-        #[allow(non_snake_case)] let mut verts_idxs_zzN = Vec::with_capacity(positions.len());
-    
+
+        #[rustfmt::skip] #[allow(non_snake_case)] let mut verts_idxs_Pzz = Vec::with_capacity(positions.len());
+        #[rustfmt::skip] #[allow(non_snake_case)] let mut verts_idxs_Nzz = Vec::with_capacity(positions.len());
+        #[rustfmt::skip] #[allow(non_snake_case)] let mut verts_idxs_zPz = Vec::with_capacity(positions.len());
+        #[rustfmt::skip] #[allow(non_snake_case)] let mut verts_idxs_zNz = Vec::with_capacity(positions.len());
+        #[rustfmt::skip] #[allow(non_snake_case)] let mut verts_idxs_zzP = Vec::with_capacity(positions.len());
+        #[rustfmt::skip] #[allow(non_snake_case)] let mut verts_idxs_zzN = Vec::with_capacity(positions.len());
+
         // TODO: how to return a ref to local_but_higher_scope variable?
+        #[rustfmt::skip]
         let mut push_index_to_corresponding_vec = |normal: vec3, index: u16| {
             match normal {
-                vec3 {x: 1.0, y: 0.0, z: 0.0} => {verts_idxs_Pzz.push(index);},
-                vec3 {x: -1.0, y: 0.0, z: 0.0} => {verts_idxs_Nzz.push(index);},
-                vec3 {x: 0.0, y: 1.0, z: 0.0} => {verts_idxs_zPz.push(index);},
-                vec3 {x: 0.0, y: -1.0, z: 0.0} => {verts_idxs_zNz.push(index);},
-                vec3 {x: 0.0, y: 0.0, z: 1.0} => {verts_idxs_zzP.push(index);},
-                vec3 {x: 0.0, y: 0.0, z: -1.0} => {verts_idxs_zzN.push(index);},
+                vec3 {x:  1.0, y:  0.0, z:  0.0} => {verts_idxs_Pzz.push(index);},
+                vec3 {x: -1.0, y:  0.0, z:  0.0} => {verts_idxs_Nzz.push(index);},
+                vec3 {x:  0.0, y:  1.0, z:  0.0} => {verts_idxs_zPz.push(index);},
+                vec3 {x:  0.0, y: -1.0, z:  0.0} => {verts_idxs_zNz.push(index);},
+                vec3 {x:  0.0, y:  0.0, z:  1.0} => {verts_idxs_zzP.push(index);},
+                vec3 {x:  0.0, y:  0.0, z: -1.0} => {verts_idxs_zzN.push(index);},
                 _ => {
                     dbg!(normal);
                     panic!("Unknown normal");
@@ -539,23 +550,25 @@ impl super::InternalRenderer {
         // dbg!(&indices);
         for i in 0..indices.len() {
             let index = indices[i];
-            // the first one in triangle. This is the one that points to vertex that is the Provoking Vertex (google it)
-            // which means that when all 3 pass some some value to fragment shader with flat qualifier (no interpolation), Provoking Vertex's one is used
+            // the first one in triangle. This is the one that points to vertex that is the
+            // Provoking Vertex (google it) which means that when all 3 pass
+            // some some value to fragment shader with flat qualifier (no interpolation),
+            // Provoking Vertex's one is used
             let provoking_index = indices[(i / 3) * 3];
             // TODO: should i checks that they all actualyl have same normal?
             let norm = normals[provoking_index as usize];
             push_index_to_corresponding_vec(norm.into(), index as u16);
         }
-    
+
         assert!(verts_idxs_Pzz.len() != 0);
         assert!(verts_idxs_Nzz.len() != 0);
         assert!(verts_idxs_zPz.len() != 0);
         assert!(verts_idxs_zNz.len() != 0);
         assert!(verts_idxs_zzP.len() != 0);
         assert!(verts_idxs_zzN.len() != 0);
-    
+
         let mut triangles = FaceBuffers::default();
-    
+
         let mut all_indices = vec![];
         let mut offset_and_insert = |vec: &mut Vec<u16>, section: &mut IndexedVertices| {
             // starts at current length
@@ -564,17 +577,14 @@ impl super::InternalRenderer {
             section.icount = vec.len() as u32;
             all_indices.extend_from_slice(vec.as_slice());
         };
-    
+
         offset_and_insert(&mut verts_idxs_Pzz, &mut triangles.Pzz);
         offset_and_insert(&mut verts_idxs_Nzz, &mut triangles.Nzz);
         offset_and_insert(&mut verts_idxs_zPz, &mut triangles.zPz);
         offset_and_insert(&mut verts_idxs_zNz, &mut triangles.zNz);
         offset_and_insert(&mut verts_idxs_zzP, &mut triangles.zzP);
         offset_and_insert(&mut verts_idxs_zzN, &mut triangles.zzN);
-    
-        // dbg!(&circ_verts);
-        // dbg!(&all_indices);
-    
+
         triangles.vertexes = self.lumal.create_elem_buffer::<PackedVoxelCircuit>(
             &circ_verts,
             vk::BufferUsageFlags::TRANSFER_DST // trans_dst needed internally but specified explicitly 
@@ -588,19 +598,6 @@ impl super::InternalRenderer {
         triangles
     }
 
-/*        if let Some(target_block) = target_block {
-            assert!(size.x == 16 && size.y == 16 && size.z == 16);
-            let target_block = target_block as usize;
-            for zz in 0..size.z {
-            for yy in 0..size.y {
-            for xx in 0..size.x {
-                self.block_palette_voxels[target_block]
-                    [xx as usize][yy as usize][zz as usize] =
-                    plain_voxel_data[(xx as usize, yy as usize, zz as usize)].0;
-            }}}
-            
-            
-    } */
     pub fn free_mesh(&mut self, mesh: InternalMeshModel) {
         assert!(mesh.triangles.vertexes.buffer != vk::Buffer::null());
         assert!(mesh.triangles.indices.buffer != vk::Buffer::null());
@@ -630,11 +627,14 @@ fn make_padded_array(voxels: &[dot_vox::Voxel], size: vek::Vec3<u32>) -> Array3D
         (size.x + 2) as usize,
         (size.y + 2) as usize,
         (size.z + 2) as usize,
-    ); plain_voxel_data.data.fill(VoxelForContour(0));
+    );
+    plain_voxel_data.data.fill(VoxelForContour(0));
 
-    // contour means that 2 different voxels (different color, roughness, etc) will be meshed into same triangle(s)
+    // contour means that 2 different voxels (different color, roughness, etc) will
+    // be meshed into same triangle(s)
     // - But where does material come from then?
-    // - from GPU-side 3d voxel arrays. That is faster (cause triangles without such approach are too small and overhead of raster is too heavy)
+    // - from GPU-side 3d voxel arrays. That is faster (cause triangles without such
+    //   approach are too small and overhead of raster is too heavy)
     // NOTE: data is still represented with u8
     // but type is VoxelForContour to implement a trait for mesher lib
     // In original C++ implementation this was separate array
@@ -645,19 +645,16 @@ fn make_padded_array(voxels: &[dot_vox::Voxel], size: vek::Vec3<u32>) -> Array3D
         plain_voxel_data[(
             (voxel.x + 1) as usize,
             (voxel.y + 1) as usize,
-            (voxel.z + 1) as usize
+            (voxel.z + 1) as usize,
         )] = VoxelForContour(voxel.i);
     });
     plain_voxel_data
 }
 
 impl super::InternalRenderer {
-    //TODO: runtime copies in single copy command buffer instead of per-model cmb creation
-    pub fn create_rayrace_voxel_image(
-        &mut self,
-        voxels: &[Voxel],
-        size: uvec3,
-    ) -> lumal::Image {
+    // TODO: runtime copies in single copy command buffer instead of per-model cmb
+    // creation
+    pub fn create_rayrace_voxel_image(&mut self, voxels: &[Voxel], size: uvec3) -> lumal::Image {
         let buffer_count = size.x * size.y * size.z;
         let buffer_size = buffer_count * std::mem::size_of::<Voxel>() as u32;
         assert_eq!(voxels.len(), ((size.x) * (size.y) * (size.z)) as usize);
@@ -667,7 +664,9 @@ impl super::InternalRenderer {
             .create_image(
                 vk::ImageType::_3D,
                 vk::Format::R8_UINT,
-                vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+                vk::ImageUsageFlags::STORAGE
+                    | vk::ImageUsageFlags::TRANSFER_DST
+                    | vk::ImageUsageFlags::SAMPLED,
                 vulkanalia_vma::MemoryUsage::AutoPreferDevice,
                 vulkanalia_vma::AllocationCreateFlags::empty(),
                 vk::ImageAspectFlags::COLOR,
@@ -698,14 +697,17 @@ impl super::InternalRenderer {
         };
         lumal::trace!();
 
-        self.lumal.copy_buffer_to_image_single_time(staging_buffer.buffer, &voxel_image, uvec3_to_extent3d(size));
+        self.lumal.copy_buffer_to_image_single_time(
+            staging_buffer.buffer,
+            &voxel_image,
+            uvec3_to_extent3d(size),
+        );
 
         lumal::trace!();
         self.lumal.destroy_buffer(staging_buffer);
 
         voxel_image
     }
-    
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
@@ -729,6 +731,6 @@ impl block_mesh::MergeVoxel for VoxelForContour {
         return match self.0 {
             0 => VoxelForContour(0),
             _ => VoxelForContour(1),
-        }
+        };
     }
 }

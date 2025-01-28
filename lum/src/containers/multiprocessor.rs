@@ -1,8 +1,11 @@
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread;
-use std::thread::JoinHandle;
+use std::{
+    sync::{
+        atomic::{AtomicBool, AtomicI32, Ordering},
+        Arc, Mutex,
+    },
+    thread,
+    thread::JoinHandle,
+};
 
 // Struct representing the thread pool (aka multiprocessor)
 // Why not rayon? Its too slow. $> cargo bench -p lum --bench threads
@@ -18,7 +21,9 @@ pub struct Multiprocessor {
 impl Multiprocessor {
     pub fn new() -> Self {
         // let num_threads = std::thread::available_parallelism().unwrap().get() - 1;
-        let num_threads = std::thread::available_parallelism().map(|n| n.get() - 1).unwrap_or(1); // Ensure at least one thread
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get() - 1)
+            .unwrap_or(1); // Ensure at least one thread
         let threads_active = Arc::new(AtomicI32::new(0));
         let should_stop = Arc::new(AtomicBool::new(false));
         let current_task: Arc<Mutex<Option<Box<dyn Fn(usize) + Send>>>> =
@@ -79,19 +84,23 @@ impl Multiprocessor {
         }
 
         // store how many threads will be working on the thing
-        self.threads_active.store(dispatch_size as i32, Ordering::Relaxed);
+        self.threads_active
+            .store(dispatch_size as i32, Ordering::Relaxed);
 
         // set N threads to do work for workgroup_size of N
         for i in 0..dispatch_size {
             let flag = &self.thread_flags[i];
             flag.store(true, Ordering::Relaxed);
         }
-        
+
         // while self.threads_active.load(Ordering::Relaxed) != 0 {}
         loop {
             let active = self.threads_active.load(Ordering::Relaxed);
             assert!(active >= 0, "threads_active should never be negative");
-            assert!(active <= dispatch_size as i32, "threads_active should never be greater than num_threads");
+            assert!(
+                active <= dispatch_size as i32,
+                "threads_active should never be greater than num_threads"
+            );
             if active == 0 {
                 break;
             }
@@ -102,6 +111,7 @@ impl Multiprocessor {
     pub fn used_thread_count(&self) -> usize {
         self.num_threads
     }
+
     pub fn optimal_dispatch_size(&self) -> usize {
         self.num_threads - 1 // one for sync
     }
@@ -119,9 +129,12 @@ impl Drop for Multiprocessor {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        sync::{atomic::AtomicUsize, Arc, Mutex},
+        time::Duration,
+    };
+
     use super::*;
-    use std::sync::{atomic::AtomicUsize, Arc, Mutex};
-    use std::time::Duration;
 
     #[test]
     fn test_thread_count() {
@@ -141,7 +154,11 @@ mod tests {
             *result = Some(thread_id);
         });
 
-        assert_eq!(*result.lock().unwrap(), Some(0), "Task should execute on thread 0");
+        assert_eq!(
+            *result.lock().unwrap(),
+            Some(0),
+            "Task should execute on thread 0"
+        );
     }
 
     #[test]
@@ -224,7 +241,7 @@ mod tests {
         let num_threads = pool.used_thread_count();
         let iterations = 100;
         let counter = Arc::new(AtomicUsize::new(0));
-        
+
         for _ in 0..iterations {
             let counter_clone = counter.clone();
             pool.dispatch(num_threads, move |_| {
@@ -264,7 +281,7 @@ mod tests {
     // fn test_task_timing() {
     //     let pool = ThreadPoolThatDoesNotSuck::new();
     //     let num_threads = pool.thread_count();
-        
+
     //     let start_time = Instant::now();
 
     //     pool.dispatch(2, |_| {
@@ -272,7 +289,7 @@ mod tests {
     //     });
     //     let elapsed = start_time.elapsed();
     //     println!("elapsed: {elapsed:?}");
-        
+
     //     if elapsed > Duration::from_secs(1) {
     //         panic!("Tasks should complete within a reasonable time");
     //     }

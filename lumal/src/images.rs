@@ -1,10 +1,10 @@
-use crate::{ring::Ring, Renderer}; // Import the LumalRenderer struct
 use crate::Image;
+use crate::{ring::Ring, Renderer}; // Import the LumalRenderer struct
+use anyhow::*;
 use std::ptr::{self};
-use anyhow::*; 
 use vulkanalia::vk::{self, DeviceV1_0};
-use vulkanalia_vma::{self as vma};
 use vulkanalia_vma::Alloc;
+use vulkanalia_vma::{self as vma};
 
 impl Renderer {
     pub fn create_image(
@@ -49,9 +49,12 @@ impl Renderer {
             ..Default::default()
         };
 
-        let (vk_image, allocation) = unsafe { self
-            .allocator.as_ref().unwrap()
-            .create_image(image_info, &alloc_info) }?;
+        let (vk_image, allocation) = unsafe {
+            self.allocator
+                .as_ref()
+                .unwrap()
+                .create_image(image_info, &alloc_info)
+        }?;
 
         let image_image = vk_image;
         let image_allocation = allocation;
@@ -110,7 +113,7 @@ impl Renderer {
             extent: image_extent,
             mip_levels: image_mip_levels,
         };
-        
+
         self.transition_image_layout_single_time(
             &image,
             vk::ImageLayout::UNDEFINED,
@@ -158,14 +161,17 @@ impl Renderer {
         })
     }
 
-    pub fn destroy_image(&self, img: &Image){
-        unsafe { 
+    pub fn destroy_image(&self, img: &Image) {
+        unsafe {
             self.device.destroy_image_view(img.view, None);
-            self.allocator.as_ref().unwrap().destroy_image(img.image, img.allocation); 
+            self.allocator
+                .as_ref()
+                .unwrap()
+                .destroy_image(img.image, img.allocation);
         };
     }
-    
-    pub fn destroy_image_ring(&self, images: &Ring<Image>){
+
+    pub fn destroy_image_ring(&self, images: &Ring<Image>) {
         for img in images {
             self.destroy_image(img);
         }

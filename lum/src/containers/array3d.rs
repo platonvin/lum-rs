@@ -1,17 +1,17 @@
-use std::fmt::{self, Debug};
-use std::iter::IntoIterator;
-use std::ops::{Index, IndexMut};
-use std::slice::{Iter, IterMut};
+use std::{
+    fmt::{self, Debug},
+    iter::IntoIterator,
+    ops::{Index, IndexMut},
+    slice::{Iter, IterMut},
+};
 
 use crate::types::{ivec3, ivec4};
 
-/*
- * You should index into it in this order
- *  for z in 0..z_size {
- *  for y in 0..y_size {
- *  for x in 0..x_size {
- * Currently, Rust cannot optimize the order automatically. TODO: MIR-OPT coherence transform 
- */
+// You should index into it in this order
+//  for z in 0..z_size {
+//  for y in 0..y_size {
+//  for x in 0..x_size {
+// Currently, Rust cannot optimize the order automatically. TODO: MIR-OPT coherence transform
 
 #[derive(Clone)]
 pub struct Array3D<T> {
@@ -29,7 +29,7 @@ where
     pub fn new(x_size: usize, y_size: usize, z_size: usize) -> Self {
         Self::new_filled(x_size, y_size, z_size, T::default())
     }
-    
+
     pub fn new_filled(x_size: usize, y_size: usize, z_size: usize, value: T) -> Self {
         assert!(
             x_size > 0 && y_size > 0 && z_size > 0,
@@ -99,11 +99,8 @@ impl<T: Default + Clone> Index<ivec3> for Array3D<T> {
     type Output = T;
 
     fn index(&self, index: ivec3) -> &Self::Output {
-        let index_internal = self.index_internal(
-            index.x as usize,
-            index.y as usize, 
-            index.z as usize
-        ); 
+        let index_internal =
+            self.index_internal(index.x as usize, index.y as usize, index.z as usize);
         &self.data[index_internal]
     }
 }
@@ -111,11 +108,8 @@ impl<T: Default + Clone> Index<ivec4> for Array3D<T> {
     type Output = T;
 
     fn index(&self, index: ivec4) -> &Self::Output {
-        let index_internal = self.index_internal(
-            index.x as usize,
-            index.y as usize, 
-            index.z as usize
-        ); 
+        let index_internal =
+            self.index_internal(index.x as usize, index.y as usize, index.z as usize);
         &self.data[index_internal]
     }
 }
@@ -149,8 +143,8 @@ where
 }
 
 impl<T: Default + Clone> IntoIterator for Array3D<T> {
-    type Item = T;
     type IntoIter = std::vec::IntoIter<T>;
+    type Item = T;
 
     fn into_iter(self) -> Self::IntoIter {
         self.data.into_iter()
@@ -158,8 +152,8 @@ impl<T: Default + Clone> IntoIterator for Array3D<T> {
 }
 
 impl<'a, T: Default + Clone> IntoIterator for &'a Array3D<T> {
-    type Item = &'a T;
     type IntoIter = Iter<'a, T>;
+    type Item = &'a T;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -167,8 +161,8 @@ impl<'a, T: Default + Clone> IntoIterator for &'a Array3D<T> {
 }
 
 impl<'a, T: Default + Clone> IntoIterator for &'a mut Array3D<T> {
-    type Item = &'a mut T;
     type IntoIter = IterMut<'a, T>;
+    type Item = &'a mut T;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()

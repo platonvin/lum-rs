@@ -42,9 +42,7 @@ fn shaders() {
     println!("cargo:rerun-if-changed=shaders");
 
     // Check if `glslc` is available
-    let glslc_available = Command::new("glslc")
-        .arg("--version")
-        .output().is_ok();
+    let glslc_available = Command::new("glslc").arg("--version").output().is_ok();
     if !glslc_available {
         eprintln!("glslc not found. Shaders will not be compiled.");
         return;
@@ -75,7 +73,11 @@ fn shaders() {
         }
 
         // Compile the shader using glslc
-        println!("Compiling shader: {} -> {}", path.display(), out_path.display());
+        println!(
+            "Compiling shader: {} -> {}",
+            path.display(),
+            out_path.display()
+        );
         let status = Command::new("glslc")
             .arg(&path) // Input shader file
             .arg("-o")
@@ -99,10 +101,7 @@ fn shaders() {
 fn cpp() {
     // You call it lazy
     // I call it precomputed for optimization
-    let sources = [
-        "cpp/my_cpp_code.cpp",
-        "cpp/ogt_vox.cpp",
-    ];
+    let sources = ["cpp/my_cpp_code.cpp", "cpp/ogt_vox.cpp"];
 
     let mut build = cc::Build::new();
     build

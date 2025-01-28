@@ -1,9 +1,11 @@
 use std::{option, ptr::null, u32::MAX};
 
-use crate::{ring::Ring, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe, MAX_FRAMES_IN_FLIGHT};
-use crate::Renderer; 
-use vulkanalia::vk::{self, DeviceV1_3};
+use crate::Renderer;
+use crate::{
+    ring::Ring, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe, MAX_FRAMES_IN_FLIGHT,
+};
 use anyhow::*;
+use vulkanalia::vk::{self, DeviceV1_3};
 
 use vulkanalia::prelude::v1_3::*;
 
@@ -81,9 +83,9 @@ pub struct AttachmentDescription<'lt> {
 // everything is a a pointer to be able to compare them later
 pub struct SubpassDescription<'lt> {
     pub pipes: &'lt mut [&'lt mut RasterPipe],
-    pub a_input: &'lt [Option<&'lt Ring<Image>>],    // Input images for the subpass
-    pub a_color: &'lt [Option<&'lt Ring<Image>>],    // Color images for the subpass
-    pub a_depth: Option<&'lt Ring<Image>>,           // Depth image for the subpass
+    pub a_input: &'lt [Option<&'lt Ring<Image>>], // Input images for the subpass
+    pub a_color: &'lt [Option<&'lt Ring<Image>>], // Color images for the subpass
+    pub a_depth: Option<&'lt Ring<Image>>,        // Depth image for the subpass
 }
 
 // Structure for SubpassAttachmentRefs
@@ -98,10 +100,10 @@ pub struct SubpassAttachmentRefs {
 // Enum for RelativeDescriptorPos (relative descriptor positions)
 #[derive(Clone, Copy, Debug)]
 pub enum RelativeDescriptorPos {
-    NotPresented,     // What?
-    Previous, // Relative Descriptor position previous - for accumulators
-    Current,  // Relative Descriptor position matching - common CPU-paired
-    First,    // Relative Descriptor position first - for GPU-only
+    NotPresented, // What?
+    Previous,     // Relative Descriptor position previous - for accumulators
+    Current,      // Relative Descriptor position matching - common CPU-paired
+    First,        // Relative Descriptor position first - for GPU-only
 }
 
 // Structure for ShaderStage
@@ -124,7 +126,7 @@ pub struct DescriptorInfo {
     pub images: Option<Ring<Image>>,   // Option ring of Images
     pub image_sampler: vk::Sampler,
     pub image_layout: vk::ImageLayout, // Image layout for use (not current)
-    pub specified_stages: vk::ShaderStageFlags,  // Shader stages
+    pub specified_stages: vk::ShaderStageFlags, // Shader stages
 }
 impl Default for DescriptorInfo {
     fn default() -> Self {
@@ -180,26 +182,36 @@ impl Renderer {
             .map(|(i, info)| {
                 macro_rules! make_descriptor_type {
                     ($name:ident) => {
-                            self.descriptor_counter.$name += 1
+                        self.descriptor_counter.$name += 1
                     };
                 }
                 match info.descriptor_type {
                     vk::DescriptorType::SAMPLER => make_descriptor_type!(SAMPLER),
-                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER => make_descriptor_type!(COMBINED_IMAGE_SAMPLER),
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER => {
+                        make_descriptor_type!(COMBINED_IMAGE_SAMPLER)
+                    }
                     vk::DescriptorType::SAMPLED_IMAGE => make_descriptor_type!(SAMPLED_IMAGE),
                     vk::DescriptorType::STORAGE_IMAGE => make_descriptor_type!(STORAGE_IMAGE),
-                    vk::DescriptorType::UNIFORM_TEXEL_BUFFER => make_descriptor_type!(UNIFORM_TEXEL_BUFFER),
-                    vk::DescriptorType::STORAGE_TEXEL_BUFFER => make_descriptor_type!(STORAGE_TEXEL_BUFFER),
+                    vk::DescriptorType::UNIFORM_TEXEL_BUFFER => {
+                        make_descriptor_type!(UNIFORM_TEXEL_BUFFER)
+                    }
+                    vk::DescriptorType::STORAGE_TEXEL_BUFFER => {
+                        make_descriptor_type!(STORAGE_TEXEL_BUFFER)
+                    }
                     vk::DescriptorType::UNIFORM_BUFFER => make_descriptor_type!(UNIFORM_BUFFER),
                     vk::DescriptorType::STORAGE_BUFFER => make_descriptor_type!(STORAGE_BUFFER),
-                    vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC => make_descriptor_type!(UNIFORM_BUFFER_DYNAMIC),
-                    vk::DescriptorType::STORAGE_BUFFER_DYNAMIC => make_descriptor_type!(STORAGE_BUFFER_DYNAMIC),
+                    vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC => {
+                        make_descriptor_type!(UNIFORM_BUFFER_DYNAMIC)
+                    }
+                    vk::DescriptorType::STORAGE_BUFFER_DYNAMIC => {
+                        make_descriptor_type!(STORAGE_BUFFER_DYNAMIC)
+                    }
                     vk::DescriptorType::INPUT_ATTACHMENT => make_descriptor_type!(INPUT_ATTACHMENT),
                     _ => {
                         panic!("Unknown descriptor type");
                     }
                 }
-                
+
                 vk::DescriptorSetLayoutBinding {
                     binding: i as u32,
                     descriptor_type: info.descriptor_type,
@@ -207,8 +219,7 @@ impl Renderer {
                     stage_flags: info.stages,
                     ..Default::default()
                 }
-            }
-            )
+            })
             .collect();
 
         let layout_info = vk::DescriptorSetLayoutCreateInfo {
@@ -218,11 +229,13 @@ impl Renderer {
             bindings: bindings.as_ptr(),
             ..Default::default()
         };
-        
-        // actually create layout and write it to ptr 
-        *layout = unsafe { self.device
-            .create_descriptor_set_layout(&layout_info, None)
-            .expect("Failed to create descriptor set layout") };
+
+        // actually create layout and write it to ptr
+        *layout = unsafe {
+            self.device
+                .create_descriptor_set_layout(&layout_info, None)
+                .expect("Failed to create descriptor set layout")
+        };
     }
 
     pub unsafe fn create_descriptor_pool(&self) -> Result<vk::DescriptorPool> {
@@ -254,12 +267,11 @@ impl Renderer {
             s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
             pool_size_count: pool_sizes.len() as u32,
             pool_sizes: pool_sizes.as_ptr(),
-            max_sets: self.descriptor_sets_count * self.settings.fif as u32,  
+            max_sets: self.descriptor_sets_count * self.settings.fif as u32,
             ..Default::default()
         };
 
-        Ok(self.device
-            .create_descriptor_pool(&pool_info, None)?)
+        Ok(self.device.create_descriptor_pool(&pool_info, None)?)
     }
 
     pub unsafe fn allocate_descriptor(
@@ -267,8 +279,8 @@ impl Renderer {
         // sets: &mut Vec<vk::DescriptorSet>,
         layout: vk::DescriptorSetLayout,
         pool: vk::DescriptorPool,
-        count: usize, ) -> Ring<vk::DescriptorSet> 
-    {
+        count: usize,
+    ) -> Ring<vk::DescriptorSet> {
         let layouts = vec![layout; count];
         let alloc_info = vk::DescriptorSetAllocateInfo {
             s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -280,21 +292,22 @@ impl Renderer {
 
         let mut ring = Ring::new(count, vk::DescriptorSet::null());
         // return
-        let vec = device.allocate_descriptor_sets(&alloc_info)
-              .expect("Failed to allocate descriptor sets");
-        for (i,v) in vec.iter().enumerate() {
-            ring[i] = *v;            
+        let vec = device
+            .allocate_descriptor_sets(&alloc_info)
+            .expect("Failed to allocate descriptor sets");
+        for (i, v) in vec.iter().enumerate() {
+            ring[i] = *v;
         }
         return ring;
     }
-    
+
     // Tell the LumalRenderer that such descriptor will be setup
     // basically counts needed resources to then allocate them
     pub fn anounce_descriptor_setup(
         &mut self,
-        dset_layout: & mut vk::DescriptorSetLayout,
+        dset_layout: &mut vk::DescriptorSetLayout,
         descriptor_sets: &mut Ring<vk::DescriptorSet>, // Ring to setup into (some setup happens immediately on anounce)
-        descriptions: &[DescriptorInfo], 
+        descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
     ) {
@@ -311,15 +324,14 @@ impl Renderer {
                 })
                 .collect();
             unsafe {
-                // actually create layout and write it to ptr 
+                // actually create layout and write it to ptr
                 self.create_descriptor_set_layout(&descriptor_infos, dset_layout, create_flags);
             }
         }
 
-        self.descriptor_sets_count += ((MAX_FRAMES_IN_FLIGHT*1) as u32); // cuase dset per fif
+        self.descriptor_sets_count += ((MAX_FRAMES_IN_FLIGHT * 1) as u32); // cuase dset per fif
     }
 }
-
 
 impl Renderer {
     // anounce is just a request, this is an actual logic
@@ -335,21 +347,23 @@ impl Renderer {
         *descriptor_sets = Ring::new(MAX_FRAMES_IN_FLIGHT, vk::DescriptorSet::null());
         let dset_layouts = vec![*dset_layout; MAX_FRAMES_IN_FLIGHT];
         for frame_i in 0..MAX_FRAMES_IN_FLIGHT {
-            descriptor_sets[frame_i] = device.allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
-                s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
-                descriptor_pool: *descriptor_pool,
-                descriptor_set_count: MAX_FRAMES_IN_FLIGHT as u32,
-                set_layouts: dset_layouts.as_ptr(),
-                next: null(),
-            }).unwrap()[0];
+            descriptor_sets[frame_i] = device
+                .allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
+                    s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+                    descriptor_pool: *descriptor_pool,
+                    descriptor_set_count: MAX_FRAMES_IN_FLIGHT as u32,
+                    set_layouts: dset_layouts.as_ptr(),
+                    next: null(),
+                })
+                .unwrap()[0];
         }
         assert!(descriptor_sets.len() == MAX_FRAMES_IN_FLIGHT);
         for frame_i in 0..descriptor_sets.len() {
-            let previous_frame_i = 
-                if frame_i == 0 
-                    {settings.fif - 1} 
-                else 
-                    {frame_i - 1};
+            let previous_frame_i = if frame_i == 0 {
+                settings.fif - 1
+            } else {
+                frame_i - 1
+            };
 
             let mut image_infos = vec![vk::DescriptorImageInfo::default(); descriptions.len()];
             let mut buffer_infos = vec![vk::DescriptorBufferInfo::default(); descriptions.len()];
@@ -386,7 +400,9 @@ impl Renderer {
                     writes[i].image_info = &image_infos[i];
 
                     assert!(desc.buffers.is_none());
-                    if desc.image_sampler != vk::Sampler::null() && desc.descriptor_type != vk::DescriptorType::COMBINED_IMAGE_SAMPLER {
+                    if desc.image_sampler != vk::Sampler::null()
+                        && desc.descriptor_type != vk::DescriptorType::COMBINED_IMAGE_SAMPLER
+                    {
                         panic!("Descriptor has sampler but type is not for sampler");
                     }
                 } else if let Some(buffers) = &desc.buffers {
@@ -408,15 +424,15 @@ impl Renderer {
     pub unsafe fn flush_descriptor_setup(&mut self) -> Result<()> {
         // (actually) create Vulkan descriptor pool
         self.vulkan_data.descriptor_pool = self.create_descriptor_pool()?;
-    
+
         Ok(())
     }
 
     pub fn acutally_setup_descriptor(
         &mut self,
-        dset_layout: & mut vk::DescriptorSetLayout,
+        dset_layout: &mut vk::DescriptorSetLayout,
         descriptor_sets: &mut Ring<vk::DescriptorSet>, // Ring to setup into
-        descriptions: &[DescriptorInfo], 
+        descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
     ) {
@@ -433,5 +449,4 @@ impl Renderer {
             );
         }
     }
-    
 }

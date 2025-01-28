@@ -1,7 +1,8 @@
 /target
 /.idea 
 /temp.md
-*.spv
+# compiled shaders (SPIR-V). They are not shipped
+*.spv 
 # magicavoxel models. I kinda need them for demos to work on other machines
 # /assets
 # mtg deck. Dont ask.
@@ -18,3 +19,7 @@ analysis.jsoncargo
 /lum/src/internal_renderer/ogt_vox2.rs
 /assets/scene
 /assets/robot.vox
+
+/move.md
+# imgui file created by nvidia nsight 
+/imgui.ini

@@ -1,10 +1,11 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use rayon::ThreadPool;
 use std::thread;
+
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use lum::containers::Multiprocessor;
+use rayon::ThreadPool;
 
 // A dummy function to simulate (no) dispatch work
-// - oh but compiler can just remove all the function calls 
+// - oh but compiler can just remove all the function calls
 // - if it can for some crate, than that is a very good crate. Currently, it cannot
 fn just_function() {}
 
@@ -79,29 +80,35 @@ fn bench_dispatch(c: &mut Criterion) {
     let native_thread_count = thread::available_parallelism().unwrap().get();
     let thread_count = native_thread_count - 2; // 1 for main thread, 1 for os stuff
     let thread_counts = [
-        thread_count, 
+        thread_count,
         // native_thread_count
-        ];
-
+    ];
 
     for &thread_count in &thread_counts {
         let mine_pool = Multiprocessor::new();
-            bench_mine(&mine_pool, thread_count);
-            group.bench_with_input(BenchmarkId::new("mine", thread_count), &thread_count, |b, &tc| {
+        bench_mine(&mine_pool, thread_count);
+        group.bench_with_input(
+            BenchmarkId::new("mine", thread_count),
+            &thread_count,
+            |b, &tc| {
                 b.iter(|| bench_mine(&mine_pool, tc));
-            });
+            },
+        );
         // we have to drop cause my threads are busy waiting and will conflict with rayon
         drop(mine_pool);
 
-        let rayon_pool = rayon::ThreadPoolBuilder::new().num_threads(thread_count).build().unwrap();
-            bench_rayon(&rayon_pool, thread_count);
-            group.bench_with_input(
-                BenchmarkId::new("rayon", thread_count),
-                &thread_count,
-                |b, &tc| {
-                    b.iter(|| bench_rayon(&rayon_pool, tc));
-                },
-            );
+        let rayon_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(thread_count)
+            .build()
+            .unwrap();
+        bench_rayon(&rayon_pool, thread_count);
+        group.bench_with_input(
+            BenchmarkId::new("rayon", thread_count),
+            &thread_count,
+            |b, &tc| {
+                b.iter(|| bench_rayon(&rayon_pool, tc));
+            },
+        );
         // rayon is also probably some kind of busy waiting
         drop(rayon_pool);
     }

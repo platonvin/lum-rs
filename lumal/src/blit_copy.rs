@@ -1,12 +1,10 @@
-
 fn empty_arr<T>() -> &'static [T] {
     &[]
 }
 
+use crate::{Image, Renderer};
 use vk::MemoryBarrier;
 use vulkanalia::prelude::v1_3::*;
-use crate::{Image, Renderer};
-
 
 impl Renderer {
     pub fn copy_whole_image(&self, cmdbuf: vk::CommandBuffer, src: &Image, dst: &Image) {
@@ -56,7 +54,7 @@ impl Renderer {
                 dst_access_mask: vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
                 ..Default::default() // initialize other fields if necessary
             };
-            
+
             self.device.cmd_pipeline_barrier(
                 cmdbuf,
                 vk::PipelineStageFlags::TRANSFER,
@@ -70,7 +68,13 @@ impl Renderer {
     }
 
     // basically copy image into another image (with possible dimension mismatch and thus scaling)
-    pub fn blit_whole_image(&self, cmdbuf: vk::CommandBuffer, src: &Image, dst: &Image, filter: vk::Filter) {
+    pub fn blit_whole_image(
+        &self,
+        cmdbuf: vk::CommandBuffer,
+        src: &Image,
+        dst: &Image,
+        filter: vk::Filter,
+    ) {
         let src_offsets = [
             vk::Offset3D { x: 0, y: 0, z: 0 },
             vk::Offset3D {
@@ -156,7 +160,7 @@ impl Renderer {
     ) -> Option<vk::Format> {
         for &format in candidates {
             let result = unsafe {
-                self.instance.get_physical_device_image_format_properties (
+                self.instance.get_physical_device_image_format_properties(
                     self.vulkan_data.physical_device,
                     format,
                     ty,

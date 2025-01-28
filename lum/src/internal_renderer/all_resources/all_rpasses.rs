@@ -1,5 +1,5 @@
 use internal_renderer::*;
-use lumal::{descriptors::*, Renderer, LumalSettings};
+use lumal::{descriptors::*, LumalSettings, Renderer};
 use vulkanalia::vk::{self, Handle};
 
 use crate::*;
@@ -42,7 +42,7 @@ impl InternalRenderer {
 
         // Second render pass
         println!("creating rpass: gbuffer");
-        
+
         let mut foliage_pipes = vec![];
         for pipe in &mut pipes.raygen_foliage_pipes {
             foliage_pipes.push(pipe);
@@ -109,7 +109,7 @@ impl InternalRenderer {
         );
         assert!(gbuffer_rpass.render_pass != vk::RenderPass::null());
         assert!(pipes.raygen_models_pipe.render_pass != vk::RenderPass::null());
-        
+
         // Third render pass
         println!("creating rpass: shade");
         let shade_rpass = lumal.create_render_pass(

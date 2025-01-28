@@ -1,10 +1,12 @@
+use std::mem::offset_of;
+
 use consts::*;
 use internal_renderer::*;
-use lumal::{descriptors::*, ring::Ring, Renderer, LumalSettings};
-use std::mem::offset_of;
+use lumal::{descriptors::*, ring::Ring, LumalSettings, Renderer};
 use vk::Sampler;
 use vulkanalia::vk::{self, DeviceV1_0, Handle};
 use RelativeDescriptorPos::*;
+
 use crate::*;
 
 // This file could be just a data
@@ -69,7 +71,7 @@ impl InternalRenderer {
                 vk::DescriptorSetLayoutCreateFlags::empty(),
             );
         });
-        
+
         lumal::trace!();
         // (actually) allocate space that is enough for all descriptors
         lumal.flush_descriptor_setup().unwrap();
@@ -117,7 +119,7 @@ impl InternalRenderer {
                 vk::DescriptorSetLayoutCreateFlags::empty(),
             );
         });
-        
+
         lumal::trace!();
 
         lumal.create_raster_pipeline(
@@ -138,7 +140,7 @@ impl InternalRenderer {
             vk::PrimitiveTopology::TRIANGLE_LIST,
             lum_settings.lightmap_extent,
             &[BlendAttachment::NoBlend],
-            std::mem::size_of::<i16vec4>() as u32, //push size
+            std::mem::size_of::<i16vec4>() as u32, // push size
             DepthTesting::DT_ReadWrite,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
@@ -350,7 +352,7 @@ impl InternalRenderer {
                 vk::StencilOpState::default(),
             );
         }
-        
+
         lumal.create_raster_pipeline(
             &mut pipes.diffuse_pipe,
             None,
@@ -695,7 +697,9 @@ impl InternalRenderer {
 
         lumal.destroy_raster_pipe(pipes.raygen_blocks_pipe);
         lumal.destroy_raster_pipe(pipes.raygen_models_pipe);
-        lumal.device.destroy_descriptor_set_layout(pipes.raygen_models_push_layout, None);
+        lumal
+            .device
+            .destroy_descriptor_set_layout(pipes.raygen_models_push_layout, None);
         lumal.destroy_raster_pipe(pipes.raygen_particles_pipe);
         lumal.destroy_raster_pipe(pipes.raygen_water_pipe);
 
@@ -711,20 +715,24 @@ impl InternalRenderer {
         lumal.destroy_raster_pipe(pipes.smoke_pipe);
         lumal.destroy_raster_pipe(pipes.tonemap_pipe);
         // lumal.destroy_raster_pipe(pipes.overlay_pipe);
-        lumal.device.destroy_descriptor_set_layout(pipes.overlay_pipe.set_layout, None);
+        lumal
+            .device
+            .destroy_descriptor_set_layout(pipes.overlay_pipe.set_layout, None);
 
         // lumal.destroy_compute_pipe(&mut pipes.raytrace_pipe);
         lumal.destroy_compute_pipe(&mut pipes.radiance_pipe);
         lumal.destroy_compute_pipe(&mut pipes.map_pipe);
-        lumal.device.destroy_descriptor_set_layout(pipes.map_push_layout, None);
+        lumal
+            .device
+            .destroy_descriptor_set_layout(pipes.map_push_layout, None);
         lumal.destroy_compute_pipe(&mut pipes.update_grass_pipe);
         lumal.destroy_compute_pipe(&mut pipes.update_water_pipe);
-        lumal.destroy_compute_pipe(&mut pipes.gen_perlin2d_pipe); //generate noise for grass
-        lumal.destroy_compute_pipe(&mut pipes.gen_perlin3d_pipe); //generate noise for grass
+        lumal.destroy_compute_pipe(&mut pipes.gen_perlin2d_pipe); // generate noise for grass
+        lumal.destroy_compute_pipe(&mut pipes.gen_perlin3d_pipe); // generate noise for grass
     }
 
     fn do_smth_all_descriptors<Fun>(
-        process: & Fun ,
+        process: &Fun,
         lumal: &mut Renderer,
         buffers: &AllBuffers,
         iimages: &AllIndependentImages,
