@@ -4,7 +4,8 @@ use std::sync::Mutex;
 use std::thread;
 use std::thread::JoinHandle;
 
-// Struct representing the thread pool
+// Struct representing the thread pool (aka multiprocessor)
+// Why not rayon? Its too slow. $> cargo bench -p lum --bench threads
 pub struct Multiprocessor {
     num_threads: usize,
     threads: Vec<JoinHandle<()>>,

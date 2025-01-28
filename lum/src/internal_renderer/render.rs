@@ -38,7 +38,7 @@ impl Default for Camera {
             .normalized();
 
         Self {
-            camera_pos: vec3::new(60.0, 0.0, 194.0) - camera_dir * 100.0,
+            camera_pos: vec3::new(60.0, 0.0, 194.0),
             camera_dir,
             camera_transform: mat4::identity(),
             pixels_in_voxel,
@@ -69,26 +69,28 @@ impl Camera {
     fn update_camera(&mut self) {
         let up = vec3::new(0.0, 0.0, 1.0); // Up vector
         self.view_size = self.origin_view_size / self.pixels_in_voxel;
-        let view = mat4::look_at_lh(self.camera_pos, self.camera_pos + self.camera_dir, up);
-        let projection = mat4::orthographic_lh_no(FrustumPlanes {
+        // RIGHT HANDED MATH EVERYWHERE
+        let view = mat4::look_at_rh(self.camera_pos, self.camera_pos + self.camera_dir, up);
+        let projection = mat4::orthographic_rh_no(FrustumPlanes {
             left: -self.view_size.x / 2.0,
             right: self.view_size.x / 2.0,
             bottom: self.view_size.y / 2.0,
-            top: -self.view_size.y / 2.0,
+            top:   -self.view_size.y / 2.0,
             near: -0.0,
             far: 2000.0,
         }); // => *(2000.0/2) for decoding
+        // dbg!(&projection);
         self.camera_transform = projection * view;
-        self.camera_ray_dir_plane = vec3::new(self.camera_dir.x, self.camera_dir.y, 0.0);
-        vec3::normalize(&mut self.camera_ray_dir_plane);
+        self.camera_ray_dir_plane = vec3::new(self.camera_dir.x, self.camera_dir.y, 0.0).normalized();
 
         self.horizline = self
             .camera_ray_dir_plane
             .cross(vec3::new(0.0, 0.0, 1.0))
             .normalized();
+
         self.vertiline = self
-            .horizline
-            .cross(self.camera_dir)
+            .camera_dir
+            .cross(self.horizline)
             .normalized();
     }
 }
@@ -276,6 +278,7 @@ impl InternalRenderer {
     }
 
     pub fn update_radiance(&mut self) {
+        // separation for multiverse
         Self::_update_radiance(self);
     }
     
@@ -441,15 +444,6 @@ impl InternalRenderer {
             shift: i32,
         }
 
-        fn as_u8_slice(push_constant: &PushConstant) -> &[u8] {
-            unsafe {
-                std::slice::from_raw_parts(
-                    (push_constant as *const PushConstant) as *const u8,
-                    mem::size_of::<PushConstant>(),
-                )
-            }
-        }
-
         let push_constant = PushConstant {
             time: self.lumal.frame as i32,
             iters: 0,
@@ -489,9 +483,10 @@ impl InternalRenderer {
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             GENERAL, GENERAL, // Most of images are in GENERAL because:
             // 1. Highly optimized GPU code uses images in multiple ways, which restricts to GENERAL only
-            // 2. When it does not, gained perfomance is negligible compared to the work required to manage layouts
+            // 2. When it does not, gained perfomance is negligible compared to the (my) work required to manage layouts
             // 3. Most popular GPU's dont give a fuck about layouts (NVIDIA)
             // 4. Even AMD did not gain any perfomance in my tests (at some point, i did whole thing with correct layouts and barriers and it was the same perfomance)
+            // 5. anyways, there is still reason to do it, but only when all other optimizations are done
         );
     }
 
@@ -1077,17 +1072,21 @@ impl InternalRenderer {
             timeseed: i32,
         }
 
+        let horizline_scaled = self.camera.horizline * (self.camera.view_size.x / 2.0);
+        let vertiline_scaled = self.camera.vertiline * (self.camera.view_size.y / 2.0);
+
         let buffer_patch = BufferPatch {
             trans_w2s: self.camera.camera_transform,
             campos: vec4::new(self.camera.camera_pos.x, self.camera.camera_pos.y, self.camera.camera_pos.z, 0.0),
             camdir: vec4::new(self.camera.camera_dir.x, self.camera.camera_dir.y, self.camera.camera_dir.z, 0.0),
-            horizline_scaled: vec4::new(self.camera.horizline.x * self.camera.view_size.x / 2.0, 0.0, 0.0, 0.0),
-            vertiline_scaled: vec4::new(self.camera.vertiline.y * self.camera.view_size.y / 2.0, 0.0, 0.0, 0.0),
+            horizline_scaled: vec4::new(horizline_scaled.x, horizline_scaled.y, horizline_scaled.z, 0.0),
+            vertiline_scaled: vec4::new(vertiline_scaled.x, vertiline_scaled.y, vertiline_scaled.z, 0.0),
             global_light_dir: vec4::new(self.light.light_dir.x, self.light.light_dir.y, self.light.light_dir.z, 0.0),
             lightmap_proj: self.light.light_transform,
             size: vec2::new(self.lumal.vulkan_data.swapchain_extent.width as f32, self.lumal.vulkan_data.swapchain_extent.height as f32),
             timeseed: self.lumal.frame as i32,
         };
+        // dbg!(self.lumal.frame);
 
         // sync
         self.lumal.buffer_memory_barrier(

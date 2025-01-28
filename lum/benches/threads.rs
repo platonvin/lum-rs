@@ -5,16 +5,14 @@ use lum::containers::Multiprocessor;
 
 // A dummy function to simulate (no) dispatch work
 // - oh but compiler can just remove all the function calls 
-// - if it can for some crate, than that is a very good crate. Currently, its not
+// - if it can for some crate, than that is a very good crate. Currently, it cannot
 fn just_function() {}
 
-// Mine: reuse the thread pool
 fn bench_mine(pool: &Multiprocessor, thread_count: usize) {
     // mine always dispatches the same amount of threads
     pool.dispatch(thread_count, |_| just_function());
 }
 
-// Rayon: reuse the thread pool
 fn bench_rayon(pool: &ThreadPool, thread_count: usize) {
     pool.scope(|s| {
         for _ in 0..thread_count {
@@ -79,7 +77,7 @@ fn bench_rayon(pool: &ThreadPool, thread_count: usize) {
 fn bench_dispatch(c: &mut Criterion) {
     let mut group = c.benchmark_group("Thread Pool Dispatch");
     let native_thread_count = thread::available_parallelism().unwrap().get();
-    let thread_count = native_thread_count - 2;
+    let thread_count = native_thread_count - 2; // 1 for main thread, 1 for os stuff
     let thread_counts = [
         thread_count, 
         // native_thread_count
@@ -92,6 +90,7 @@ fn bench_dispatch(c: &mut Criterion) {
             group.bench_with_input(BenchmarkId::new("mine", thread_count), &thread_count, |b, &tc| {
                 b.iter(|| bench_mine(&mine_pool, tc));
             });
+        // we have to drop cause my threads are busy waiting and will conflict with rayon
         drop(mine_pool);
 
         let rayon_pool = rayon::ThreadPoolBuilder::new().num_threads(thread_count).build().unwrap();
@@ -103,6 +102,7 @@ fn bench_dispatch(c: &mut Criterion) {
                     b.iter(|| bench_rayon(&rayon_pool, tc));
                 },
             );
+        // rayon is also probably some kind of busy waiting
         drop(rayon_pool);
     }
 

@@ -2,10 +2,6 @@ use vek::Aabb;
 
 use super::{mat4, uvec3, vec3, vec4};
 
-// pub struct AABB {
-//     pub min: vec3,
-//     pub max: vec3,
-// }
 #[allow(non_camel_case_types)]
 pub type fAABB = Aabb<f32>;
 #[allow(non_camel_case_types)]

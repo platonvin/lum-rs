@@ -31,7 +31,7 @@ cargo-features = ["profile-rustflags"]
     opt-level = 3           # "s" is 5 times slower lol. TODO: investigate
     panic = "abort"
     codegen-units = 8
-    lto = "thin"
+    lto = false
     overflow-checks = false # TODO: unchecked math (UB on overflow)
 
 [profile.nsight]
@@ -55,7 +55,7 @@ cargo-features = ["profile-rustflags"]
     strip = "symbols"
 
 # TODO: profile package?
-# TODO: multiverse?
+# TODO: multiverse cfg?
 [profile.distribution]
     inherits = "release"
     opt-level = 3

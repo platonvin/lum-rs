@@ -889,7 +889,7 @@ impl InternalRenderer {
                 ),
                 DescriptorInfo::make_new(
                     COMBINED_IMAGE_SAMPLER,
-                    First,
+                    Current,
                     None,
                     Some(iimages.radiance_cache.clone()),
                     samplers.unnorm_linear,

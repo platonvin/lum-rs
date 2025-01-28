@@ -7,6 +7,9 @@ CPU:
         macros are fine
     C/C++ is fine, but should be build by build.rs
         verify LLVM lto
+
+RIGHT HANDED MATH EVERYWHERE
+
 GPU:
     use glsl
     compile in build time

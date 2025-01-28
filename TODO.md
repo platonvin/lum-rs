@@ -41,3 +41,12 @@ macro-driven pipelines:
     auto format
     auto attributes
     push constants as array of structs
+
+
+magicavoxel parser that does not suck
+    dot_vox is so bad that i literally learned derivatives in less time i spend reading its code and i still have no idea what it does
+
+
+resizing:
+    impl
+    sync problem try changing move() in the end_frame() or current() -> next() in some cases 

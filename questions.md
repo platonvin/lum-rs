@@ -70,3 +70,14 @@ vulkanalia:
                 why renaming then?
         50% chance to use builders
         80% chance to use slices (and 20% chance to use pointers. Im not even angry anymore, im done)
+
+i think there is plenty of people who all need the same lib
+    why dont we cooperate to create the best version of it?
+    like, @i need good magicavoxel loader
+          @i need it too!
+          @lets build it together
+
+Rust does have frustrating linking problems
+    cardo add lib
+    cargo build
+    > fails for different reasons

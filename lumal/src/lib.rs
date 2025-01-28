@@ -10,7 +10,6 @@ pub mod descriptors;
 pub mod ring; // circular Vec
 pub mod blit_copy;
 pub mod pipes;
-pub mod file_reading;
 pub mod rpass;
 pub mod macros;
 pub mod samplers;

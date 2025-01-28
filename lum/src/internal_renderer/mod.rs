@@ -4,6 +4,8 @@ pub mod gen_perlin_noise;
 pub mod render;
 pub mod load;
 pub mod all_resources;
+pub mod ogt_vox;
+// pub mod ogt_vox2;
 
 use anyhow::Result;
 use lumal::{ring::Ring, trace};

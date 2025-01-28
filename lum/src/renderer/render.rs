@@ -113,7 +113,7 @@ impl Renderer {
     }
     
     pub fn load_model(&mut self, path: &str) -> InternalMeshModel {
-        return self.renderer.load_mesh_from_file(path, true, true);
+        return self.renderer.load_mesh_from_file_ogt(path, true, true);
     }
     pub fn unload_model(&mut self, model: InternalMeshModel) {
         self.renderer.free_mesh(model);
@@ -121,7 +121,7 @@ impl Renderer {
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
     pub fn load_block(&mut self, block: BlockID_t, path: &str) {
-        self.renderer.load_block_from_file(block, path);
+        self.renderer.load_block_from_file_ogt(block, path);
     }
 
     // volumetrics can be loaded any time (no context on GPU). But please, load them in the same way as models / foliage
@@ -222,7 +222,7 @@ impl Renderer {
         self.renderer.start_blockify();
             //
         self.renderer.end_blockify();
-        self.renderer.shift_radiance(Default::default());
+        // self.renderer.shift_radiance(Default::default());
         self.renderer.update_radiance();
         self.renderer.updade_grass(Default::default());
         self.renderer.updade_water();
@@ -244,10 +244,10 @@ impl Renderer {
         self.renderer.start_raygen();
         self.renderer.raygen_start_blocks();
 
-        for brr in &self.block_que {
-            let ipos = super::types::ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
-            self.renderer.raygen_block(brr.block, ipos);
-        }
+            for brr in &self.block_que {
+                let ipos = super::types::ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
+                self.renderer.raygen_block(brr.block, ipos);
+            }
         self.renderer.raygen_start_models();
         // self.renderer.raygen_model(&mesh, Default::default());
         self.renderer.update_particles();

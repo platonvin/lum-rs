@@ -101,7 +101,7 @@ fn cpp() {
     // I call it precomputed for optimization
     let sources = [
         "cpp/my_cpp_code.cpp",
-        // "cpp/another_file.cpp"
+        "cpp/ogt_vox.cpp",
     ];
 
     let mut build = cc::Build::new();
@@ -110,21 +110,20 @@ fn cpp() {
         .cpp(true) // not C
         .include("cpp/")
         .flag_if_supported("-std=c++17")
-        // .flag_if_supported("-flto=thin") // TODO: does it work with Rust?
-        .flag_if_supported("-O2");
+        .flag_if_supported("-flto=fat") // TODO: does it work with Rust?
+        .flag_if_supported("-O3");
 
     for source in sources {
         build.file(source);
     }
 
     // Compile into a static library
-    build.compile("my_cpp_code");
+    build.compile("cpp_code");
 
     // I have no fucking idea how to actually get it working LOL
-    // Add environment variables for Rust's linker
-    // println!("cargo:rustc-link-arg=-fuse-ld=lld"); // Use LLVM's linker
-    // println!("cargo:rustc-link-arg=-flto=thin");  // Enable ThinLTO for Rust
+    // its better to control it via .cargo/config.toml
     println!("cargo:rerun-if-changed=cpp/my_cpp_code.cpp");
+    println!("cargo:rerun-if-changed=cpp/ogt_vox.cpp");
 }
 
 fn main() {

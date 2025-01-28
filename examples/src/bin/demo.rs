@@ -76,6 +76,7 @@ impl AppState {
         let meshes = AllMeshes::new(&mut lum, grass);
 
         lum.load_block(1, "assets/dirt.vox");
+        // lum.load_block(1, "assets/black_block.vox");
         lum.load_block(2, "assets/grass.vox");
         lum.load_block(3, "assets/grassNdirt.vox");
         lum.load_block(4, "assets/stone_dirt.vox");
@@ -111,13 +112,16 @@ impl AppState {
         for yy in 0..self.lum.renderer.settings.world_size.y {
         for xx in 0..self.lum.renderer.settings.world_size.x {
             let is_floor = zz <= 1;
-            if is_floor {
+            if zz == 0 {
                 let block = &mut self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
-                // why the hell when i cast it to 16 breaks
-                // reminder math was a mistake
-                let mut bid = rand::random::<u16>() as u16 % 15;
-                // bid = 5;
-                *block = bid as i16;
+                // let mut bid = rand::random::<u16>() as u16 % 15;
+                *block = 1;
+            }
+            if zz == 1 {
+                let block = &mut self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
+                if rand::random::<i32>() % 12 == 0 {
+                    *block = 6;
+                }
             }
         }}}
     }
@@ -155,7 +159,8 @@ fn main() {
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let window_attributes = Window::default_attributes()
         .with_title("Lumal")
-        // .with_maximized(true)
+        .with_maximized(true)
+        // .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
         ;
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();

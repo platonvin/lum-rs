@@ -37,7 +37,7 @@ impl Renderer {
                 vma::AllocationCreateFlags::empty()
             },
             required_flags: if host {
-                vk::MemoryPropertyFlags::HOST_VISIBLE
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT
             } else {
                 vk::MemoryPropertyFlags::empty()
             },

@@ -22,10 +22,6 @@ ivec3 voxel_in_palette(ivec3 relative_voxel_pos, int block_id) {
     int block_x = block_id % BLOCK_PALETTE_SIZE_X;
     int block_y = block_id / BLOCK_PALETTE_SIZE_X;
 
-    // ivec3 remapped_rvp = relative_voxel_pos.xyz;
-    // remapped_rvp.z = 16 - remapped_rvp.z;
-    // remapped_rvp = 16 - remapped_rvp;
-    // return remapped_rvp + ivec3(16*block_x, 16*block_y, 0);
     return relative_voxel_pos + ivec3(16*block_x, 16*block_y, 0); 
 }
 

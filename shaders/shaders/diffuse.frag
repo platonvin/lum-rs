@@ -91,8 +91,9 @@ vec3 sample_radiance(vec3 position, vec3 normal){
 
 vec3 sample_radiance(vec3 position){
     vec3 block_pos = position / 16.0;
-    vec3 sampled_light = textureLod(radianceCache, (((block_pos / vec3(world_size)))), 0).rgb;
-    // vec3 sampled_light = texture(radianceCache, (block_pos / vec3(world_size))).rgb;
+
+    vec3 uv = block_pos / vec3(world_size);
+    vec3 sampled_light = textureLod(radianceCache, uv, 0).rgb;
     return sampled_light;
 }
 
@@ -125,6 +126,7 @@ Material GetMat(in int voxel){
     // mat.transparancy = 1.0 - texelFetch(voxelPalette, ivec2(3,voxel), 0).r;
     mat.emmitance    =       texelFetch(voxelPalette, ivec2(4,voxel), 0).r;
     mat.roughness    =       texelFetch(voxelPalette, ivec2(5,voxel), 0).r;
+
     return mat;
 }
 
@@ -214,7 +216,8 @@ float sample_lightmap(vec3 world_pos, vec3 normal){
     total_light += sample_lightmap_with_shift(0,-1,light_uv,world_depth);
     total_light += sample_lightmap_with_shift(0,1,light_uv,world_depth);
 
-    return ((total_light / 5.0)) * 0.15;
+    // return ((total_light / 5.0)) * 0.15;
+    return 0;
 }
 
 const float COLOR_ENCODE_VALUE = 8.0;
@@ -238,6 +241,7 @@ void main(void){
     const      vec3 stored_normal = load_norm();
 
     vec3 incoming_light = sample_radiance(origin + stored_normal*6.0);
+    // vec3 incoming_light = sample_radiance(origin, stored_normal*6.0);
     float sunlight = sample_lightmap(origin, stored_normal);
 
     final_color = (2.0*incoming_light+stored_mat.emmitance + sunlight) * stored_mat.color;
@@ -247,4 +251,4 @@ void main(void){
     // frame_color = vec4(encode_color(vec3(stored_mat.color)),1);
     // frame_color = vec4(vec3(1),1);
     // frame_color = vec4(encode_color(vec3(1,1,1)),1);
-}
+}   

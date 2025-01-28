@@ -2,7 +2,8 @@
 /.idea 
 /temp.md
 *.spv
-/assets
+# magicavoxel models. I kinda need them for demos to work on other machines
+# /assets
 # mtg deck. Dont ask.
 /temp2.md 
 # perfomance tracing results
@@ -14,3 +15,6 @@ analysis.json
 analysis.jsoncargo
 /tree.txt
 /temp3.md
+/lum/src/internal_renderer/ogt_vox2.rs
+/assets/scene
+/assets/robot.vox
