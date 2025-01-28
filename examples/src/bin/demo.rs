@@ -5,7 +5,7 @@ use lum::{
     internal_renderer::Settings,
     renderer::Renderer,
     types::{
-        u8vec3, vec3, BlockID_t, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel,
+        u8vec3, vec3, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel,
         InternalMeshVolumetric, MeshTransform,
     },
 };
@@ -50,7 +50,7 @@ impl AllMeshes {
             tank_lf_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
             tank_rb_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
             water: lum.load_liquid(69, 42),
-            grass: grass,
+            grass,
             smoke: lum.load_volumetric(1.0, 0.5, u8vec3::new(0, 0, 0)),
         }
     }

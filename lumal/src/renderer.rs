@@ -81,7 +81,7 @@ impl Renderer {
         let submit_info = vk::SubmitInfo::builder()
             .wait_semaphores(&wait_semaphores)
             .wait_dst_stage_mask(&wait_stages)
-            .command_buffers(&command_buffers)
+            .command_buffers(command_buffers)
             .signal_semaphores(&signal_semaphores);
 
         unsafe {

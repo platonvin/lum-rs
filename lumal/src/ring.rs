@@ -33,12 +33,12 @@ impl<T: std::default::Default + Clone> Ring<T> {
 
     /// Returns the current element in the Ring.
     pub fn current(&self) -> &T {
-        return &self.data[self.index];
+        &self.data[self.index]
     }
     pub fn previous(&self) -> &T {
         let index = self.index + self.data.len() - 1;
         let wrapped_index = index % self.data.len();
-        return &self.data[wrapped_index];
+        &self.data[wrapped_index]
     }
 
     /// Mutably access the current element in the Ring.
@@ -87,26 +87,26 @@ impl<T: std::default::Default + Clone> Ring<T> {
     }
 
     pub fn as_mut_ptr(&mut self) -> *mut Ring<T> {
-        return self;
+        self
     }
 
     pub fn as_mut_ref(&self) -> *const () {
-        return self as *const Ring<T> as *const ();
+        self as *const Ring<T> as *const ()
     }
 
     pub fn as_ptr(&self) -> *const () {
-        return self as *const Ring<T> as *const ();
+        self as *const Ring<T> as *const ()
     }
 
     pub fn as_slice(&self) -> &[T] {
-        return self.data.as_slice();
+        self.data.as_slice()
     }
 
     pub fn iter(&self) -> RingIterator<T> {
-        return RingIterator {
+        RingIterator {
             ring: self,
             position: 0,
-        };
+        }
     }
 }
 

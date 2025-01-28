@@ -1,9 +1,4 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::Command,
-    time::SystemTime,
-};
+use std::{fs, path::Path, process::Command, time::SystemTime};
 
 fn add_extension(path: &mut std::path::PathBuf, extension: impl AsRef<std::path::Path>) {
     match path.extension() {

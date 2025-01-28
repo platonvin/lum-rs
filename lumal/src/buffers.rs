@@ -65,7 +65,7 @@ impl Renderer {
         Buffer {
             buffer: vk_buffer,
             allocation,
-            mapped: mapped,
+            mapped,
         }
     }
 
@@ -124,7 +124,7 @@ impl Renderer {
         buffer_usage: vk::BufferUsageFlags,
     ) -> Buffer {
         let count = elements.len();
-        let size = count * std::mem::size_of::<T>();
+        let size = std::mem::size_of_val(elements);
         let buffer = self.create_buffer(
             buffer_usage,
             size,

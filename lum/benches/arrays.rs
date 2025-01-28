@@ -38,7 +38,7 @@ fn blur_array3d(src: &Array3D<u8>, radius: usize) -> Array3D<u16> {
         }
     }
 
-    return result;
+    result
 }
 
 fn blur_zarray3d(src: &ZArray3D<u8>, radius: usize) -> ZArray3D<u16> {
@@ -59,9 +59,9 @@ fn blur_zarray3d(src: &ZArray3D<u8>, radius: usize) -> ZArray3D<u16> {
                             //      sum += value as u16;
                             //     count += 1;
                             // }
-                            let nx = x as isize + dx;
-                            let ny = y as isize + dy;
-                            let nz = z as isize + dz;
+                            let nx = x + dx;
+                            let ny = y + dy;
+                            let nz = z + dz;
 
                             if nx >= 0
                                 && nx < x_size as isize
@@ -89,7 +89,7 @@ fn blur_zarray3d(src: &ZArray3D<u8>, radius: usize) -> ZArray3D<u16> {
         }
     }
 
-    return result;
+    result
 }
 
 fn benchmark_blur(c: &mut Criterion) {

@@ -118,7 +118,7 @@ pub struct RasterPipe {
 }
 impl RasterPipe {
     pub fn as_mut_ptr(&self) -> *mut RasterPipe {
-        return self as *const RasterPipe as *mut RasterPipe;
+        self as *const RasterPipe as *mut RasterPipe
     }
 
     // fn as_mut(&self) -> &mut RasterPipe {
@@ -231,7 +231,7 @@ pub struct LumalSettings {
 }
 impl LumalSettings {
     pub fn create_default() -> LumalSettings {
-        return LumalSettings {
+        LumalSettings {
             timestamp_count: 0,
             fif: MAX_FRAMES_IN_FLIGHT,
             vsync: true,
@@ -245,12 +245,12 @@ impl LumalSettings {
             // instance_layers: vec![],
             // instance_extensions: vec![],
             // device_extensions: vec![],
-        };
+        }
     }
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DescriptorCounter {
     pub COMBINED_IMAGE_SAMPLER: u32,
     pub INPUT_ATTACHMENT: u32,
@@ -263,24 +263,6 @@ pub struct DescriptorCounter {
     pub UNIFORM_BUFFER: u32,
     pub UNIFORM_BUFFER_DYNAMIC: u32,
     pub UNIFORM_TEXEL_BUFFER: u32,
-}
-
-impl Default for DescriptorCounter {
-    fn default() -> DescriptorCounter {
-        return DescriptorCounter {
-            COMBINED_IMAGE_SAMPLER: 0,
-            INPUT_ATTACHMENT: 0,
-            SAMPLED_IMAGE: 0,
-            SAMPLER: 0,
-            STORAGE_BUFFER: 0,
-            STORAGE_BUFFER_DYNAMIC: 0,
-            STORAGE_IMAGE: 0,
-            STORAGE_TEXEL_BUFFER: 0,
-            UNIFORM_BUFFER: 0,
-            UNIFORM_BUFFER_DYNAMIC: 0,
-            UNIFORM_TEXEL_BUFFER: 0,
-        };
-    }
 }
 
 // TODO: not copy? or Copy image?
@@ -338,7 +320,7 @@ impl Renderer {
         unsafe {
             let loader = LibloadingLoader::new(LIBRARY)?;
             let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
-            let instance = Renderer::create_instance(&window, &entry, &mut vulkan_data)?;
+            let instance = Renderer::create_instance(window, &entry, &mut vulkan_data)?;
             vulkan_data.surface = vulkanalia::window::create_surface(&instance, &window, &window)?;
             pick_physical_device(&instance, &mut vulkan_data)?;
             let device = create_logical_device(&entry, &instance, &mut vulkan_data)?;
@@ -347,7 +329,7 @@ impl Renderer {
                 vma::AllocatorOptions::new(&instance, &device, vulkan_data.physical_device);
             let allocator = vma::Allocator::new(&allocator_options)?;
 
-            create_swapchain(&window, &instance, &device, &mut vulkan_data)?;
+            create_swapchain(window, &instance, &device, &mut vulkan_data)?;
             create_swapchain_image_views(&device, &mut vulkan_data)?;
             // these are handled by downstream user. Makes no sense to hardcode pipes in renderer
             // example.create_render_pass(&device, &mut data)?;
@@ -599,17 +581,14 @@ impl Renderer {
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(MAX_FRAMES_IN_FLIGHT as u32);
 
-        let command_buffers =
-            Ring::from_vec(unsafe { self.device.allocate_command_buffers(&info).unwrap() });
-
-        return command_buffers;
+        Ring::from_vec(unsafe { self.device.allocate_command_buffers(&info).unwrap() })
     }
 
     pub fn destroy_command_buffer(&self, compute_command_buffers: &Ring<vk::CommandBuffer>) {
         unsafe {
             self.device.free_command_buffers(
                 self.vulkan_data.command_pool,
-                &compute_command_buffers.as_slice(),
+                compute_command_buffers.as_slice(),
             )
         };
     }
@@ -755,7 +734,7 @@ impl Renderer {
 
     // The only use i can imagine for this is the indented one - freing resources
     pub fn process_deletion_queues_untill_all_done(&mut self) {
-        while self.buffer_deletion_queue.len() > 0 || self.image_deletion_queue.len() > 0 {
+        while !self.buffer_deletion_queue.is_empty() || !self.image_deletion_queue.is_empty() {
             self.process_deletion_queues();
         }
     }
@@ -817,7 +796,7 @@ extern "system" fn debug_callback(
     //     println!("({:?}) {}", type_, message);
     // }
 
-    return vk::FALSE;
+    vk::FALSE
 }
 
 //================================================

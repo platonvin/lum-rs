@@ -152,12 +152,12 @@ impl DescriptorInfo {
         stages: vk::ShaderStageFlags,  // Shader stages
     ) -> Self {
         Self {
-            descriptor_type: descriptor_type,
+            descriptor_type,
             relative_pos,
             buffers,
             images,
             image_sampler,
-            image_layout: image_layout,
+            image_layout,
             specified_stages: stages,
         }
     }
@@ -298,7 +298,7 @@ impl Renderer {
         for (i, v) in vec.iter().enumerate() {
             ring[i] = *v;
         }
-        return ring;
+        ring
     }
 
     // Tell the LumalRenderer that such descriptor will be setup
@@ -329,7 +329,7 @@ impl Renderer {
             }
         }
 
-        self.descriptor_sets_count += ((MAX_FRAMES_IN_FLIGHT * 1) as u32); // cuase dset per fif
+        self.descriptor_sets_count += (MAX_FRAMES_IN_FLIGHT as u32); // cuase dset per fif
     }
 }
 
@@ -345,7 +345,7 @@ impl Renderer {
         stages: vk::ShaderStageFlags,
     ) {
         *descriptor_sets = Ring::new(MAX_FRAMES_IN_FLIGHT, vk::DescriptorSet::null());
-        let dset_layouts = vec![*dset_layout; MAX_FRAMES_IN_FLIGHT];
+        let dset_layouts = [*dset_layout; MAX_FRAMES_IN_FLIGHT];
         for frame_i in 0..MAX_FRAMES_IN_FLIGHT {
             descriptor_sets[frame_i] = device
                 .allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {

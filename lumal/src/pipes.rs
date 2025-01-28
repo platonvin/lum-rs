@@ -368,7 +368,7 @@ impl Renderer {
                 || depth_test == DepthTesting::DT_ReadWrite) as u32,
             depth_write_enable: (depth_test == DepthTesting::DT_Write
                 || depth_test == DepthTesting::DT_ReadWrite) as u32,
-            depth_compare_op: depth_compare_op,
+            depth_compare_op,
             depth_bounds_test_enable: vk::FALSE,
             stencil_test_enable: !Self::stencil_is_empty(stencil) as u32,
             front: stencil,

@@ -16,7 +16,7 @@ use vulkanalia::prelude::v1_3::*;
 impl Renderer {
     pub fn destroy_render_pass(&mut self, rpass: &mut RenderPass) {
         assert!(rpass.render_pass != vk::RenderPass::null());
-        assert!(rpass.framebuffers.len() != 0);
+        assert!(!rpass.framebuffers.is_empty());
         for framebuffer in rpass.framebuffers.into_iter() {
             assert!(*framebuffer != vk::Framebuffer::null());
             unsafe {
@@ -200,7 +200,7 @@ impl Renderer {
         );
         trace!();
 
-        return rpass;
+        rpass
     }
 
     // Function to create subpass dependencies
@@ -264,7 +264,7 @@ impl Renderer {
         let lcm = imgs4views
             .iter()
             .map(|v| (unsafe { (**v).clone() }).len())
-            .fold(1, |acc, size| num::integer::lcm(acc, size));
+            .fold(1, num::integer::lcm);
         assert!(lcm != 0);
 
         let mut framebuffers = Ring::new(lcm, Framebuffer::default());

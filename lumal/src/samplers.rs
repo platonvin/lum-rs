@@ -8,7 +8,7 @@ use vulkanalia_vma::{self as vma};
 
 impl Renderer {
     pub fn create_sampler(&self, sampler_info: &vk::SamplerCreateInfo) -> Result<vk::Sampler> {
-        let sampler = unsafe { self.device.create_sampler(&sampler_info, None) }?;
+        let sampler = unsafe { self.device.create_sampler(sampler_info, None) }?;
         Ok(sampler)
     }
 
