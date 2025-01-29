@@ -8,7 +8,7 @@ pub mod render;
 // pub mod ogt_vox2;
 
 use anyhow::Result;
-use lumal::{ring::Ring, trace};
+use lumal::{ring::Ring, trace, RasterPipe};
 use render::{Camera, SunLight};
 use vulkanalia::vk::{self, DeviceV1_0, Extent2D};
 use winit::window::Window;
@@ -24,8 +24,8 @@ pub struct Settings {
     lightmap_extent: vk::Extent2D,
 }
 
-impl Settings {
-    pub fn default() -> Settings {
+impl Default for Settings {
+    fn default() -> Settings {
         Settings {
             world_size: uvec3::new(48, 48, 16),
             static_block_palette_size: 15,
@@ -52,24 +52,24 @@ const FRAMES_IN_FLIGHT: usize = 2;
 // groups all Pipes (abstraction on top of Vulkan Pipelines) into one struct
 // most of them are hardcoded, but foliage pipes are optional and partially managed by user
 pub struct AllPipes {
-    lightmap_blocks_pipe: lumal::RasterPipe,
-    lightmap_models_pipe: lumal::RasterPipe,
+    lightmap_blocks_pipe: RasterPipe,
+    lightmap_models_pipe: RasterPipe,
 
-    raygen_blocks_pipe: lumal::RasterPipe,
-    raygen_models_pipe: lumal::RasterPipe,
+    raygen_blocks_pipe: RasterPipe,
+    raygen_models_pipe: RasterPipe,
     raygen_models_push_layout: vk::DescriptorSetLayout,
-    raygen_particles_pipe: lumal::RasterPipe,
-    raygen_water_pipe: lumal::RasterPipe,
-    raygen_foliage_pipes: Vec<lumal::RasterPipe>,
+    raygen_particles_pipe: RasterPipe,
+    raygen_water_pipe: RasterPipe,
+    raygen_foliage_pipes: Vec<RasterPipe>,
 
-    diffuse_pipe: lumal::RasterPipe,
-    ao_pipe: lumal::RasterPipe,
-    fill_stencil_glossy_pipe: lumal::RasterPipe,
-    fill_stencil_smoke_pipe: lumal::RasterPipe,
-    glossy_pipe: lumal::RasterPipe,
-    smoke_pipe: lumal::RasterPipe,
-    tonemap_pipe: lumal::RasterPipe,
-    overlay_pipe: lumal::RasterPipe,
+    diffuse_pipe: RasterPipe,
+    ao_pipe: RasterPipe,
+    fill_stencil_glossy_pipe: RasterPipe,
+    fill_stencil_smoke_pipe: RasterPipe,
+    glossy_pipe: RasterPipe,
+    smoke_pipe: RasterPipe,
+    tonemap_pipe: RasterPipe,
+    overlay_pipe: RasterPipe,
 
     radiance_pipe: lumal::ComputePipe,
     map_pipe: lumal::ComputePipe,
@@ -191,10 +191,10 @@ pub struct InternalRenderer {
     static_block_palette_size: u32,
 
     // ground truth for block references data, without any block allocations (no models)
-    origin_world: Array3D<BlockID_t>,
+    origin_world: Array3D<BlockId>,
     // modified origin world, with some blocks allocated for models
     // for internal use only
-    current_world: Array3D<BlockID_t>,
+    current_world: Array3D<BlockId>,
 
     // just particles. Hardocded.
     particles: Vec<Particle>,
@@ -221,8 +221,8 @@ impl InternalRenderer {
     // Creates Lum::InternalRenderer. You should use Renderer::create() and then .init() instead
     pub unsafe fn create(
         lum_settings: &Settings,
-        window: &mut Window,
-        mut foliage_to_init: Vec<InternalMeshFoliageDesc>,
+        window: &Window,
+        mut foliage_descriptions: Vec<InternalMeshFoliageDesc>,
     ) -> Result<InternalRenderer> {
         my_cpp_function();
 
@@ -258,12 +258,14 @@ impl InternalRenderer {
         let mut independent_images =
             InternalRenderer::create_independent_images(&lumal, lum_settings, &lumal_settings);
         let buffers = InternalRenderer::create_all_buffers(&lumal, lum_settings, &lumal_settings);
-        let samplers =
-            InternalRenderer::create_all_samplers(&lumal, lum_settings, &lumal_settings);
+        let samplers = InternalRenderer::create_all_samplers(&lumal, lum_settings, &lumal_settings);
         let command_buffers =
             InternalRenderer::create_all_command_buffers(&lumal, lum_settings, &lumal_settings);
 
         let mut pipes: AllPipes = AllPipes::default();
+        pipes
+            .raygen_foliage_pipes
+            .resize(foliage_descriptions.len(), RasterPipe::default());
 
         let renderpasses: AllRenderPasses = InternalRenderer::create_all_rpasses(
             &mut lumal,
@@ -284,13 +286,14 @@ impl InternalRenderer {
             &dependent_images,
             &samplers,
             &mut pipes,
+            &foliage_descriptions,
         );
 
         let camera = Camera::default();
         let light = SunLight::default();
         trace!();
 
-        let origin_world = Array3D::<BlockID_t>::new(
+        let origin_world = Array3D::<BlockId>::new(
             lum_settings.world_size.x as usize,
             lum_settings.world_size.y as usize,
             lum_settings.world_size.z as usize,
@@ -329,7 +332,7 @@ impl InternalRenderer {
             ],
             block_copies_queue: vec![],
             block_clear_queue: vec![],
-            foliage_descriptions: vec![],
+            foliage_descriptions: foliage_descriptions,
             block_palette_meshes: vec![
                 Default::default();
                 lum_settings.static_block_palette_size as usize
@@ -351,9 +354,9 @@ impl InternalRenderer {
 
         // TODO: there is something im missing in winit that should make this unnecessary. How did i do it in C++?
         lumal.device.device_wait_idle().unwrap();
-        Self::destroy_independent_images(&mut lumal, &mut self.independent_images);
-        Self::destroy_dependent_images(&mut lumal, &mut self.dependent_images);
-        Self::destroy_all_buffers(&mut lumal, self.buffers);
+        Self::destroy_independent_images(&lumal, &mut self.independent_images);
+        Self::destroy_dependent_images(&lumal, &mut self.dependent_images);
+        Self::destroy_all_buffers(&lumal, self.buffers);
 
         lumal.process_deletion_queues_untill_all_done();
 

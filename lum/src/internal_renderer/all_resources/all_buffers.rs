@@ -61,7 +61,7 @@ impl InternalRenderer {
             (lum_settings.world_size.x as usize)
                 * (lum_settings.world_size.y as usize)
                 * (lum_settings.world_size.z as usize)
-                * mem::size_of::<BlockID_t>(),
+                * mem::size_of::<BlockId>(),
             true,
         );
         AllBuffers {

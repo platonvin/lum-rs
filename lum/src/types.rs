@@ -35,11 +35,11 @@ pub type mat4 = vek::Mat4<f32>;
 pub type quat = vek::quaternion::Quaternion<f32>;
 
 #[allow(non_camel_case_types)]
-pub type BlockID_t = i16;
+pub type BlockId = i16;
 #[allow(non_camel_case_types)]
-pub type MatID_t = u8;
+// Material ID and Voxel are essentially the same thing
+pub type MatId = u8;
 // TODO: enum with empty / non-empty using NonZeroU8
-// #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub type Voxel = u8;
 
 // CPU side structure with actual voxel data but only gpu mesh handler
@@ -63,7 +63,7 @@ pub struct Particle {
     pub pos: vec3,
     pub vel: vec3,
     pub life_time: f32,
-    pub mat_id: MatID_t,
+    pub mat_id: MatId,
 }
 
 #[repr(C)]

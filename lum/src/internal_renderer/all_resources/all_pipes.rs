@@ -22,6 +22,7 @@ impl InternalRenderer {
         dimages: &AllSwapchainDependentImages,
         samplers: &AllSamplers,
         pipes: &mut AllPipes,
+        foliage_descriptions: &[InternalMeshFoliageDesc],
     ) {
         // they are seperate because they are actually secondary layouts - used for descriptor_push
         // this is a big TODO: - get rid of descriptor_push
@@ -128,7 +129,7 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "lightmapBlocks.vert.spv",
+                    src: "lightmapBlocks.vert.spv".to_string(),
                 }, // Fragment shader is not needed
             ],
             &[AttrFormOffs {
@@ -156,7 +157,7 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "lightmapModels.vert.spv",
+                    src: "lightmapModels.vert.spv".to_string(),
                 }, // Fragment shader is not needed
             ],
             &[AttrFormOffs {
@@ -184,11 +185,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "rayGenBlocks.vert.spv",
+                    src: "rayGenBlocks.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "rayGenBlocks.frag.spv",
+                    src: "rayGenBlocks.frag.spv".to_string(),
                 },
             ],
             &[AttrFormOffs {
@@ -216,11 +217,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "rayGenModels.vert.spv",
+                    src: "rayGenModels.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "rayGenModels.frag.spv",
+                    src: "rayGenModels.frag.spv".to_string(),
                 },
             ],
             &[AttrFormOffs {
@@ -248,15 +249,15 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "rayGenParticles.vert.spv",
+                    src: "rayGenParticles.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::GEOMETRY,
-                    src: "rayGenParticles.geom.spv",
+                    src: "rayGenParticles.geom.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "rayGenParticles.frag.spv",
+                    src: "rayGenParticles.frag.spv".to_string(),
                 },
             ],
             &[
@@ -298,11 +299,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "water.vert.spv",
+                    src: "water.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "water.frag.spv",
+                    src: "water.frag.spv".to_string(),
                 },
             ],
             &[],
@@ -321,18 +322,20 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        for foliage in pipes.raygen_foliage_pipes.iter_mut() {
+        for (i, foliage) in pipes.raygen_foliage_pipes.iter_mut().enumerate() {
+            let desc = &foliage_descriptions[i];
+            // let vs = desc.vertex_shader_file.as_str();
             lumal.create_raster_pipeline(
                 foliage,
                 None,
                 &[
                     ShaderStage {
                         stage: vk::ShaderStageFlags::VERTEX,
-                        src: "grass.vert.spv",
+                        src: desc.vertex_shader_file.clone(),
                     },
                     ShaderStage {
                         stage: vk::ShaderStageFlags::FRAGMENT,
-                        src: "grass.frag.spv",
+                        src: "grass.frag.spv".to_string(),
                     },
                 ],
                 &[AttrFormOffs {
@@ -359,11 +362,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv",
+                    src: "fullscreenTriag.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "diffuse.frag.spv",
+                    src: "diffuse.frag.spv".to_string(),
                 },
             ],
             &[],
@@ -390,11 +393,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv",
+                    src: "fullscreenTriag.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "hbao.frag.spv",
+                    src: "hbao.frag.spv".to_string(),
                 },
             ],
             &[],
@@ -419,11 +422,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv",
+                    src: "fullscreenTriag.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "fillStencilGlossy.frag.spv",
+                    src: "fillStencilGlossy.frag.spv".to_string(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -456,11 +459,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fillStencilSmoke.vert.spv",
+                    src: "fillStencilSmoke.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "fillStencilSmoke.frag.spv",
+                    src: "fillStencilSmoke.frag.spv".to_string(),
                 },
             ],
             &[], // Push constants only
@@ -497,11 +500,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv",
+                    src: "fullscreenTriag.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "glossy.frag.spv",
+                    src: "glossy.frag.spv".to_string(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -534,11 +537,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv",
+                    src: "fullscreenTriag.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "smoke.frag.spv",
+                    src: "smoke.frag.spv".to_string(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -571,11 +574,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv",
+                    src: "fullscreenTriag.vert.spv".to_string(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "tonemap.frag.spv",
+                    src: "tonemap.frag.spv".to_string(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -602,11 +605,11 @@ impl InternalRenderer {
         //     &[
         //         ShaderStage {
         //             stage: vk::ShaderStageFlags::VERTEX,
-        //             src: "overlay.vert.spv",
+        //             src: "overlay.vert.spv".to_string(),
         //         },
         //         ShaderStage {
         //             stage: vk::ShaderStageFlags::FRAGMENT,
-        //             src: "overlay.frag.spv",
+        //             src: "overlay.frag.spv".to_string(),
         //         },
         //     ],
         //     &[
@@ -640,7 +643,7 @@ impl InternalRenderer {
         lumal.create_compute_pipeline(
             &mut pipes.radiance_pipe,
             None,
-            "radiance.comp.spv",
+            "radiance.comp.spv".to_string(),
             (std::mem::size_of::<i32>() * 4) as u32,
             vk::PipelineCreateFlags::DISPATCH_BASE,
         );
@@ -649,7 +652,7 @@ impl InternalRenderer {
         lumal.create_compute_pipeline(
             &mut pipes.update_grass_pipe,
             None,
-            "updateGrass.comp.spv",
+            "updateGrass.comp.spv".to_string(),
             (std::mem::size_of::<vec2>() * 2 + std::mem::size_of::<f32>()) as u32,
             vk::PipelineCreateFlags::empty(),
         );
@@ -658,7 +661,7 @@ impl InternalRenderer {
         lumal.create_compute_pipeline(
             &mut pipes.update_water_pipe,
             None,
-            "updateWater.comp.spv",
+            "updateWater.comp.spv".to_string(),
             (std::mem::size_of::<f32>() + std::mem::size_of::<vec2>() * 2) as u32,
             vk::PipelineCreateFlags::empty(),
         );
@@ -667,7 +670,7 @@ impl InternalRenderer {
         lumal.create_compute_pipeline(
             &mut pipes.gen_perlin2d_pipe,
             None,
-            "perlin2.comp.spv",
+            "perlin2.comp.spv".to_string(),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
         );
@@ -676,7 +679,7 @@ impl InternalRenderer {
         lumal.create_compute_pipeline(
             &mut pipes.gen_perlin3d_pipe,
             None,
-            "perlin3.comp.spv",
+            "perlin3.comp.spv".to_string(),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
         );
@@ -685,7 +688,7 @@ impl InternalRenderer {
         lumal.create_compute_pipeline(
             &mut pipes.map_pipe,
             Some(pipes.map_push_layout),
-            "map.comp.spv",
+            "map.comp.spv".to_string(),
             (std::mem::size_of::<mat4>() + std::mem::size_of::<ivec4>()) as u32,
             vk::PipelineCreateFlags::empty(),
         );
@@ -715,16 +718,12 @@ impl InternalRenderer {
         lumal.destroy_raster_pipe(pipes.smoke_pipe);
         lumal.destroy_raster_pipe(pipes.tonemap_pipe);
         // lumal.destroy_raster_pipe(pipes.overlay_pipe);
-        lumal
-            .device
-            .destroy_descriptor_set_layout(pipes.overlay_pipe.set_layout, None);
+        lumal.device.destroy_descriptor_set_layout(pipes.overlay_pipe.set_layout, None);
 
         // lumal.destroy_compute_pipe(&mut pipes.raytrace_pipe);
         lumal.destroy_compute_pipe(&mut pipes.radiance_pipe);
         lumal.destroy_compute_pipe(&mut pipes.map_pipe);
-        lumal
-            .device
-            .destroy_descriptor_set_layout(pipes.map_push_layout, None);
+        lumal.device.destroy_descriptor_set_layout(pipes.map_push_layout, None);
         lumal.destroy_compute_pipe(&mut pipes.update_grass_pipe);
         lumal.destroy_compute_pipe(&mut pipes.update_water_pipe);
         lumal.destroy_compute_pipe(&mut pipes.gen_perlin2d_pipe); // generate noise for grass

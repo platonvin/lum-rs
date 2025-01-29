@@ -560,9 +560,9 @@ namespace ogt {
     };
 
     // internal math/helper utilities
-    static inline uint32_t _vox_max(uint32_t a, uint32_t b) {
-        return (a > b) ? a : b;
-    }
+    // static inline uint32_t _vox_max(uint32_t a, uint32_t b) {
+    //     return (a > b) ? a : b;
+    // }
     static inline uint32_t _vox_min(uint32_t a, uint32_t b) {
         return (a < b) ? a : b;
     }

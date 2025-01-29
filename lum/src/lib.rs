@@ -35,6 +35,19 @@ macro_rules! assert_assume {
 }
 
 #[macro_export]
+macro_rules! assert_unreachable {
+    () => {
+        if cfg!(debug_assertions) {
+            // In debug mode, verify that the code never executes
+            panic!();
+        } else {
+            // In release mode, use assume to hint to the compiler
+            unreachable!();
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! for_zyx {
     // Handle ivec3 argument with a closure
     ($dims:expr, $body:expr) => {

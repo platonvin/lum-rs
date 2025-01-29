@@ -108,7 +108,7 @@ pub enum RelativeDescriptorPos {
 
 // Structure for ShaderStage
 pub struct ShaderStage {
-    pub src: &'static str,           // Source code as a string (raw pointer)
+    pub src: String,                 // Source code as a string (raw pointer)
     pub stage: vk::ShaderStageFlags, // Shader stage flags
 }
 

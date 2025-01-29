@@ -8,7 +8,7 @@
 
 [build]
     rustflags = [
-        # "-C", "target-cpu=native",     # TODO: how to do this in local build and what is local build?
+        "-C", "target-feature=+mmx,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+cx16,+avx,+pclmul",     # TODO: how to do this in local build and what is local build?
         "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
         "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
     ]
@@ -18,7 +18,13 @@
 
 [profile.native.build-override]
     rustflags = [
-        "-C", "target-cpu=native",
+        "-C", "target-feature=+mmx,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+cx16,+avx,+pclmul",
+        "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
+        "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+    ]
+[profile.natsize.build-override]
+    rustflags = [
+        "-C", "target-feature=+mmx,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+cx16,+avx,+pclmul",
         "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
         "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
     ]

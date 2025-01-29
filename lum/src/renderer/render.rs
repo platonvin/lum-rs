@@ -1,45 +1,59 @@
+use std::collections::HashMap;
 
 use winit::window::Window;
 
-use crate::types::{quat, uvec3};
+use crate::{
+    containers::Arena,
+    types::{ivec3, quat, uvec3},
+};
 
 use super::{
     containers::Array3D,
     internal_renderer::InternalRenderer,
     types::{
-        i16vec3, mat4, u8vec3, vec3, vec4, BlockID_t, InternalMeshFoliage,
-        InternalMeshFoliageDesc, InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric,
-        MatID_t, MeshTransform,
+        i16vec3, mat4, u8vec3, vec3, vec4, BlockId, InternalMeshFoliage, InternalMeshFoliageDesc,
+        InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric, MatId, MeshTransform,
     },
 };
 
+// opaque handlers. Done this way for cheap copying and simple lifetime management
+#[derive(Clone, Copy)]
+pub struct MeshModel(usize);
+#[derive(Clone, Copy)]
+pub struct MeshVolumetric(usize);
+#[derive(Clone, Copy)]
+pub struct MeshLiquid(usize);
+#[derive(Clone)]
+// internal foliage mesh is already opaque handle
+pub struct MeshFoliage(InternalMeshFoliage);
+
 pub struct ModelRenderRequest {
     pub cam_dist: f32,
-    pub mesh: InternalMeshModel,
+    pub mesh: MeshModel,
     pub trans: MeshTransform,
 }
 pub struct BlockRenderRequest {
     pub cam_dist: f32,
-    pub block: BlockID_t,
+    pub block: BlockId,
     // snapped to voxel grid
     pub pos: i16vec3,
 }
 pub struct FoliageRenderRequest {
     pub cam_dist: f32,
-    pub mesh: InternalMeshFoliage,
-    // pub pos: i16vec3, // snapped to voxel grid
+    pub mesh: MeshFoliage,
+    //TODO: pub size: vec2
     pub pos: vec3,
 }
 pub struct LiquidRenderRequest {
     pub cam_dist: f32,
-    pub mesh: InternalMeshLiquid,
-    // pub pos: i16vec3, // snapped to voxel grid
+    pub mesh: MeshLiquid,
+    //TODO: pub size: vec2/vec3?
     pub pos: vec3,
 }
 pub struct VolumetricRenderRequest {
     pub cam_dist: f32,
-    pub mesh: InternalMeshVolumetric,
-    // pub pos: i16vec3, // snapped to voxel grid
+    pub mesh: MeshVolumetric,
+    //TODO: pub size: vec3?
     pub pos: vec3,
 }
 
@@ -48,6 +62,16 @@ pub struct VolumetricRenderRequest {
 pub struct PreInitRenderer {
     // renderer: InternalRenderer,
     foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+}
+
+#[derive(Default)]
+struct RendererStorage {
+    // TODO: arena?
+    models: Arena<InternalMeshModel>,
+    volumetrics: Arena<InternalMeshVolumetric>,
+    liquids: Arena<InternalMeshLiquid>,
+    // TODO: do smth about that this is stored inside internal renderer and everything else is stored here
+    // foliages: Arena<InternalMeshFoliage>,
 }
 
 // initialized fully working Renderer that can be used to draw voxels on screen
@@ -60,6 +84,7 @@ pub struct Renderer {
     foliage_que: Vec<FoliageRenderRequest>,
     liquid_que: Vec<LiquidRenderRequest>,
     volumetric_que: Vec<VolumetricRenderRequest>,
+    storage: RendererStorage,
 }
 
 impl PreInitRenderer {
@@ -78,6 +103,7 @@ impl PreInitRenderer {
             foliage_que: vec![],
             liquid_que: vec![],
             volumetric_que: vec![],
+            storage: Default::default(),
         })
     }
 
@@ -95,7 +121,7 @@ impl PreInitRenderer {
         path_to_shader: &str,
         vertices_per_blade: u32,
         density: u32,
-    ) -> InternalMeshFoliage {
+    ) -> MeshFoliage {
         // current vec size is the index of last (which is what we need)
         let index = self.foliage_descriptions.len() as u32;
         // and then we push the one so it is created afterwards (defer into queue)
@@ -105,7 +131,7 @@ impl PreInitRenderer {
             density,
         });
 
-        InternalMeshFoliage { stored_id: index }
+        MeshFoliage(InternalMeshFoliage { stored_id: index })
     }
 }
 
@@ -126,15 +152,18 @@ impl Renderer {
         unsafe { self.renderer.destroy() };
     }
 
-    pub fn load_model(&mut self, path: &str) -> InternalMeshModel {
-        self.renderer.load_mesh_from_file_ogt(path, true, true)
+    pub fn load_model(&mut self, path: &str) -> MeshModel {
+        let model_mesh = self.renderer.load_mesh_from_file_ogt(path, true, true);
+        let index = self.storage.models.allocate(model_mesh).unwrap();
+        MeshModel(index)
     }
-    pub fn unload_model(&mut self, model: InternalMeshModel) {
-        self.renderer.free_mesh(model);
+    pub fn unload_model(&mut self, model: MeshModel) {
+        let model_mesh = self.storage.models.take(model.0).unwrap();
+        self.renderer.free_mesh(model_mesh);
     }
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
-    pub fn load_block(&mut self, block: BlockID_t, path: &str) {
+    pub fn load_block(&mut self, block: BlockId, path: &str) {
         self.renderer.load_block_from_file_ogt(block, path);
     }
 
@@ -145,31 +174,38 @@ impl Renderer {
         max_density: f32,
         dencity_variation: f32,
         color: u8vec3,
-    ) -> InternalMeshVolumetric {
-        InternalMeshVolumetric {
+    ) -> MeshVolumetric {
+        let volumetric_mesh = InternalMeshVolumetric {
             max_density,
             variation: dencity_variation,
             color,
-        }
+        };
+        let index = self.storage.volumetrics.allocate(volumetric_mesh).unwrap();
+        MeshVolumetric(index)
     }
-    pub fn unload_volumetric(&mut self, volumetric: InternalMeshVolumetric) {
-        drop(volumetric);
+    pub fn unload_volumetric(&mut self, volumetric: MeshVolumetric) {
+        let volumetric_mesh = self.storage.volumetrics.take(volumetric.0).unwrap();
+        drop(volumetric_mesh);
     }
 
     // liquids can be loaded any time (no context on GPU). But please, load them in the same way as models / foliage / volumetrics
     // rendered using same shader, mesh is just "uniforms"
-    pub fn load_liquid(&mut self, main_mat: MatID_t, foam_mat: MatID_t) -> InternalMeshLiquid {
-        InternalMeshLiquid {
+    pub fn load_liquid(&mut self, main_mat: MatId, foam_mat: MatId) -> MeshLiquid {
+        let liquid_mesh = InternalMeshLiquid {
             main: main_mat,
             foam: foam_mat,
-        }
+        };
+        let index = self.storage.liquids.allocate(liquid_mesh).unwrap();
+        MeshLiquid(index)
     }
-    pub fn unload_liquid(&mut self, liquid: InternalMeshLiquid) {
-        drop(liquid);
+    pub fn unload_liquid(&mut self, liquid: MeshLiquid) {
+        let liquid_mesh = self.storage.liquids.take(liquid.0).unwrap();
+        drop(liquid_mesh);
     }
 
-    pub fn unload_foliage(&mut self, foliage: InternalMeshFoliage) {
-        drop(foliage);
+    pub fn unload_foliage(&mut self, foliage: MeshFoliage) {
+        // let foliage_mesh = self.storage.models.take(foliage.0).unwrap();
+        let _ = MeshFoliage;
     }
 
     pub fn calculate_and_sort_by_cam_dist<Type>(rqueue: &mut [Type], camera_transform: mat4)
@@ -295,8 +331,7 @@ impl Renderer {
         for zz in 0..self.renderer.settings.world_size.z {
             for yy in 0..self.renderer.settings.world_size.y {
                 for xx in 0..self.renderer.settings.world_size.x {
-                    let block =
-                        self.renderer.current_world[(xx as usize, yy as usize, zz as usize)];
+                    let block = self.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
                     if block == 0 {
                         continue;
                     }
@@ -321,12 +356,43 @@ impl Renderer {
         }
     }
 
-    pub fn draw_model(&mut self, model: &InternalMeshModel, trans: &MeshTransform) {
-        if self.is_model_visible(&model.size, trans) {
+    pub fn draw_model(&mut self, model: &MeshModel, trans: &MeshTransform) {
+        let model_mesh = self.storage.models.get(model.0).unwrap();
+        if self.is_model_visible(&model_mesh.size, trans) {
             self.model_que.push(ModelRenderRequest {
                 cam_dist: 0.0,
-                mesh: model.clone(),
+                mesh: *model,
                 trans: *trans,
+            });
+        }
+    }
+
+    pub fn draw_foliage(&mut self, foliage: &MeshFoliage, pos: &vec3) {
+        if self.is_block_visible(*pos) {
+            self.foliage_que.push(FoliageRenderRequest {
+                cam_dist: 0.0,
+                mesh: foliage.clone(),
+                pos: *pos,
+            });
+        }
+    }
+
+    pub fn draw_liquid(&mut self, liquid: &MeshLiquid, pos: &vec3) {
+        if self.is_block_visible(*pos) {
+            self.liquid_que.push(LiquidRenderRequest {
+                cam_dist: 0.0,
+                mesh: *liquid,
+                pos: *pos,
+            });
+        }
+    }
+
+    pub fn draw_volumetric(&mut self, volumetric: &MeshVolumetric, pos: &vec3) {
+        if self.is_block_visible(*pos) {
+            self.volumetric_que.push(VolumetricRenderRequest {
+                cam_dist: 0.0,
+                mesh: *volumetric,
+                pos: *pos,
             });
         }
     }
@@ -350,52 +416,55 @@ impl Renderer {
         self.renderer.start_frame();
         self.renderer.start_blockify();
         for mrr in &self.model_que {
-            self.renderer.blockify_mesh(&mrr.mesh, &mrr.trans);
+            let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
+            self.renderer.blockify_mesh(model_mesh, &mrr.trans);
         }
         self.renderer.end_blockify();
-        // self.renderer.shift_radiance(Default::default());
+        self.renderer.shift_radiance(Default::default());
         self.renderer.update_radiance();
         self.renderer.updade_grass(Default::default());
         self.renderer.updade_water();
         self.renderer.exec_copies();
         self.renderer.start_map();
         for mrr in &self.model_que {
-            self.renderer.map_mesh(&mrr.mesh, &mrr.trans);
+            let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
+            self.renderer.map_mesh(model_mesh, &mrr.trans);
         }
         self.renderer.end_map();
         self.renderer.end_compute();
         self.renderer.start_lightmap();
         self.renderer.lightmap_start_blocks();
         for brr in &self.block_que {
-            let ipos =
-                super::types::ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
+            let ipos = ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
             self.renderer.lightmap_block(brr.block, ipos);
         }
         self.renderer.lightmap_start_models();
         for mrr in &self.model_que {
-            self.renderer.lightmap_model(&mrr.mesh, &mrr.trans);
+            let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
+            self.renderer.lightmap_model(model_mesh, &mrr.trans);
         }
         self.renderer.end_lightmap();
         self.renderer.start_raygen();
         self.renderer.raygen_start_blocks();
         for brr in &self.block_que {
-            let ipos =
-                super::types::ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
+            let ipos = ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
             self.renderer.raygen_block(brr.block, ipos);
         }
         self.renderer.raygen_start_models();
         for mrr in &self.model_que {
-            self.renderer.raygen_model(&mrr.mesh, &mrr.trans);
+            let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
+            self.renderer.raygen_model(model_mesh, &mrr.trans);
         }
         self.renderer.update_particles();
         self.renderer.raygen_map_particles();
         self.renderer.raygen_start_grass();
         for frr in &self.foliage_que {
-            self.renderer.raygen_map_grass(&frr.mesh, &frr.pos);
+            self.renderer.raygen_map_grass(&frr.mesh.0, &frr.pos);
         }
         self.renderer.raygen_start_water();
         for lrr in &self.liquid_que {
-            self.renderer.raygen_map_water(&lrr.mesh, &lrr.pos);
+            let liquid_mesh = self.storage.liquids.get(lrr.mesh.0).unwrap();
+            self.renderer.raygen_map_water(liquid_mesh, &lrr.pos);
         }
         self.renderer.end_raygen();
         self.renderer.start_2nd_spass();
@@ -404,7 +473,8 @@ impl Renderer {
         self.renderer.glossy_raygen();
         self.renderer.raygen_start_smoke();
         for vrr in &self.volumetric_que {
-            self.renderer.raygen_map_smoke(&vrr.mesh, &vrr.pos);
+            let volumetric_mesh = self.storage.volumetrics.get(vrr.mesh.0).unwrap();
+            self.renderer.raygen_map_smoke(volumetric_mesh, &vrr.pos);
         }
         self.renderer.glossy();
         self.renderer.smoke();
@@ -413,10 +483,10 @@ impl Renderer {
         self.renderer.end_frame();
     }
 
-    pub fn get_world_blocks(&self) -> &Array3D<BlockID_t> {
+    pub fn get_world_blocks(&self) -> &Array3D<BlockId> {
         &self.renderer.current_world
     }
-    pub fn get_world_blocks_mut(&mut self) -> &mut Array3D<BlockID_t> {
+    pub fn get_world_blocks_mut(&mut self) -> &mut Array3D<BlockId> {
         &mut self.renderer.current_world
     }
 }

@@ -25,13 +25,12 @@ pub fn get_shift(trans: mat4, size: uvec3) -> fAABB {
     ];
 
     // transform the first corner
-    let mut tmin = vec3::new(std::f32::MAX, std::f32::MAX, std::f32::MAX);
-    let mut tmax = vec3::new(std::f32::MIN, std::f32::MIN, std::f32::MIN);
+    let mut tmin = vec3::new(f32::MAX, f32::MAX, f32::MAX);
+    let mut tmax = vec3::new(f32::MIN, f32::MIN, f32::MIN);
 
     // Transform all corners and calculate AABB bounds
     for corner in corners {
-        let transformed = trans * vec4::new(corner.x, corner.y, corner.z, 1.0);
-        let point = vec3::from(transformed);
+        let point = trans * vec4::new(corner.x, corner.y, corner.z, 1.0);
 
         tmin = vec3::partial_min(tmin, point);
         tmax = vec3::partial_max(tmax, point);

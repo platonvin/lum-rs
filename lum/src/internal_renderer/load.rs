@@ -7,7 +7,7 @@ use vulkanalia::vk::{self, Handle};
 use crate::{types::*, *};
 
 fn from_addr<'b, T>(address: *const T) -> &'b T {
-    unsafe { &*(address as *const T) }
+    unsafe { &*address }
 }
 
 impl super::InternalRenderer {
@@ -45,8 +45,7 @@ impl super::InternalRenderer {
         let buffer_size = buffer_count * std::mem::size_of::<Voxel>();
 
         let staging_buffer =
-            self.lumal
-                .create_buffer(vk::BufferUsageFlags::TRANSFER_SRC, buffer_size, true);
+            self.lumal.create_buffer(vk::BufferUsageFlags::TRANSFER_SRC, buffer_size, true);
 
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -95,12 +94,11 @@ impl super::InternalRenderer {
         // dbg!(&self.material_palette);
 
         let staging_buffer =
-            self.lumal
-                .create_buffer(vk::BufferUsageFlags::TRANSFER_SRC, buffer_size, true);
+            self.lumal.create_buffer(vk::BufferUsageFlags::TRANSFER_SRC, buffer_size, true);
 
         unsafe {
             std::ptr::copy_nonoverlapping(
-                self.material_palette.as_ptr() as *const Material,
+                self.material_palette.as_ptr(),
                 staging_buffer.mapped.unwrap() as *mut Material,
                 buffer_count,
             );
@@ -306,9 +304,7 @@ impl super::InternalRenderer {
             for yy in 0..size.y {
                 for zz in 0..size.z {
                     let voxel = unsafe {
-                        *model
-                            .voxel_data
-                            .offset((xx + yy * size.x + zz * size.x * size.y) as isize)
+                        *model.voxel_data.offset((xx + yy * size.x + zz * size.x * size.y) as isize)
                     };
                     // some padding for generator
                     padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] =
@@ -375,7 +371,7 @@ impl super::InternalRenderer {
     }
 
     // does not return a mesh because you should only access it via BlockID_t
-    pub fn load_block_from_file(&mut self, block: BlockID_t, path: &str) {
+    pub fn load_block_from_file(&mut self, block: BlockId, path: &str) {
         let scene = dot_vox::load(path).unwrap();
         assert!(scene.models.len() == 1); // only one model per file supported for now
         let model = &scene.models[0];
@@ -384,7 +380,7 @@ impl super::InternalRenderer {
         self.load_block_from_memory(block, model);
     }
 
-    pub fn load_block_from_file_ogt(&mut self, block: BlockID_t, path: &str) {
+    pub fn load_block_from_file_ogt(&mut self, block: BlockId, path: &str) {
         let scene_data = std::fs::read(path).unwrap();
         let scene = unsafe {
             ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
@@ -399,7 +395,7 @@ impl super::InternalRenderer {
 
     pub fn load_block_from_memory_ogt(
         &mut self,
-        block_id: BlockID_t,
+        block_id: BlockId,
         model: &ogt_vox::ogt_vox_model,
     ) {
         let size = uvec3::new(model.size_x, model.size_y, model.size_z);
@@ -416,9 +412,7 @@ impl super::InternalRenderer {
             for yy in 0..size.y {
                 for zz in 0..size.z {
                     let voxel = unsafe {
-                        *model
-                            .voxel_data
-                            .offset((xx + yy * size.x + zz * size.x * size.y) as isize)
+                        *model.voxel_data.offset((xx + yy * size.x + zz * size.x * size.y) as isize)
                     };
                     // some padding for generator
                     padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] =
@@ -440,7 +434,7 @@ impl super::InternalRenderer {
     }
 
     // does not return a mesh because you should only access it via BlockID_t
-    pub fn load_block_from_memory(&mut self, block: BlockID_t, model: &dot_vox::Model) {
+    pub fn load_block_from_memory(&mut self, block: BlockId, model: &dot_vox::Model) {
         let size = uvec3::new(model.size.x, model.size.y, model.size.z);
 
         let mut array = make_padded_array(&model.voxels, size);

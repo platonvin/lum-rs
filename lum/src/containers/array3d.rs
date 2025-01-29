@@ -44,6 +44,10 @@ where
         }
     }
 
+    pub fn fill(&mut self, value: T) {
+        self.data.fill(value);
+    }
+
     /// Returns the index in the flat data array for given (x, y, z) coordinates.
     pub fn index_internal(&self, x: usize, y: usize, z: usize) -> usize {
         debug_assert!(

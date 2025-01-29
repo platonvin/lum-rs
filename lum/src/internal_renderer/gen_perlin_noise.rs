@@ -11,7 +11,7 @@ impl super::InternalRenderer {
 
         let pipe = &self.pipes.gen_perlin2d_pipe;
 
-        lumal.bind_compute_pipe(&mut cmb, pipe);
+        lumal.bind_compute_pipe(&cmb, pipe);
 
         // bind sets
         // place barriers
@@ -76,7 +76,7 @@ impl super::InternalRenderer {
         // bind sets
         // place barriers
         // dispatch the perlin noise compute shader
-        assert!(!pipe.sets.is_empty());
+        assert!(pipe.sets.len() != 0);
         for frame_i in 0..FRAMES_IN_FLIGHT {
             unsafe {
                 lumal.device.cmd_bind_descriptor_sets(

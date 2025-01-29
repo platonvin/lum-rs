@@ -18,8 +18,7 @@ impl Renderer {
         unsafe {
             self.device.destroy_pipeline(pipe.line, None);
             self.device.destroy_pipeline_layout(pipe.line_layout, None);
-            self.device
-                .destroy_descriptor_set_layout(pipe.set_layout, None);
+            self.device.destroy_descriptor_set_layout(pipe.set_layout, None);
         }
         // reset the whole thing. Its like raii but explicit
         *pipe = ComputePipe {
@@ -36,8 +35,7 @@ impl Renderer {
         unsafe {
             self.device.destroy_pipeline(pipe.line, None);
             self.device.destroy_pipeline_layout(pipe.line_layout, None);
-            self.device
-                .destroy_descriptor_set_layout(pipe.set_layout, None);
+            self.device.destroy_descriptor_set_layout(pipe.set_layout, None);
         }
         // reset the whole thing. Its like raii but explicit
         // *pipe = RasterPipe {
@@ -54,7 +52,7 @@ impl Renderer {
         &self,
         pipe: &mut ComputePipe,
         extra_dynamic_layout: Option<vk::DescriptorSetLayout>,
-        src: &str,
+        src: String,
         push_size: u32,
         create_flags: vk::PipelineCreateFlags,
     ) {
@@ -169,7 +167,7 @@ impl Renderer {
         let pipeline_shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = shader_stages
             .iter()
             .map(|stage| {
-                let resolved_path = Self::resolve_shader_path(PREFIXES, stage.src)
+                let resolved_path = Self::resolve_shader_path(PREFIXES, stage.src.clone())
                     .expect("Failed to resolve shader path");
                 let module = Self::load_shader_module(&self.device, &resolved_path);
                 modules_to_destroy.push(module);
@@ -296,9 +294,7 @@ impl Renderer {
         };
 
         let pipeline_layout = unsafe {
-            self.device
-                .create_pipeline_layout(&pipeline_layout_create_info, None)
-                .unwrap()
+            self.device.create_pipeline_layout(&pipeline_layout_create_info, None).unwrap()
         };
 
         let binding_description = vk::VertexInputBindingDescription {
@@ -453,9 +449,9 @@ impl Renderer {
     }
 
     // Helper function for resolving shader paths
-    fn resolve_shader_path(prefixes: &[&str], file_name: &str) -> Option<std::path::PathBuf> {
+    fn resolve_shader_path(prefixes: &[&str], file_name: String) -> Option<std::path::PathBuf> {
         for prefix in prefixes {
-            let candidate = std::path::Path::new(prefix).join(file_name);
+            let candidate = std::path::Path::new(prefix).join(file_name.as_str());
             if candidate.exists() {
                 return Some(candidate);
             }
@@ -470,8 +466,7 @@ impl Renderer {
 
         let mut file = File::open(path).expect("Failed to open shader file");
         let mut spirv_code = Vec::new();
-        file.read_to_end(&mut spirv_code)
-            .expect("Failed to read shader file");
+        file.read_to_end(&mut spirv_code).expect("Failed to read shader file");
 
         let create_info = vk::ShaderModuleCreateInfo {
             s_type: vk::StructureType::SHADER_MODULE_CREATE_INFO,

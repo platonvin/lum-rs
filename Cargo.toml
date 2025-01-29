@@ -47,12 +47,22 @@ cargo-features = ["profile-rustflags"]
 [profile.native]
     inherits = "release"
     opt-level = 3
+    codegen-units = 1
+    lto = "fat"
+    debug = false
+    panic ="abort"
+    overflow-checks = false
+    strip = "symbols"
+
+[profile.natsize]
+    inherits = "release"
+    opt-level = "s"
     lto = "fat"
     codegen-units = 1
     debug = false
     panic = "abort"
     overflow-checks = false
-    strip = "symbols"
+    strip = true
 
 # TODO: profile package?
 # TODO: multiverse cfg?

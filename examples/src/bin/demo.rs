@@ -1,13 +1,16 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use std::{
+    fs::File,
+    io::{self, Read},
+    path::Path,
+};
+
 use lum::{
     internal_renderer::Settings,
-    renderer::Renderer,
-    types::{
-        u8vec3, vec3, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel,
-        InternalMeshVolumetric, MeshTransform,
-    },
+    renderer::{MeshFoliage, MeshLiquid, MeshModel, MeshVolumetric, Renderer},
+    types::{u8vec3, uvec3, vec3, BlockId, MeshTransform},
 };
 use winit::{
     application::ApplicationHandler,
@@ -19,15 +22,15 @@ use winit::{
 // i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityEnum -> LumMeshModel
 // #[derive(Default)]
 struct AllMeshes {
-    tank_body: InternalMeshModel,
-    tank_head: InternalMeshModel,
-    tank_rf_leg: InternalMeshModel,
-    tank_lb_leg: InternalMeshModel,
-    tank_lf_leg: InternalMeshModel,
-    tank_rb_leg: InternalMeshModel,
-    water: InternalMeshLiquid,
-    grass: InternalMeshFoliage,
-    smoke: InternalMeshVolumetric,
+    tank_body: MeshModel,
+    tank_head: MeshModel,
+    tank_rf_leg: MeshModel,
+    tank_lb_leg: MeshModel,
+    tank_lf_leg: MeshModel,
+    tank_rb_leg: MeshModel,
+    water: MeshLiquid,
+    grass: MeshFoliage,
+    smoke: MeshVolumetric,
 }
 #[derive(Default)]
 struct AllTransforms {
@@ -40,7 +43,7 @@ struct AllTransforms {
 }
 
 impl AllMeshes {
-    fn new(lum: &mut Renderer, grass: InternalMeshFoliage) -> Self {
+    fn new(lum: &mut Renderer, grass: MeshFoliage) -> Self {
         let tank = lum.load_model("assets/tank_body.vox");
         Self {
             tank_body: tank,
@@ -86,7 +89,7 @@ impl AppState {
         let mut pre_init_lum = Renderer::create().unwrap();
         let grass = pre_init_lum.load_foliage(
             // this is compiled by lum. But you should compile such shaders yourself
-            "shaders/compiled/grass.vert.spv",
+            "grass.vert.spv",
             13,
             100,
         );
@@ -127,27 +130,55 @@ impl AppState {
         self.lum.destroy();
     }
 
-    pub fn load_scene(&mut self, scene_file: &str) {
-        for zz in 0..self.lum.renderer.settings.world_size.z {
-            for yy in 0..self.lum.renderer.settings.world_size.y {
-                for xx in 0..self.lum.renderer.settings.world_size.x {
-                    let is_floor = zz <= 1;
-                    if zz == 0 {
-                        let block = &mut self.lum.renderer.origin_world
-                            [(xx as usize, yy as usize, zz as usize)];
-                        // let mut bid = rand::random::<u16>() as u16 % 15;
-                        *block = 1;
-                    }
-                    if zz == 1 {
-                        let block = &mut self.lum.renderer.origin_world
-                            [(xx as usize, yy as usize, zz as usize)];
-                        if rand::random::<i32>() % 12 == 0 {
-                            *block = 6;
-                        }
-                    }
+    pub fn load_scene(&mut self, vox_file: &str) -> io::Result<()> {
+        let buffer = read_file_buffer(vox_file)?; // Read file into Vec<u8>
+
+        if buffer.len() < std::mem::size_of::<uvec3>() {
+            self.lum.renderer.origin_world.fill(0);
+            return Ok(());
+        }
+
+        // Extract world size from header
+        let stored_world_size = uvec3::from_slice(
+            &buffer[..12]
+                .chunks_exact(4)
+                .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
+                .collect::<Vec<_>>()[..],
+        );
+
+        let stored_world = &buffer[12..]; // Skip the header
+
+        // Ensure we don't read past buffer bounds
+        assert!(
+            stored_world.len()
+                >= stored_world_size.x as usize
+                    * stored_world_size.y as usize
+                    * stored_world_size.z as usize
+                    * std::mem::size_of::<BlockId>()
+        );
+
+        let size2read =
+            stored_world_size.map(|v| v.min(self.lum.renderer.origin_world.x_size as u32));
+
+        for zz in 0..size2read.z {
+            for yy in 0..size2read.y {
+                for xx in 0..size2read.x {
+                    let index = (xx
+                        + stored_world_size.x * yy
+                        + stored_world_size.x * stored_world_size.y * zz)
+                        as usize;
+                    let loaded_block = BlockId::from_le_bytes(
+                        stored_world[index * 2..index * 2 + 2].try_into().unwrap(),
+                    );
+
+                    // Clamp and set block
+                    self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)] =
+                        loaded_block.clamp(0, self.lum.renderer.static_block_palette_size as i16);
                 }
             }
         }
+
+        Ok(())
     }
 
     pub fn render(&mut self) {
@@ -156,8 +187,34 @@ impl AppState {
         self.lum.start_frame();
 
         self.lum.draw_world();
-        self.lum
-            .draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
+        self.lum.draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
+
+        // literally procedural grass placement every frame. You probably want to store it as entities in your own structures
+        for xx in 4..20 {
+            for yy in 4..20 {
+                if xx >= 5 && xx < 12 && yy >= 6 && yy < 16 {
+                    continue;
+                };
+                let pos = vec3::new(xx as f32 * 16.0, yy as f32 * 16.0, 16.0);
+                self.lum.draw_foliage(&self.meshes.grass, &pos);
+            }
+        }
+
+        // literally procedural water placement every frame. You probably want to store it as entities in your own structures
+        for xx in 5..12 {
+            for yy in 6..16 {
+                let pos = vec3::new(xx as f32 * 16.0, yy as f32 * 16.0, 14.0);
+                self.lum.draw_liquid(&self.meshes.water, &pos);
+            }
+        }
+
+        // literally procedural smoke placement every frame. You probably want to store it as entities in your own structures
+        for xx in 8..10 {
+            for yy in 10..13 {
+                let pos = vec3::new(xx as f32 * 16.0, yy as f32 * 16.0, 20.0);
+                self.lum.draw_volumetric(&self.meshes.smoke, &pos);
+            }
+        }
 
         self.lum.prepare_frame();
         self.lum.end_frame();
@@ -205,8 +262,16 @@ fn main() {
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();
     let mut state = AppState::new(window);
-    state.load_scene("assets/scene");
+    state.load_scene("assets/scene").unwrap();
     let result = event_loop.run_app(&mut state);
     state.destroy();
     result.unwrap();
+}
+
+/// Reads an entire file into a Vec<u8> (efficiently handles large files)
+fn read_file_buffer<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
+    let mut file = File::open(path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    Ok(buffer)
 }

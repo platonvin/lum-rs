@@ -216,8 +216,8 @@ float sample_lightmap(vec3 world_pos, vec3 normal){
     total_light += sample_lightmap_with_shift(0,-1,light_uv,world_depth);
     total_light += sample_lightmap_with_shift(0,1,light_uv,world_depth);
 
-    // return ((total_light / 5.0)) * 0.15;
-    return 0;
+    return ((total_light / 5.0)) * 0.15;
+    // return 0;
 }
 
 const float COLOR_ENCODE_VALUE = 8.0;

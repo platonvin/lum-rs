@@ -308,7 +308,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn create(settings: &LumalSettings, window: &mut Window) -> Result<Renderer> {
+    pub fn create(settings: &LumalSettings, window: &Window) -> Result<Renderer> {
         println!("Starting app.");
 
         let mut vulkan_data = VulkanData::default();
@@ -406,11 +406,7 @@ impl Renderer {
         // Required by Vulkan SDK on macOS since 1.3.216.
         let flags = if cfg!(target_os = "macos") && entry.version()? >= PORTABILITY_MACOS_VERSION {
             println!("Enabling extensions for macOS portability.");
-            extensions.push(
-                vk::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_EXTENSION
-                    .name
-                    .as_ptr(),
-            );
+            extensions.push(vk::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_EXTENSION.name.as_ptr());
             extensions.push(vk::KHR_PORTABILITY_ENUMERATION_EXTENSION.name.as_ptr());
             vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
         } else {
@@ -446,8 +442,7 @@ impl Renderer {
     }
     /// buffers, images, pipelines - everything created manually should be destroyed manually before this funcall
     pub unsafe fn destroy(&mut self) {
-        self.device
-            .destroy_descriptor_pool(self.vulkan_data.descriptor_pool, None);
+        self.device.destroy_descriptor_pool(self.vulkan_data.descriptor_pool, None);
         self.destroy_swapchain();
         self.destroy_sync_primitives();
         // cause author of vulkanalia decided to hide it behind the drop. WHY
@@ -455,8 +450,7 @@ impl Renderer {
             std::mem::drop(allocator);
         }
         self.device.destroy_device(None);
-        self.instance
-            .destroy_surface_khr(self.vulkan_data.surface, None);
+        self.instance.destroy_surface_khr(self.vulkan_data.surface, None);
         self.instance.destroy_instance(None);
     }
 
@@ -466,20 +460,15 @@ impl Renderer {
             .framebuffers
             .iter()
             .for_each(|f| self.device.destroy_framebuffer(*f, None));
-        self.device
-            .destroy_command_pool(self.vulkan_data.command_pool, None);
-        self.device
-            .destroy_pipeline(self.vulkan_data.pipeline, None);
-        self.device
-            .destroy_pipeline_layout(self.vulkan_data.pipeline_layout, None);
-        self.device
-            .destroy_render_pass(self.vulkan_data.render_pass, None);
+        self.device.destroy_command_pool(self.vulkan_data.command_pool, None);
+        self.device.destroy_pipeline(self.vulkan_data.pipeline, None);
+        self.device.destroy_pipeline_layout(self.vulkan_data.pipeline_layout, None);
+        self.device.destroy_render_pass(self.vulkan_data.render_pass, None);
         self.vulkan_data
             .swapchain_image_views
             .iter()
             .for_each(|v| self.device.destroy_image_view(*v, None));
-        self.device
-            .destroy_swapchain_khr(self.vulkan_data.swapchain, None);
+        self.device.destroy_swapchain_khr(self.vulkan_data.swapchain, None);
     }
 
     unsafe fn destroy_sync_primitives(&self) {
@@ -539,16 +528,13 @@ impl Renderer {
                 )
                 .unwrap();
             // yep unoptimal but you are not supposed to use this at all
-            self.device
-                .queue_wait_idle(self.vulkan_data.graphics_queue)
-                .unwrap();
+            self.device.queue_wait_idle(self.vulkan_data.graphics_queue).unwrap();
         }
     }
 
     pub fn bind_compute_pipe(&self, cmb: &vk::CommandBuffer, pipe: &ComputePipe) {
         unsafe {
-            self.device
-                .cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
+            self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
             self.device.cmd_bind_descriptor_sets(
                 *cmb,
                 vk::PipelineBindPoint::COMPUTE,
@@ -561,8 +547,7 @@ impl Renderer {
     }
     pub fn bind_raster_pipe(&self, cmb: &vk::CommandBuffer, pipe: &RasterPipe) {
         unsafe {
-            self.device
-                .cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
+            self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
             self.device.cmd_bind_descriptor_sets(
                 *cmb,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -691,10 +676,7 @@ impl Renderer {
             } else {
                 if let Some(_mapped_ptr) = deletion.buffer.mapped {
                     unsafe {
-                        self.allocator
-                            .as_ref()
-                            .unwrap()
-                            .unmap_memory(deletion.buffer.allocation)
+                        self.allocator.as_ref().unwrap().unmap_memory(deletion.buffer.allocation)
                     };
                 }
                 unsafe {
@@ -706,8 +688,7 @@ impl Renderer {
             }
             // TODO why shrink_to does not work?
         }
-        self.buffer_deletion_queue
-            .resize(write_index, BufferDeletion::default());
+        self.buffer_deletion_queue.resize(write_index, BufferDeletion::default());
 
         write_index = 0;
         for i in 0..self.image_deletion_queue.len() {
@@ -728,8 +709,7 @@ impl Renderer {
                 unsafe { self.device.destroy_image_view(deletion.image.view, None) };
             }
         }
-        self.image_deletion_queue
-            .resize(write_index, ImageDeletion::default());
+        self.image_deletion_queue.resize(write_index, ImageDeletion::default());
     }
 
     // The only use i can imagine for this is the indented one - freing resources
@@ -904,10 +884,7 @@ unsafe fn create_logical_device(
     };
 
     // Extensions
-    let mut extensions = DEVICE_EXTENSIONS
-        .iter()
-        .map(|n| n.as_ptr())
-        .collect::<Vec<_>>();
+    let mut extensions = DEVICE_EXTENSIONS.iter().map(|n| n.as_ptr()).collect::<Vec<_>>();
 
     // Required by Vulkan SDK on macOS since 1.3.216.
     if cfg!(target_os = "macos") && entry.version()? >= PORTABILITY_MACOS_VERSION {
@@ -1125,12 +1102,9 @@ unsafe fn create_sync_objects(device: &Device, data: &mut VulkanData) -> Result<
     let semaphore_info = vk::SemaphoreCreateInfo::builder();
     let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
 
-    data.image_available_semaphores
-        .resize(MAX_FRAMES_IN_FLIGHT, Default::default());
-    data.render_finished_semaphores
-        .resize(MAX_FRAMES_IN_FLIGHT, Default::default());
-    data.in_flight_fences
-        .resize(MAX_FRAMES_IN_FLIGHT, Default::default());
+    data.image_available_semaphores.resize(MAX_FRAMES_IN_FLIGHT, Default::default());
+    data.render_finished_semaphores.resize(MAX_FRAMES_IN_FLIGHT, Default::default());
+    data.in_flight_fences.resize(MAX_FRAMES_IN_FLIGHT, Default::default());
 
     for i in 0..MAX_FRAMES_IN_FLIGHT {
         data.image_available_semaphores[i] = (device.create_semaphore(&semaphore_info, None)?);

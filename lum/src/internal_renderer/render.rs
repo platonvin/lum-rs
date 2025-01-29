@@ -1,13 +1,13 @@
-use crate::{assert_assume, consts::*, internal_renderer::*};
-use std::mem::{transmute};
+use crate::{assert_assume, consts::*, for_zyx, internal_renderer::*};
+use std::mem::transmute;
 
 use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
 // use multiversion::multiversion;
 use vek::{Clamp, FrustumPlanes};
 use vulkanalia::vk::{
-    AccessFlags, DeviceV1_0, Handle, HasBuilder, KhrPushDescriptorExtension, PipelineStageFlags,
-    ShaderStageFlags,
+    AccessFlags, DeviceV1_0, Handle, HasBuilder, ImageSubresource, ImageSubresourceLayers,
+    KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags,
 };
 
 use crate::{containers::Array3D, types::*};
@@ -36,9 +36,7 @@ impl Default for Camera {
         let pixels_in_voxel = 5.0;
         let camera_dir = vec3::new(0.61, 1.0, -0.8).normalized();
         let camera_ray_dir_plane = vec3::new(camera_dir.x, camera_dir.y, 0.0).normalized();
-        let horizline = camera_ray_dir_plane
-            .cross(vec3::new(0.0, 0.0, 1.0))
-            .normalized();
+        let horizline = camera_ray_dir_plane.cross(vec3::new(0.0, 0.0, 1.0)).normalized();
 
         Self {
             camera_pos: vec3::new(60.0, 0.0, 194.0),
@@ -87,10 +85,7 @@ impl Camera {
         self.camera_ray_dir_plane =
             vec3::new(self.camera_dir.x, self.camera_dir.y, 0.0).normalized();
 
-        self.horizline = self
-            .camera_ray_dir_plane
-            .cross(vec3::new(0.0, 0.0, 1.0))
-            .normalized();
+        self.horizline = self.camera_ray_dir_plane.cross(vec3::new(0.0, 0.0, 1.0)).normalized();
 
         self.vertiline = self.camera_dir.cross(self.horizline).normalized();
     }
@@ -107,17 +102,17 @@ impl SunLight {
         ) / 2.0
             - (1.0 * 16.0 * self.light_dir);
 
-        let view = mat4::look_at_lh(light_pos, light_pos + self.light_dir, up);
+        let view = mat4::look_at_rh(light_pos, light_pos + self.light_dir, up);
         let voxel_in_pixels = 5.0;
         let view_width_in_voxels = 3000.0 / voxel_in_pixels;
         let view_height_in_voxels = 3000.0 / voxel_in_pixels;
-        let projection = mat4::orthographic_lh_no(FrustumPlanes {
+        let projection = mat4::orthographic_rh_no(FrustumPlanes {
             left: -view_width_in_voxels / 2.0,
             right: view_width_in_voxels / 2.0,
             bottom: view_height_in_voxels / 2.0,
             top: -view_height_in_voxels / 2.0,
-            near: -0.0,
-            far: 2000.0,
+            near: -512.0,
+            far: 1024.0,
         });
         self.light_transform = projection * view;
     }
@@ -149,7 +144,7 @@ impl InternalRenderer {
 
     pub fn start_blockify(&mut self) {
         self.block_copies_queue.clear();
-        self.palette_counter = 0;
+        self.palette_counter = self.static_block_palette_size as usize;
 
         // reset the current world to the origin
         self.current_world.copy_data_from(&self.origin_world);
@@ -164,21 +159,20 @@ impl InternalRenderer {
 
     // allocates temp block in palette for every block that intersects with every mesh blockified
     pub fn blockify_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
-        let rotate = vek::Mat4::from(trans.rotation);
-        let shift = vek::Mat4::<f32>::identity().translated_3d(trans.translation);
-        // let
+        let rotate = mat4::from(trans.rotation);
+        let shift = mat4::identity().translated_3d(trans.translation);
         let border_in_voxel = get_shift(shift * rotate, mesh.size);
 
         let mut border = iAABB {
             min: ivec3::new(
-                (border_in_voxel.min.x - 1.0) as i32 / 16,
-                (border_in_voxel.min.y - 1.0) as i32 / 16,
-                (border_in_voxel.min.z - 1.0) as i32 / 16,
+                (border_in_voxel.min.x as i32 - 1) / 16,
+                (border_in_voxel.min.y as i32 - 1) / 16,
+                (border_in_voxel.min.z as i32 - 1) / 16,
             ),
             max: ivec3::new(
-                (border_in_voxel.max.x + 1.0) as i32 / 16,
-                (border_in_voxel.max.y + 1.0) as i32 / 16,
-                (border_in_voxel.max.z + 1.0) as i32 / 16,
+                (border_in_voxel.max.x as i32 + 1) / 16,
+                (border_in_voxel.max.y as i32 + 1) / 16,
+                (border_in_voxel.max.z as i32 + 1) / 16,
             ),
         };
 
@@ -215,46 +209,42 @@ impl InternalRenderer {
                         // do image copy on for non-zero-src blocks. Other things still done for every allocated block
                         // because zeroing is fast
                         if (current_block != 0) {
-                            let mut static_block_copy = vk::ImageCopy::default();
-                            static_block_copy.src_subresource =
-                                vk::ImageSubresourceLayers::builder()
-                                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                                    .base_array_layer(0)
-                                    .layer_count(1)
-                                    .mip_level(0)
-                                    .build();
-                            static_block_copy.dst_subresource =
-                                vk::ImageSubresourceLayers::builder()
-                                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                                    .base_array_layer(0)
-                                    .layer_count(1)
-                                    .mip_level(0)
-                                    .build();
-                            static_block_copy.extent = vk::Extent3D::builder()
-                                .width(16)
-                                .height(16)
-                                .depth(16)
-                                .build();
-                            static_block_copy.src_offset = vk::Offset3D::builder()
-                                .x(src_block.x as i32 * 16)
-                                .y(src_block.y as i32 * 16)
-                                .z(0)
-                                .build();
-                            static_block_copy.dst_offset = vk::Offset3D::builder()
-                                .x(dst_block.x as i32 * 16)
-                                .y(dst_block.y as i32 * 16)
-                                .z(0)
-                                .build();
+                            let mut static_block_copy = vk::ImageCopy {
+                                src_subresource: ImageSubresourceLayers {
+                                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                                    mip_level: 0,
+                                    base_array_layer: 0,
+                                    layer_count: 1,
+                                },
+                                src_offset: vk::Offset3D {
+                                    x: src_block.x as i32 * 16,
+                                    y: src_block.y as i32 * 16,
+                                    z: 0,
+                                },
+                                dst_subresource: ImageSubresourceLayers {
+                                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                                    mip_level: 0,
+                                    base_array_layer: 0,
+                                    layer_count: 1,
+                                },
+                                dst_offset: vk::Offset3D {
+                                    x: dst_block.x as i32 * 16,
+                                    y: dst_block.y as i32 * 16,
+                                    z: 0,
+                                },
+                                extent: vk::Extent3D {
+                                    width: 16,
+                                    height: 16,
+                                    depth: 16,
+                                },
+                            };
                             // TODO: more compact representation
                             self.block_copies_queue.push(static_block_copy);
                         }
 
                         self.current_world[(xx as usize, yy as usize, zz as usize)] =
-                            self.palette_counter as BlockID_t;
+                            self.palette_counter as BlockId;
                         self.palette_counter += 1;
-
-                        // if(current_block == 0) zero_blocks++;
-                        // else just_blocks++;
                     } else {
                         //already new block, just leave it
                     }
@@ -267,11 +257,11 @@ impl InternalRenderer {
         let count_to_copy = self.current_world.dimensions().0
             * self.current_world.dimensions().1
             * self.current_world.dimensions().2;
-        let size_to_copy = count_to_copy * size_of::<BlockID_t>();
+        let size_to_copy = count_to_copy * size_of::<BlockId>();
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.current_world.data.as_ptr(),
-                self.buffers.staging_world.current().mapped.unwrap() as *mut BlockID_t,
+                self.buffers.staging_world.current().mapped.unwrap() as *mut BlockId,
                 count_to_copy, // converts to size automatically
             )
         };
@@ -335,40 +325,32 @@ impl InternalRenderer {
         // just moved it up to help compiler
         let world_size_minus_1 = world_size - ivec4::new(1, 1, 1, 0);
 
-        for zz in 0..self.settings.world_size.z {
-            for yy in 0..self.settings.world_size.y {
-                for xx in 0..self.settings.world_size.x {
-                    // smarter algorithms resulted in less perfomance, at least in cpp
-                    let mut sum_of_neighbours = 0;
+        for_zyx!(self.settings.world_size, |xx, yy, zz| {
+            // smarter algorithms resulted in less perfomance, at least in cpp
+            let mut sum_of_neighbours = 0;
 
-                    for dz in -1_i32..=1 {
-                        for dy in -1_i32..=1 {
-                            for dx in -1_i32..=1 {
-                                let mut xyz0 =
-                                    ivec4::new(xx as i32 + dx, yy as i32 + dy, zz as i32 + dz, 0);
+            for dz in -1_i32..=1 {
+                for dy in -1_i32..=1 {
+                    for dx in -1_i32..=1 {
+                        let mut xyz0 =
+                            ivec4::new(xx as i32 + dx, yy as i32 + dy, zz as i32 + dz, 0);
 
-                                xyz0 = ivec4::clamp(xyz0, ivec4::zero(), world_size_minus_1);
-                                // x = clamp(x, 0, self.settings.world_size.x as i32 - 1);
-                                // y = clamp(y, 0, self.settings.world_size.y as i32 - 1);
-                                // z = clamp(z, 0, self.settings.world_size.z as i32 - 1);
+                        xyz0 = ivec4::clamp(xyz0, ivec4::zero(), world_size_minus_1);
 
-                                // let neighbor_block = self.current_world[(x as usize, y as usize, z as usize)];
-                                let neighbor_block = self.current_world[xyz0];
-                                // we could add one, but it does not matter - we only need presence of neighbours
-                                sum_of_neighbours += neighbor_block;
-                            }
-                        }
-                    }
-
-                    if sum_of_neighbours > 0 {
-                        self.radiance_updates.push(i8vec4::new(
-                            xx as i8, yy as i8, zz as i8, 0, // padding
-                        ));
-                        set[(xx as usize, yy as usize, zz as usize)] = true;
+                        let neighbor_block = self.current_world[xyz0];
+                        // we could add one, but it does not matter - we only need presence of neighbours
+                        sum_of_neighbours += neighbor_block;
                     }
                 }
             }
-        }
+
+            if sum_of_neighbours > 0 {
+                self.radiance_updates.push(i8vec4::new(
+                    xx as i8, yy as i8, zz as i8, 0, // padding
+                ));
+                set[(xx as usize, yy as usize, zz as usize)] = true;
+            }
+        });
 
         // flame::end("push radiance updates");
 
@@ -388,11 +370,7 @@ impl InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.radiance_updates.as_ptr(),
-                self.buffers
-                    .staging_radiance_updates
-                    .current()
-                    .mapped
-                    .unwrap() as *mut i8vec4,
+                self.buffers.staging_radiance_updates.current().mapped.unwrap() as *mut i8vec4,
                 count_to_copy, // converts to size automatically
             )
         };
@@ -444,8 +422,7 @@ impl InternalRenderer {
         );
 
         // binds descriptor sets and pipeline itself
-        self.lumal
-            .bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
+        self.lumal.bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
 
         let magic_number = 2;
 
@@ -722,6 +699,7 @@ impl InternalRenderer {
         );
 
         unsafe {
+            // zero out the current image (zeroing 90% and copying the rest is faster than copying all)
             self.lumal.device.cmd_clear_color_image(
                 *command_buffer,
                 self.independent_images.origin_block_palette.current().image,
@@ -783,10 +761,7 @@ impl InternalRenderer {
         unsafe {
             self.lumal.device.cmd_copy_image(
                 *command_buffer,
-                self.independent_images
-                    .origin_block_palette
-                    .previous()
-                    .image, // we zeroed current, but previous stayed the same, so we grap static palette from there
+                self.independent_images.origin_block_palette.previous().image, // we zeroed current, but previous stayed the same, so we grap static palette from there
                 vk::ImageLayout::GENERAL,
                 self.independent_images.origin_block_palette.current().image,
                 vk::ImageLayout::GENERAL,
@@ -824,10 +799,7 @@ impl InternalRenderer {
             unsafe {
                 self.lumal.device.cmd_copy_image(
                     *command_buffer,
-                    self.independent_images
-                        .origin_block_palette
-                        .previous()
-                        .image,
+                    self.independent_images.origin_block_palette.previous().image,
                     vk::ImageLayout::GENERAL,
                     self.independent_images.origin_block_palette.current().image,
                     vk::ImageLayout::GENERAL,
@@ -910,8 +882,7 @@ impl InternalRenderer {
     pub fn start_map(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
-        self.lumal
-            .bind_compute_pipe(command_buffer, &self.pipes.map_pipe);
+        self.lumal.bind_compute_pipe(command_buffer, &self.pipes.map_pipe);
     }
 
     pub fn map_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
@@ -937,8 +908,8 @@ impl InternalRenderer {
             )
         };
 
-        let rotate = vek::Mat4::from(trans.rotation);
-        let shift = vek::Mat4::<f32>::identity().translated_3d(trans.translation);
+        let rotate = mat4::from(trans.rotation);
+        let shift = mat4::identity().translated_3d(trans.translation);
         let transform = shift * rotate;
         let border_in_voxel = get_shift(shift * rotate, mesh.size);
 
@@ -965,7 +936,7 @@ impl InternalRenderer {
             shift: ivec4,
         }
         let push_constant = PushConstant {
-            trans: transform,
+            trans: transform.inverted(),
             shift: ivec4::new(border.min.x, border.min.y, border.min.z, 0),
         };
 
@@ -1060,24 +1031,19 @@ impl InternalRenderer {
     pub fn lightmap_start_blocks(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.lightmap_blocks_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.lightmap_blocks_pipe);
     }
 
     pub fn lightmap_start_models(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.lightmap_models_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.lightmap_models_pipe);
     }
 
     pub fn end_lightmap(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
-        unsafe {
-            self.lumal
-                .cmd_end_renderpass(command_buffer, &mut self.rpasses.lightmap_rpass)
-        };
+        self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.lightmap_rpass)
     }
 
     pub fn start_raygen(&mut self) {
@@ -1181,15 +1147,14 @@ impl InternalRenderer {
     pub fn raygen_start_blocks(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.raygen_blocks_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.raygen_blocks_pipe);
     }
 
     fn is_face_visible(&self, normal: vec3, camera_dir: vec3) -> bool {
         (normal.dot(camera_dir) < 0.0)
     }
 
-    fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
+    fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockId) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         assert!(block_id > 0);
         let sum = normal.x + normal.y + normal.z;
@@ -1236,7 +1201,7 @@ impl InternalRenderer {
         };
     }
 
-    pub fn raygen_block(&mut self, block_id: BlockID_t, shift: ivec3) {
+    pub fn raygen_block(&mut self, block_id: BlockId, shift: ivec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         let block_mesh = &self.block_palette_meshes[block_id as usize];
@@ -1258,7 +1223,7 @@ impl InternalRenderer {
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
-            block: BlockID_t,
+            block: BlockId,
             shift: i16vec3,
             // inorm: i8vec4, // passed separately
         }
@@ -1302,14 +1267,9 @@ impl InternalRenderer {
 
     pub fn raygen_start_models(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE)
-        };
+        unsafe { self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE) };
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.raygen_models_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.raygen_models_pipe);
     }
 
     fn raygen_model_face(&mut self, normal: vec3, buff: &IndexedVertices) {
@@ -1429,7 +1389,7 @@ impl InternalRenderer {
         // let _ :i64 = 0x0_c001_babe_face; // why did i port this?
     }
 
-    fn lightmap_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
+    fn lightmap_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockId) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
         unsafe {
             self.lumal
@@ -1438,7 +1398,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn lightmap_block(&mut self, block_id: BlockID_t, shift: ivec3) {
+    pub fn lightmap_block(&mut self, block_id: BlockId, shift: ivec3) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         let block_mesh = &self.block_palette_meshes[block_id as usize];
@@ -1618,15 +1578,12 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
         if !self.particles.is_empty() {
             // just for safity
-            self.lumal
-                .bind_raster_pipe(command_buffer, &self.pipes.raygen_particles_pipe);
+            self.lumal.bind_raster_pipe(command_buffer, &self.pipes.raygen_particles_pipe);
             unsafe {
                 self.lumal.device.cmd_bind_vertex_buffers(
                     *command_buffer,
@@ -1644,9 +1601,7 @@ impl InternalRenderer {
     pub fn raygen_start_grass(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
         // self.lumal.bind_raster_pipe(
         //     &command_buffer,
@@ -1656,8 +1611,7 @@ impl InternalRenderer {
 
     pub fn updade_grass(&mut self, wind_direction: vec2) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
-        self.lumal
-            .bind_compute_pipe(command_buffer, &self.pipes.update_grass_pipe);
+        self.lumal.bind_compute_pipe(command_buffer, &self.pipes.update_grass_pipe);
 
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -1706,8 +1660,7 @@ impl InternalRenderer {
 
     pub fn updade_water(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
-        self.lumal
-            .bind_compute_pipe(command_buffer, &self.pipes.update_water_pipe);
+        self.lumal.bind_compute_pipe(command_buffer, &self.pipes.update_water_pipe);
 
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -1808,14 +1761,9 @@ impl InternalRenderer {
     pub fn raygen_start_water(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE)
-        };
+        unsafe { self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE) };
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.raygen_water_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.raygen_water_pipe);
     }
 
     pub fn raygen_map_water(&mut self, water: &InternalMeshLiquid, pos: &vec3) {
@@ -1847,20 +1795,15 @@ impl InternalRenderer {
         let verts_per_water_tape = quality_size * 2 + 2;
         let tapes_per_block = quality_size;
         unsafe {
-            self.lumal.device.cmd_draw(
-                *command_buffer,
-                verts_per_water_tape,
-                tapes_per_block,
-                0,
-                0,
-            )
+            self.lumal
+                .device
+                .cmd_draw(*command_buffer, verts_per_water_tape, tapes_per_block, 0, 0)
         };
     }
 
     pub fn end_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        self.lumal
-            .cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass);
+        self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass);
     }
 
     pub fn start_2nd_spass(&mut self) {
@@ -1961,8 +1904,7 @@ impl InternalRenderer {
     pub fn diffuse(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.diffuse_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.diffuse_pipe);
 
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -2007,13 +1949,10 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.ao_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.ao_pipe);
 
         unsafe {
             // fullscreen triangle
@@ -2025,9 +1964,7 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
         self.lumal
@@ -2043,13 +1980,10 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.fill_stencil_smoke_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.fill_stencil_smoke_pipe);
     }
 
     pub fn raygen_map_smoke(&mut self, smoke: &InternalMeshVolumetric, pos: &vec3) {
@@ -2084,13 +2018,10 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.smoke_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.smoke_pipe);
 
         unsafe {
             // fullscreen triangle
@@ -2102,13 +2033,10 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.glossy_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.glossy_pipe);
 
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -2151,13 +2079,10 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
-            self.lumal
-                .device
-                .cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+            self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
 
-        self.lumal
-            .bind_raster_pipe(command_buffer, &self.pipes.tonemap_pipe);
+        self.lumal.bind_raster_pipe(command_buffer, &self.pipes.tonemap_pipe);
 
         unsafe {
             // fullscreen triangle
@@ -2169,8 +2094,7 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         // Currently, there is no UI because it is getting abstracted away (l0l)
-        self.lumal
-            .cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
+        self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
     }
 
     pub fn end_frame(&mut self) {

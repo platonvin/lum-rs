@@ -45,7 +45,7 @@ struct Material{
     vec3 color;
     float emmitance;
     float roughness;
-    float transparancy;
+    float transparancy; // casually ignoring the fact that i do not have transparency
 };
 
 const uint k = 1103515245U;  // GLIB C
