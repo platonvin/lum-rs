@@ -1794,6 +1794,7 @@ impl InternalRenderer {
         let verts_per_blade = desc.vertices;
         let blade_per_instance = 1; //for triangle strip
         unsafe {
+            #[allow(clippy::manual_div_ceil)]
             self.lumal.device.cmd_draw(
                 *command_buffers,
                 verts_per_blade as u32 * blade_per_instance as u32,
