@@ -254,20 +254,20 @@ impl InternalRenderer {
 
         // section where most important (not init-related) vulkan resources are created. Some of them will be recreated on window resize
         let mut dependent_images =
-            InternalRenderer::create_dependent_images(&lumal, &lum_settings, &lumal_settings);
+            InternalRenderer::create_dependent_images(&lumal, lum_settings, &lumal_settings);
         let mut independent_images =
-            InternalRenderer::create_independent_images(&lumal, &lum_settings, &lumal_settings);
-        let buffers = InternalRenderer::create_all_buffers(&lumal, &lum_settings, &lumal_settings);
+            InternalRenderer::create_independent_images(&lumal, lum_settings, &lumal_settings);
+        let buffers = InternalRenderer::create_all_buffers(&lumal, lum_settings, &lumal_settings);
         let samplers =
-            InternalRenderer::create_all_samplers(&lumal, &lum_settings, &lumal_settings);
+            InternalRenderer::create_all_samplers(&lumal, lum_settings, &lumal_settings);
         let command_buffers =
-            InternalRenderer::create_all_command_buffers(&lumal, &lum_settings, &lumal_settings);
+            InternalRenderer::create_all_command_buffers(&lumal, lum_settings, &lumal_settings);
 
         let mut pipes: AllPipes = AllPipes::default();
 
         let renderpasses: AllRenderPasses = InternalRenderer::create_all_rpasses(
             &mut lumal,
-            &lum_settings,
+            lum_settings,
             &lumal_settings,
             &mut independent_images,
             &mut dependent_images,
@@ -277,7 +277,7 @@ impl InternalRenderer {
 
         InternalRenderer::create_all_pipes(
             &mut lumal,
-            &lum_settings,
+            lum_settings,
             &lumal_settings,
             &buffers,
             &independent_images,
@@ -299,25 +299,25 @@ impl InternalRenderer {
         let current_world = origin_world.clone();
 
         let mut lum = InternalRenderer {
-            lumal: lumal,
+            lumal,
             settings: Settings::default(),
             delta_time: 0.0,
 
             rpasses: renderpasses,
             cmdbufs: command_buffers,
 
-            lightmap_extent: lightmap_extent,
-            pipes: pipes,
-            independent_images: independent_images,
-            dependent_images: dependent_images,
-            buffers: buffers,
-            samplers: samplers,
-            camera: camera,
-            light: light,
+            lightmap_extent,
+            pipes,
+            independent_images,
+            dependent_images,
+            buffers,
+            samplers,
+            camera,
+            light,
             palette_counter: 0,
             static_block_palette_size: lum_settings.static_block_palette_size, /* TODO: remove settings */
-            origin_world: origin_world,
-            current_world: current_world,
+            origin_world,
+            current_world,
             has_palette: false,
             radiance_updates: vec![],
             special_radiance_updates: vec![],
@@ -342,7 +342,7 @@ impl InternalRenderer {
         lum.gen_perlin_2d();
         lum.gen_perlin_3d();
 
-        return Ok(lum);
+        Ok(lum)
     }
 
     /// Destroys our Vulkan app.

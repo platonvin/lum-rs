@@ -1,17 +1,13 @@
-use std::ops::Range;
 
 use winit::window::Window;
 
-use crate::{
-    internal_renderer::load::VoxelForContour,
-    types::{quat, uvec3, InternalMeshBlock},
-};
+use crate::types::{quat, uvec3};
 
 use super::{
     containers::Array3D,
     internal_renderer::InternalRenderer,
     types::{
-        i16vec3, ivec3, mat4, u8vec3, vec3, vec4, BlockID_t, InternalMeshFoliage,
+        i16vec3, mat4, u8vec3, vec3, vec4, BlockID_t, InternalMeshFoliage,
         InternalMeshFoliageDesc, InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric,
         MatID_t, MeshTransform,
     },
@@ -106,10 +102,10 @@ impl PreInitRenderer {
         self.foliage_descriptions.push(InternalMeshFoliageDesc {
             vertex_shader_file: path_to_shader.to_string(),
             vertices: vertices_per_blade,
-            density: density,
+            density,
         });
 
-        return InternalMeshFoliage { stored_id: index };
+        InternalMeshFoliage { stored_id: index }
     }
 }
 
@@ -131,7 +127,7 @@ impl Renderer {
     }
 
     pub fn load_model(&mut self, path: &str) -> InternalMeshModel {
-        return self.renderer.load_mesh_from_file_ogt(path, true, true);
+        self.renderer.load_mesh_from_file_ogt(path, true, true)
     }
     pub fn unload_model(&mut self, model: InternalMeshModel) {
         self.renderer.free_mesh(model);
@@ -150,11 +146,11 @@ impl Renderer {
         dencity_variation: f32,
         color: u8vec3,
     ) -> InternalMeshVolumetric {
-        return InternalMeshVolumetric {
+        InternalMeshVolumetric {
             max_density,
             variation: dencity_variation,
             color,
-        };
+        }
     }
     pub fn unload_volumetric(&mut self, volumetric: InternalMeshVolumetric) {
         drop(volumetric);
@@ -163,10 +159,10 @@ impl Renderer {
     // liquids can be loaded any time (no context on GPU). But please, load them in the same way as models / foliage / volumetrics
     // rendered using same shader, mesh is just "uniforms"
     pub fn load_liquid(&mut self, main_mat: MatID_t, foam_mat: MatID_t) -> InternalMeshLiquid {
-        return InternalMeshLiquid {
+        InternalMeshLiquid {
             main: main_mat,
             foam: foam_mat,
-        };
+        }
     }
     pub fn unload_liquid(&mut self, liquid: InternalMeshLiquid) {
         drop(liquid);
@@ -240,7 +236,7 @@ impl Renderer {
         }
 
         // none corners are in NDC range
-        return false;
+        false
     }
 
     pub fn is_model_visible(&self, size: &uvec3, trans: &MeshTransform) -> bool {
@@ -290,7 +286,7 @@ impl Renderer {
         }
 
         // none corners are in NDC range
-        return false;
+        false
     }
 
     // TODO: calculate distance here vs separate
@@ -319,14 +315,14 @@ impl Renderer {
         if self.is_block_visible(fpos) {
             self.block_que.push(BlockRenderRequest {
                 cam_dist: 0.0,
-                block: block,
+                block,
                 pos: *block_pos,
             });
         }
     }
 
     pub fn draw_model(&mut self, model: &InternalMeshModel, trans: &MeshTransform) {
-        if self.is_model_visible(&model.size, &trans) {
+        if self.is_model_visible(&model.size, trans) {
             self.model_que.push(ModelRenderRequest {
                 cam_dist: 0.0,
                 mesh: model.clone(),
@@ -435,11 +431,11 @@ pub trait GetPos {
 
 impl GetPos for ModelRenderRequest {
     fn get_pos(&self) -> vec3 {
-        return vec3::new(
-            self.trans.translation.x as f32,
-            self.trans.translation.y as f32,
-            self.trans.translation.z as f32,
-        );
+        vec3::new(
+            self.trans.translation.x,
+            self.trans.translation.y,
+            self.trans.translation.z,
+        )
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -447,13 +443,13 @@ impl GetPos for ModelRenderRequest {
     }
 
     fn get_cam_dist(&self) -> f32 {
-        return self.cam_dist;
+        self.cam_dist
     }
 }
 
 impl GetPos for BlockRenderRequest {
     fn get_pos(&self) -> vec3 {
-        return vec3::new(self.pos.x as f32, self.pos.y as f32, self.pos.z as f32);
+        vec3::new(self.pos.x as f32, self.pos.y as f32, self.pos.z as f32)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -461,12 +457,12 @@ impl GetPos for BlockRenderRequest {
     }
 
     fn get_cam_dist(&self) -> f32 {
-        return self.cam_dist;
+        self.cam_dist
     }
 }
 impl GetPos for FoliageRenderRequest {
     fn get_pos(&self) -> vec3 {
-        return vec3::new(self.pos.x as f32, self.pos.y as f32, self.pos.z as f32);
+        vec3::new(self.pos.x, self.pos.y, self.pos.z)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -474,12 +470,12 @@ impl GetPos for FoliageRenderRequest {
     }
 
     fn get_cam_dist(&self) -> f32 {
-        return self.cam_dist;
+        self.cam_dist
     }
 }
 impl GetPos for LiquidRenderRequest {
     fn get_pos(&self) -> vec3 {
-        return vec3::new(self.pos.x as f32, self.pos.y as f32, self.pos.z as f32);
+        vec3::new(self.pos.x, self.pos.y, self.pos.z)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -487,12 +483,12 @@ impl GetPos for LiquidRenderRequest {
     }
 
     fn get_cam_dist(&self) -> f32 {
-        return self.cam_dist;
+        self.cam_dist
     }
 }
 impl GetPos for VolumetricRenderRequest {
     fn get_pos(&self) -> vec3 {
-        return vec3::new(self.pos.x as f32, self.pos.y as f32, self.pos.z as f32);
+        vec3::new(self.pos.x, self.pos.y, self.pos.z)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -500,6 +496,6 @@ impl GetPos for VolumetricRenderRequest {
     }
 
     fn get_cam_dist(&self) -> f32 {
-        return self.cam_dist;
+        self.cam_dist
     }
 }

@@ -1,5 +1,5 @@
 use crate::{assert_assume, consts::*, internal_renderer::*};
-use std::mem::{self, transmute};
+use std::mem::{transmute};
 
 use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
@@ -101,8 +101,8 @@ impl SunLight {
         let horizon = vec3::new(1.0, 0.0, 0.0).normalized();
         let up = vec3::new(0.0, 0.0, 1.0).normalized();
         let light_pos = vec3::new(
-            f32::from((world_size.x * (16 as u32)) as i16),
-            f32::from((world_size.y * (16 as u32)) as i16),
+            f32::from((world_size.x * 16_u32) as i16),
+            f32::from((world_size.y * 16_u32) as i16),
             0.0,
         ) / 2.0
             - (1.0 * 16.0 * self.light_dir);
@@ -210,7 +210,7 @@ impl InternalRenderer {
                         // static
                         //add to copy queue
                         let src_block = self.index_block_xy(current_block as usize);
-                        let dst_block = self.index_block_xy(self.palette_counter as usize);
+                        let dst_block = self.index_block_xy(self.palette_counter);
 
                         // do image copy on for non-zero-src blocks. Other things still done for every allocated block
                         // because zeroing is fast
@@ -376,7 +376,7 @@ impl InternalRenderer {
         for u in &self.special_radiance_updates {
             // if not already updated in loop before, add it to the queue
             if !set[(u.x as usize, u.y as usize, u.z as usize)] {
-                self.radiance_updates.push(u.clone());
+                self.radiance_updates.push(*u);
             }
         }
 
@@ -400,7 +400,7 @@ impl InternalRenderer {
 
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.staging_radiance_updates.current(),
+            self.buffers.staging_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -408,7 +408,7 @@ impl InternalRenderer {
         );
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.gpu_radiance_updates.current(),
+            self.buffers.gpu_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -436,7 +436,7 @@ impl InternalRenderer {
 
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.gpu_radiance_updates.current(),
+            self.buffers.gpu_radiance_updates.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -459,10 +459,10 @@ impl InternalRenderer {
         }
 
         let push_constant = PushConstant {
-            time: self.lumal.frame as i32,
+            time: self.lumal.frame,
             iters: 0,
-            size: magic_number as i32,
-            shift: self.lumal.frame as i32 % magic_number as i32,
+            size: magic_number,
+            shift: self.lumal.frame % magic_number,
         };
 
         unsafe {
@@ -490,7 +490,7 @@ impl InternalRenderer {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.current(),
+            self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -548,9 +548,9 @@ impl InternalRenderer {
         );
 
         let intersection_size = uvec3::new(
-            self.settings.world_size.x - cam_shift.x.abs() as u32,
-            self.settings.world_size.y - cam_shift.y.abs() as u32,
-            self.settings.world_size.z - cam_shift.z.abs() as u32,
+            self.settings.world_size.x - cam_shift.x.unsigned_abs(),
+            self.settings.world_size.y - cam_shift.y.unsigned_abs(),
+            self.settings.world_size.z - cam_shift.z.unsigned_abs(),
         );
 
         let mut copy_region = vk::ImageCopy {
@@ -585,7 +585,7 @@ impl InternalRenderer {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.current(),
+            self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::TRANSFER, // well sometimes i feel like i should pick better barriers
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -595,7 +595,7 @@ impl InternalRenderer {
         );
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.previous(),
+            self.independent_images.radiance_cache.previous(),
             vk::PipelineStageFlags::TRANSFER, // well sometimes i feel like i should pick better barriers
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -618,7 +618,7 @@ impl InternalRenderer {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.current(),
+            self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -628,7 +628,7 @@ impl InternalRenderer {
         );
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.previous(),
+            self.independent_images.radiance_cache.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -667,7 +667,7 @@ impl InternalRenderer {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.current(),
+            self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -677,7 +677,7 @@ impl InternalRenderer {
         );
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.radiance_cache.previous(),
+            self.independent_images.radiance_cache.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -701,8 +701,8 @@ impl InternalRenderer {
 
         // Transition images for copying (lol no transition atm)
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.previous(),
+            command_buffer,
+            self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -711,8 +711,8 @@ impl InternalRenderer {
             vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.current(),
+            command_buffer,
+            self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -733,8 +733,8 @@ impl InternalRenderer {
 
         // sync
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.previous(),
+            command_buffer,
+            self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -743,8 +743,8 @@ impl InternalRenderer {
             vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.current(),
+            command_buffer,
+            self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -796,8 +796,8 @@ impl InternalRenderer {
 
         // sync
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.previous(),
+            command_buffer,
+            self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -806,8 +806,8 @@ impl InternalRenderer {
             vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.current(),
+            command_buffer,
+            self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -838,8 +838,8 @@ impl InternalRenderer {
 
         // sync
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.previous(),
+            command_buffer,
+            self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -848,8 +848,8 @@ impl InternalRenderer {
             vk::ImageLayout::GENERAL,
         );
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.current(),
+            command_buffer,
+            self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -874,8 +874,8 @@ impl InternalRenderer {
 
         // sync
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.previous(),
+            command_buffer,
+            self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::TRANSFER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -896,8 +896,8 @@ impl InternalRenderer {
 
         // sync
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.origin_block_palette.previous(),
+            command_buffer,
+            self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -911,7 +911,7 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         self.lumal
-            .bind_compute_pipe(&command_buffer, &self.pipes.map_pipe);
+            .bind_compute_pipe(command_buffer, &self.pipes.map_pipe);
     }
 
     pub fn map_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
@@ -993,8 +993,8 @@ impl InternalRenderer {
     pub fn end_map(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
         self.lumal.image_memory_barrier(
-            &command_buffer,
-            &self.independent_images.world.current(),
+            command_buffer,
+            self.independent_images.world.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::FRAGMENT_SHADER,
             AccessFlags::SHADER_WRITE,
@@ -1061,14 +1061,14 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.lightmap_blocks_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.lightmap_blocks_pipe);
     }
 
     pub fn lightmap_start_models(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.lightmap_models_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.lightmap_models_pipe);
     }
 
     pub fn end_lightmap(&mut self) {
@@ -1137,7 +1137,7 @@ impl InternalRenderer {
                 self.lumal.vulkan_data.swapchain_extent.width as f32,
                 self.lumal.vulkan_data.swapchain_extent.height as f32,
             ),
-            timeseed: self.lumal.frame as i32,
+            timeseed: self.lumal.frame,
         };
         // dbg!(self.lumal.frame);
 
@@ -1182,11 +1182,11 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.raygen_blocks_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.raygen_blocks_pipe);
     }
 
     fn is_face_visible(&self, normal: vec3, camera_dir: vec3) -> bool {
-        return (normal.dot(camera_dir) < 0.0);
+        (normal.dot(camera_dir) < 0.0)
     }
 
     fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockID_t) {
@@ -1200,12 +1200,12 @@ impl InternalRenderer {
         };
 
         let absnorm = u8vec3::new(
-            normal.x.abs() as u8,
-            normal.y.abs() as u8,
-            normal.z.abs() as u8,
+            normal.x.unsigned_abs() as u8,
+            normal.y.unsigned_abs() as u8,
+            normal.z.unsigned_abs() as u8,
         );
         assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
-        let pbn = { (neg_sign << 7) | (absnorm.x << 0) | (absnorm.y << 1) | (absnorm.z << 2) };
+        let pbn = { (neg_sign << 7) | absnorm.x | (absnorm.y << 1) | (absnorm.z << 2) };
         //signBit_4EmptyBits_xBit_yBit_zBit
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -1309,7 +1309,7 @@ impl InternalRenderer {
         };
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.raygen_models_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.raygen_models_pipe);
     }
 
     fn raygen_model_face(&mut self, normal: vec3, buff: &IndexedVertices) {
@@ -1626,7 +1626,7 @@ impl InternalRenderer {
         if !self.particles.is_empty() {
             // just for safity
             self.lumal
-                .bind_raster_pipe(&command_buffer, &self.pipes.raygen_particles_pipe);
+                .bind_raster_pipe(command_buffer, &self.pipes.raygen_particles_pipe);
             unsafe {
                 self.lumal.device.cmd_bind_vertex_buffers(
                     *command_buffer,
@@ -1667,7 +1667,7 @@ impl InternalRenderer {
             time: f32,
         }
         let push_constant = PushConstant {
-            wind_direction: wind_direction,
+            wind_direction,
             _wtf_is_this: vec2::new(0.0, 0.0),
             time: self.lumal.frame as f32,
         };
@@ -1684,7 +1684,7 @@ impl InternalRenderer {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.grass_state.current(),
+            self.independent_images.grass_state.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::SHADER_WRITE,
@@ -1732,7 +1732,7 @@ impl InternalRenderer {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            &self.independent_images.water_state.current(),
+            self.independent_images.water_state.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             AccessFlags::SHADER_WRITE,
@@ -1762,7 +1762,7 @@ impl InternalRenderer {
         let pipe = &self.pipes.raygen_foliage_pipes[grass.stored_id as usize];
         let desc = &self.foliage_descriptions[grass.stored_id as usize];
         // it is somewhat cached
-        self.lumal.bind_raster_pipe(&command_buffers, pipe);
+        self.lumal.bind_raster_pipe(command_buffers, pipe);
 
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -1774,9 +1774,9 @@ impl InternalRenderer {
             yf: i32,
         }
         let push_constant = PushConstant {
-            shift: vec4::new(pos.x as f32, pos.y as f32, pos.z as f32, 0.0),
+            shift: vec4::new(pos.x, pos.y, pos.z, 0.0),
             _size: size as i32,
-            _time: self.lumal.frame as i32,
+            _time: self.lumal.frame,
             xf: x_flip as i32, // TODO: compress
             yf: y_flip as i32,
         };
@@ -1797,7 +1797,7 @@ impl InternalRenderer {
             #[allow(clippy::manual_div_ceil)]
             self.lumal.device.cmd_draw(
                 *command_buffers,
-                verts_per_blade as u32 * blade_per_instance as u32,
+                verts_per_blade * blade_per_instance,
                 (size * size + (blade_per_instance - 1)) / blade_per_instance,
                 0,
                 0,
@@ -1815,7 +1815,7 @@ impl InternalRenderer {
         };
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.raygen_water_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.raygen_water_pipe);
     }
 
     pub fn raygen_map_water(&mut self, water: &InternalMeshLiquid, pos: &vec3) {
@@ -1832,7 +1832,7 @@ impl InternalRenderer {
         let push_constant = PushConstant {
             shift: vec4::new(pos.x, pos.y, pos.z, 0.0),
             _size: quality_size as i32,
-            _time: self.lumal.frame as i32,
+            _time: self.lumal.frame,
         };
         unsafe {
             self.lumal.device.cmd_push_constants(
@@ -1849,7 +1849,7 @@ impl InternalRenderer {
         unsafe {
             self.lumal.device.cmd_draw(
                 *command_buffer,
-                verts_per_water_tape as u32,
+                verts_per_water_tape,
                 tapes_per_block,
                 0,
                 0,
@@ -1879,7 +1879,7 @@ impl InternalRenderer {
         // sync
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.ao_lut_uniform.current(),
+            self.buffers.ao_lut_uniform.current(),
             PipelineStageFlags::ALL_COMMANDS,
             PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -1902,7 +1902,7 @@ impl InternalRenderer {
         // sync
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            &self.buffers.ao_lut_uniform.current(),
+            self.buffers.ao_lut_uniform.current(),
             PipelineStageFlags::ALL_COMMANDS,
             PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -1962,7 +1962,7 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.diffuse_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.diffuse_pipe);
 
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -2013,7 +2013,7 @@ impl InternalRenderer {
         }
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.ao_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.ao_pipe);
 
         unsafe {
             // fullscreen triangle
@@ -2031,7 +2031,7 @@ impl InternalRenderer {
         }
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.fill_stencil_glossy_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.fill_stencil_glossy_pipe);
 
         unsafe {
             // fullscreen triangle
@@ -2049,7 +2049,7 @@ impl InternalRenderer {
         }
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.fill_stencil_smoke_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.fill_stencil_smoke_pipe);
     }
 
     pub fn raygen_map_smoke(&mut self, smoke: &InternalMeshVolumetric, pos: &vec3) {
@@ -2090,7 +2090,7 @@ impl InternalRenderer {
         }
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.smoke_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.smoke_pipe);
 
         unsafe {
             // fullscreen triangle
@@ -2108,7 +2108,7 @@ impl InternalRenderer {
         }
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.glossy_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.glossy_pipe);
 
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -2157,7 +2157,7 @@ impl InternalRenderer {
         }
 
         self.lumal
-            .bind_raster_pipe(&command_buffer, &self.pipes.tonemap_pipe);
+            .bind_raster_pipe(command_buffer, &self.pipes.tonemap_pipe);
 
         unsafe {
             // fullscreen triangle

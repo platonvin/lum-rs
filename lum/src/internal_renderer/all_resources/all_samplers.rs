@@ -107,7 +107,7 @@ impl InternalRenderer {
         };
         let shadow_sampler = create_sampler(shadow_sampler_info);
 
-        return AllSamplers {
+        AllSamplers {
             nearest_sampler,
             linear_sampler,
             linear_sampler_tiled,
@@ -116,7 +116,7 @@ impl InternalRenderer {
             shadow_sampler,
             unnorm_linear,
             unnorm_nearest,
-        };
+        }
     }
 
     pub fn destroy_all_samplers(lumal: &mut Renderer, samplers: &mut AllSamplers) {

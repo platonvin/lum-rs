@@ -48,7 +48,7 @@ impl InternalRenderer {
         let staging_radiance_updates = lumal.create_buffer_rings(
             lumal_settings.fif,
             vk::BufferUsageFlags::TRANSFER_SRC,
-            mem::size_of::<ivec4>() as usize
+            mem::size_of::<ivec4>()
                 * (lum_settings.world_size.x as usize)
                 * (lum_settings.world_size.y as usize)
                 * (lum_settings.world_size.z as usize),
@@ -61,10 +61,10 @@ impl InternalRenderer {
             (lum_settings.world_size.x as usize)
                 * (lum_settings.world_size.y as usize)
                 * (lum_settings.world_size.z as usize)
-                * (mem::size_of::<BlockID_t>() as usize),
+                * mem::size_of::<BlockID_t>(),
             true,
         );
-        return AllBuffers {
+        AllBuffers {
             staging_world: staging_world.unwrap(),
             light_uniform: light_uniform.unwrap(),
             uniform: uniform.unwrap(),
@@ -72,7 +72,7 @@ impl InternalRenderer {
             gpu_radiance_updates: gpu_radiance_updates.unwrap(),
             staging_radiance_updates: staging_radiance_updates.unwrap(),
             gpu_particles: gpu_particles.unwrap(),
-        };
+        }
     }
 
     pub fn destroy_all_buffers(lumal: &Renderer, buffers: AllBuffers) {

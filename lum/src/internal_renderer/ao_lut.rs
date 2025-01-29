@@ -18,7 +18,7 @@ impl InternalRenderer {
             .map(|i| {
                 let normalized_radius = i as f32 / sample_count as f32;
                 let transformed_radius = normalized_radius * normalized_radius;
-                return 1.0 - transformed_radius;
+                1.0 - transformed_radius
             })
             .sum()
     }
@@ -57,6 +57,6 @@ impl InternalRenderer {
             };
         });
 
-        return lut;
+        lut
     }
 }

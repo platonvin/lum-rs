@@ -16,7 +16,7 @@ impl super::InternalRenderer {
         // bind sets
         // place barriers
         // dispatch the perlin noise compute shader
-        assert!(pipe.sets.len() != 0);
+        assert!(!pipe.sets.is_empty());
         for frame_i in 0..FRAMES_IN_FLIGHT {
             unsafe {
                 lumal.device.cmd_bind_descriptor_sets(
@@ -76,7 +76,7 @@ impl super::InternalRenderer {
         // bind sets
         // place barriers
         // dispatch the perlin noise compute shader
-        assert!(pipe.sets.len() != 0);
+        assert!(!pipe.sets.is_empty());
         for frame_i in 0..FRAMES_IN_FLIGHT {
             unsafe {
                 lumal.device.cmd_bind_descriptor_sets(

@@ -155,7 +155,7 @@ impl InternalRenderer {
             vk::SampleCountFlags::_1,
         ); // does not matter than much
 
-        return AllIndependentImages {
+        AllIndependentImages {
             grass_state: grass_state.unwrap(),
             water_state: water_state.unwrap(),
             perlin_noise2d: perlin_noise2d.unwrap(),
@@ -167,7 +167,7 @@ impl InternalRenderer {
             // distance_palette: distance_palette.unwrap(),
             // bit_palette: bit_palette.unwrap(),
             material_palette: material_palette.unwrap(),
-        };
+        }
     }
 
     // dependent = swapchain dependent
@@ -338,16 +338,16 @@ impl InternalRenderer {
             };
         }
 
-        return AllSwapchainDependentImages {
+        AllSwapchainDependentImages {
             swapchain_images: swapchain_images_ring,
-            highres_frame: highres_frame,
-            highres_depth_stencil: highres_depth_stencil,
-            highres_mat_norm: highres_mat_norm,
-            stencil_view_for_ds: stencil_view_for_ds,
-            far_depth: far_depth,
-            near_depth: near_depth,
+            highres_frame,
+            highres_depth_stencil,
+            highres_mat_norm,
+            stencil_view_for_ds,
+            far_depth,
+            near_depth,
             // mask_frame: mask_frame,
-        };
+        }
     }
 
     pub fn destroy_independent_images(lumal: &Renderer, independent_images: &AllIndependentImages) {

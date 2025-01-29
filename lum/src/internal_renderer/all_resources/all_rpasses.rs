@@ -36,7 +36,7 @@ impl InternalRenderer {
                 ],
                 a_input: &[None],
                 a_color: &[None],
-                a_depth: Some(&&iimages.lightmap),
+                a_depth: Some(&iimages.lightmap),
             }],
         );
 
@@ -242,11 +242,11 @@ impl InternalRenderer {
 
         println!("created all passes");
 
-        return AllRenderPasses {
+        AllRenderPasses {
             lightmap_rpass,
             gbuffer_rpass,
             shade_rpass,
-        };
+        }
     }
 
     pub fn destroy_all_rpasses(lumal: &mut Renderer, rpasses: &mut AllRenderPasses) {

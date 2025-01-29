@@ -18,6 +18,12 @@ pub struct Multiprocessor {
     thread_flags: Vec<Arc<AtomicBool>>,
 }
 
+impl Default for Multiprocessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Multiprocessor {
     pub fn new() -> Self {
         // let num_threads = std::thread::available_parallelism().unwrap().get() - 1;

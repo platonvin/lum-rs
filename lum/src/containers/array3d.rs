@@ -128,14 +128,14 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (x_size, y_size, z_size) = self.dimensions();
-        write!(f, "Array3D [{} x {} x {}]:\n", x_size, y_size, z_size)?;
+        writeln!(f, "Array3D [{} x {} x {}]:", x_size, y_size, z_size)?;
         for x in 0..x_size {
             for y in 0..y_size {
                 write!(f, "[ ")?;
                 for z in 0..z_size {
                     write!(f, "{:?} ", self[(x, y, z)])?;
                 }
-                write!(f, "]\n")?;
+                writeln!(f, "]")?;
             }
         }
         Ok(())

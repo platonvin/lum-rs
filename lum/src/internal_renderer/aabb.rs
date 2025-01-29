@@ -31,14 +31,14 @@ pub fn get_shift(trans: mat4, size: uvec3) -> fAABB {
     // Transform all corners and calculate AABB bounds
     for corner in corners {
         let transformed = trans * vec4::new(corner.x, corner.y, corner.z, 1.0);
-        let point = vec3::try_from(transformed).unwrap();
+        let point = vec3::from(transformed);
 
         tmin = vec3::partial_min(tmin, point);
         tmax = vec3::partial_max(tmax, point);
     }
 
-    return fAABB {
+    fAABB {
         min: tmin,
         max: tmax,
-    };
+    }
 }

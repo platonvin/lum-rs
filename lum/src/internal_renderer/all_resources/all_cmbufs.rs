@@ -14,12 +14,12 @@ impl InternalRenderer {
         let graphics_command_buffers = lumal.create_command_buffer();
         let copy_command_buffers = lumal.create_command_buffer();
 
-        return AllCommandBuffers {
+        AllCommandBuffers {
             compute_command_buffers,
             lightmap_command_buffers,
             graphics_command_buffers,
             copy_command_buffers,
-        };
+        }
     }
 
     pub fn destroy_all_command_buffers(lumal: &Renderer, command_buffers: &AllCommandBuffers) {

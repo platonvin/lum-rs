@@ -86,7 +86,7 @@ impl super::InternalRenderer {
     pub fn update_material_palette_to_gpu(&mut self) {
         // we do not write it to intermediate buffer cuz its already in right layout - 6
         // float rows one by one 256 total
-        assert!(self.material_palette.len() > 0);
+        assert!(!self.material_palette.is_empty());
         // dbg!(&self.material_palette);
         dbg!(&self.material_palette.len());
         let buffer_count = self.material_palette.len();
@@ -256,7 +256,7 @@ impl super::InternalRenderer {
             self.has_palette = true;
         }
 
-        return self.load_mesh_from_memory(model, true);
+        self.load_mesh_from_memory(model, true)
     }
 
     pub fn load_mesh_from_file_ogt(
@@ -276,11 +276,11 @@ impl super::InternalRenderer {
 
         if extrude_palette && !self.has_palette {
             println!("Extruding palette");
-            self.extract_palette_from_scene_ogt(&scene);
+            self.extract_palette_from_scene_ogt(scene);
             self.has_palette = true;
         }
 
-        return self.load_mesh_from_memory_ogt(model, true);
+        self.load_mesh_from_memory_ogt(model, true)
     }
 
     pub fn load_mesh_from_memory_ogt(
@@ -328,11 +328,11 @@ impl super::InternalRenderer {
 
         let triangles = self.make_contour_vertices(size, padded_voxel_data);
 
-        return InternalMeshModel {
+        InternalMeshModel {
             triangles,
             voxels,
             size,
-        };
+        }
     }
 
     pub fn load_mesh_from_memory(
@@ -367,11 +367,11 @@ impl super::InternalRenderer {
 
         let triangles = self.make_contour_vertices(size, padded_voxel_data);
 
-        return InternalMeshModel {
+        InternalMeshModel {
             triangles,
             voxels,
             size,
-        };
+        }
     }
 
     // does not return a mesh because you should only access it via BlockID_t
@@ -477,7 +477,7 @@ impl super::InternalRenderer {
         lumal::trace!();
         let faces = block_mesh::RIGHT_HANDED_Y_UP_CONFIG.faces;
         greedy_quads(
-            &padded_voxel_data.data.as_slice(),
+            padded_voxel_data.data.as_slice(),
             &chunk_shape,
             [0; 3],
             [size.x + 1, size.y + 1, size.z + 1],
@@ -504,7 +504,7 @@ impl super::InternalRenderer {
         for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
             for quad in group.into_iter() {
                 indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
-                positions.extend_from_slice(&face.quad_mesh_positions(&quad.into(), 1.0));
+                positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
                 normals.extend_from_slice(&face.quad_mesh_normals());
             }
         }
@@ -561,12 +561,12 @@ impl super::InternalRenderer {
             push_index_to_corresponding_vec(norm.into(), index as u16);
         }
 
-        assert!(verts_idxs_Pzz.len() != 0);
-        assert!(verts_idxs_Nzz.len() != 0);
-        assert!(verts_idxs_zPz.len() != 0);
-        assert!(verts_idxs_zNz.len() != 0);
-        assert!(verts_idxs_zzP.len() != 0);
-        assert!(verts_idxs_zzN.len() != 0);
+        assert!(!verts_idxs_Pzz.is_empty());
+        assert!(!verts_idxs_Nzz.is_empty());
+        assert!(!verts_idxs_zPz.is_empty());
+        assert!(!verts_idxs_zNz.is_empty());
+        assert!(!verts_idxs_zzP.is_empty());
+        assert!(!verts_idxs_zzN.is_empty());
 
         let mut triangles = FaceBuffers::default();
 
@@ -729,9 +729,9 @@ impl block_mesh::MergeVoxel for VoxelForContour {
 
     fn merge_value(&self) -> Self::MergeValue {
         // we only care about contour, thus if not emtpy, merging is allowed
-        return match self.0 {
+        match self.0 {
             0 => VoxelForContour(0),
             _ => VoxelForContour(1),
-        };
+        }
     }
 }
