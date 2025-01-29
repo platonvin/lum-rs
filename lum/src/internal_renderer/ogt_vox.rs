@@ -880,12 +880,6 @@ unsafe extern "C" {
     pub fn srand(_Seed: ::std::os::raw::c_uint);
 }
 unsafe extern "C" {
-    pub fn strtold(
-        arg1: *const ::std::os::raw::c_char,
-        arg2: *mut *mut ::std::os::raw::c_char,
-    ) -> u128;
-}
-unsafe extern "C" {
     pub fn __strtod(
         arg1: *const ::std::os::raw::c_char,
         arg2: *mut *mut ::std::os::raw::c_char,
@@ -902,12 +896,6 @@ unsafe extern "C" {
         arg1: *const ::std::os::raw::c_char,
         arg2: *mut *mut ::std::os::raw::c_char,
     ) -> f64;
-}
-unsafe extern "C" {
-    pub fn __mingw_strtold(
-        arg1: *const ::std::os::raw::c_char,
-        arg2: *mut *mut ::std::os::raw::c_char,
-    ) -> u128;
 }
 unsafe extern "C" {
     pub fn _strtof_l(
@@ -1057,12 +1045,6 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn __mingw_wcstof(nptr: *const u16, endptr: *mut *mut u16) -> f32;
-}
-unsafe extern "C" {
-    pub fn __mingw_wcstold(arg1: *const u16, arg2: *mut *mut u16) -> u128;
-}
-unsafe extern "C" {
-    pub fn wcstold(arg1: *const u16, arg2: *mut *mut u16) -> u128;
 }
 unsafe extern "C" {
     pub fn _wcstod_l(_Str: *const u16, _EndPtr: *mut *mut u16, _Locale: _locale_t) -> f64;
