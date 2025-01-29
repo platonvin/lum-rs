@@ -28,6 +28,7 @@ impl super::InternalRenderer {
         for (i, block) in self.block_palette_voxels.iter().enumerate() {
             let block_xy = self.index_block_xy(i);
             for_zyx!(16, 16, 16, |x, y, z| {
+                #[allow(clippy::unnecessary_cast)]
                 let vox = block[x as usize][y as usize][z as usize];
                 block_palette_prepared[(
                     x + ((block_xy.x as usize) * 16),
