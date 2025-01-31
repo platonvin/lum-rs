@@ -10,6 +10,9 @@ use vulkanalia::vk::{self, Cast, DeviceV1_3, DynamicState, SuccessCode};
 use std::result::Result::Ok;
 
 impl Renderer {
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("3"))]
     pub fn start_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
         unsafe {
             self.device.wait_for_fences(
@@ -17,8 +20,7 @@ impl Renderer {
                 true,
                 u64::MAX,
             );
-            self.device
-                .reset_fences(&[*self.vulkan_data.in_flight_fences.current()]);
+            self.device.reset_fences(&[*self.vulkan_data.in_flight_fences.current()]);
         };
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -31,9 +33,7 @@ impl Renderer {
             }
 
             unsafe {
-                self.device
-                    .begin_command_buffer(*command_buffer, &begin_info)
-                    .unwrap();
+                self.device.begin_command_buffer(*command_buffer, &begin_info).unwrap();
             }
         }
 
@@ -51,6 +51,9 @@ impl Renderer {
         self.process_error_code(index_code);
     }
 
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("3"))]
     pub fn present_frame(&mut self) {
         let wait_semaphores = [*self.vulkan_data.render_finished_semaphores.current()];
         let swapchains = [self.vulkan_data.swapchain];
@@ -62,13 +65,15 @@ impl Renderer {
 
         // TODO: figure out how do you make crates so unconvinient to use
         let error_code = unsafe {
-            self.device
-                .queue_present_khr(self.vulkan_data.graphics_queue, &present_info)
+            self.device.queue_present_khr(self.vulkan_data.graphics_queue, &present_info)
         };
 
         self.process_success_code(error_code);
     }
 
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("3"))]
     pub fn end_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
         for command_buffer in command_buffers {
             unsafe {
@@ -106,6 +111,9 @@ impl Renderer {
 
     // figure out if entire thing has to be recreated or not. Does not reacreate, only "flags" it
     // does someone know how to make this cleaner?
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("3"))]
     fn process_error_code(&mut self, index_code: Result<(u32, SuccessCode), vk::ErrorCode>) {
         // man why did you corrode vulkan. Should i make my own fn wrapper?
         match index_code {
@@ -143,6 +151,9 @@ impl Renderer {
     }
 
     // does someone know how to make this cleaner?
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("3"))]
     fn process_success_code(&mut self, index_code: VkResult<SuccessCode>) {
         match index_code {
             Ok(success_code) => {

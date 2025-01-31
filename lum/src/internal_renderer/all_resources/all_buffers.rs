@@ -7,6 +7,9 @@ use vulkanalia::vk::{self};
 use crate::*;
 
 impl InternalRenderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_all_buffers(
         lumal: &Renderer,
         lum_settings: &Settings,
@@ -75,6 +78,9 @@ impl InternalRenderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_all_buffers(lumal: &Renderer, buffers: AllBuffers) {
         println!("started destroying buffers");
         lumal.destroy_buffer_ring(buffers.staging_world);

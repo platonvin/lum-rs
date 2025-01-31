@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use winit::window::Window;
 
 use crate::{
@@ -413,74 +411,168 @@ impl Renderer {
 
     pub fn end_frame(&mut self) {
         // yes, started here cause no reason not to group
-        self.renderer.start_frame();
+        flame::start("GLOBAL_FRAME");
+
+        flame::start("start_blockify");
         self.renderer.start_blockify();
+        flame::end("start_blockify");
+        flame::start("blockify_mesh");
         for mrr in &self.model_que {
             let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
             self.renderer.blockify_mesh(model_mesh, &mrr.trans);
         }
+        flame::end("blockify_mesh");
+        flame::start("end_blockify");
         self.renderer.end_blockify();
+        flame::end("end_blockify");
+        // flame::start("find_radiance_to_update");
+        // self.renderer.find_radiance_to_update();
+        // flame::end("find_radiance_to_update");
+        // you may wonder why is start_frame here, and not in the beginning
+        // this is because it contains syncronization, which im trying to delay as much as possible
+        // sadly, it does not help when you are CPU-bound (which is the case here). But still useful
+        flame::start("start_frame");
+        self.renderer.start_frame();
+        flame::end("start_frame");
+        flame::start("shift_radiance");
         self.renderer.shift_radiance(Default::default());
+        flame::end("shift_radiance");
+        flame::start("update_radiance");
         self.renderer.update_radiance();
+        flame::end("update_radiance");
+        flame::start("updade_grass");
         self.renderer.updade_grass(Default::default());
+        flame::end("updade_grass");
+        flame::start("updade_water");
         self.renderer.updade_water();
+        flame::end("updade_water");
+        flame::start("exec_copies");
         self.renderer.exec_copies();
+        flame::end("exec_copies");
+        flame::start("start_map");
         self.renderer.start_map();
+        flame::end("start_map");
+        flame::start("map_mesh");
         for mrr in &self.model_que {
             let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
             self.renderer.map_mesh(model_mesh, &mrr.trans);
         }
+        flame::end("map_mesh");
+        flame::start("end_map");
         self.renderer.end_map();
+        flame::end("end_map");
+        flame::start("end_compute");
         self.renderer.end_compute();
+        flame::end("end_compute");
+        flame::start("start_lightmap");
         self.renderer.start_lightmap();
+        flame::end("start_lightmap");
+        flame::start("lightmap_start_blocks");
         self.renderer.lightmap_start_blocks();
+        flame::end("lightmap_start_blocks");
+        flame::start("lightmap_blocks");
         for brr in &self.block_que {
             let ipos = ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
             self.renderer.lightmap_block(brr.block, ipos);
         }
+        flame::end("lightmap_blocks");
+        flame::start("lightmap_start_models");
         self.renderer.lightmap_start_models();
+        flame::end("lightmap_start_models");
+        flame::start("lightmap_models");
         for mrr in &self.model_que {
             let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
             self.renderer.lightmap_model(model_mesh, &mrr.trans);
         }
+        flame::end("lightmap_models");
+        flame::start("end_lightmap");
         self.renderer.end_lightmap();
+        flame::end("end_lightmap");
+        flame::start("start_raygen");
         self.renderer.start_raygen();
+        flame::end("start_raygen");
+        flame::start("raygen_start_blocks");
         self.renderer.raygen_start_blocks();
+        flame::end("raygen_start_blocks");
+        flame::start("raygen_blocks");
         for brr in &self.block_que {
             let ipos = ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
             self.renderer.raygen_block(brr.block, ipos);
         }
+        flame::end("raygen_blocks");
+        flame::start("raygen_start_models");
         self.renderer.raygen_start_models();
+        flame::end("raygen_start_models");
+        flame::start("raygen_models");
         for mrr in &self.model_que {
             let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
             self.renderer.raygen_model(model_mesh, &mrr.trans);
         }
+        flame::end("raygen_models");
+        flame::start("update_particles");
         self.renderer.update_particles();
+        flame::end("update_particles");
+        flame::start("raygen_map_particles");
         self.renderer.raygen_map_particles();
+        flame::end("raygen_map_particles");
+        flame::start("raygen_start_grass");
         self.renderer.raygen_start_grass();
+        flame::end("raygen_start_grass");
+        flame::start("raygen_grass");
         for frr in &self.foliage_que {
             self.renderer.raygen_map_grass(&frr.mesh.0, &frr.pos);
         }
+        flame::end("raygen_grass");
+        flame::start("raygen_start_water");
         self.renderer.raygen_start_water();
+        flame::end("raygen_start_water");
+        flame::start("raygen_water");
         for lrr in &self.liquid_que {
             let liquid_mesh = self.storage.liquids.get(lrr.mesh.0).unwrap();
             self.renderer.raygen_map_water(liquid_mesh, &lrr.pos);
         }
+        flame::end("raygen_water");
+        flame::start("end_raygen");
         self.renderer.end_raygen();
+        flame::end("end_raygen");
+        flame::start("start_2nd_spass");
         self.renderer.start_2nd_spass();
+        flame::end("start_2nd_spass");
+        flame::start("diffuse");
         self.renderer.diffuse();
+        flame::end("diffuse");
+        flame::start("ambient_occlusion");
         self.renderer.ambient_occlusion();
+        flame::end("ambient_occlusion");
+        flame::start("glossy_raygen");
         self.renderer.glossy_raygen();
+        flame::end("glossy_raygen");
+        flame::start("raygen_start_smoke");
         self.renderer.raygen_start_smoke();
+        flame::end("raygen_start_smoke");
+        flame::start("raygen_smoke");
         for vrr in &self.volumetric_que {
             let volumetric_mesh = self.storage.volumetrics.get(vrr.mesh.0).unwrap();
             self.renderer.raygen_map_smoke(volumetric_mesh, &vrr.pos);
         }
+        flame::end("raygen_smoke");
+        flame::start("glossy");
         self.renderer.glossy();
+        flame::end("glossy");
+        flame::start("smoke");
         self.renderer.smoke();
+        flame::end("smoke");
+        flame::start("tonemap");
         self.renderer.tonemap();
+        flame::end("tonemap");
+        flame::start("end_2nd_spass");
         self.renderer.end_2nd_spass();
+        flame::end("end_2nd_spass");
+        flame::start("end_frame");
         self.renderer.end_frame();
+        flame::end("end_frame");
+
+        flame::end("GLOBAL_FRAME");
     }
 
     pub fn get_world_blocks(&self) -> &Array3D<BlockId> {
@@ -489,6 +581,8 @@ impl Renderer {
     pub fn get_world_blocks_mut(&mut self) -> &mut Array3D<BlockId> {
         &mut self.renderer.current_world
     }
+
+    // pub fn
 }
 
 // TODO: is there a simpler shorter)way to do this?

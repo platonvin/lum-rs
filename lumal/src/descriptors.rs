@@ -170,6 +170,9 @@ pub struct ShortDescriptorInfo {
 
 impl Renderer {
     /// immediately creates vulkan descriptor set layout
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_descriptor_set_layout(
         &mut self,
         descriptor_infos: &[ShortDescriptorInfo],
@@ -238,6 +241,9 @@ impl Renderer {
         };
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn create_descriptor_pool(&self) -> Result<vk::DescriptorPool> {
         let mut pool_sizes = Vec::new();
 
@@ -274,6 +280,9 @@ impl Renderer {
         Ok(self.device.create_descriptor_pool(&pool_info, None)?)
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn allocate_descriptor(
         device: Device,
         // sets: &mut Vec<vk::DescriptorSet>,
@@ -303,6 +312,9 @@ impl Renderer {
 
     // Tell the LumalRenderer that such descriptor will be setup
     // basically counts needed resources to then allocate them
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn anounce_descriptor_setup(
         &mut self,
         dset_layout: &mut vk::DescriptorSetLayout,
@@ -335,6 +347,9 @@ impl Renderer {
 
 impl Renderer {
     // anounce is just a request, this is an actual logic
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn actually_setup_descriptor_impl(
         descriptor_pool: &vk::DescriptorPool,
         settings: &LumalSettings,
@@ -421,6 +436,9 @@ impl Renderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn flush_descriptor_setup(&mut self) -> Result<()> {
         // (actually) create Vulkan descriptor pool
         self.vulkan_data.descriptor_pool = self.create_descriptor_pool()?;
@@ -428,6 +446,9 @@ impl Renderer {
         Ok(())
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn acutally_setup_descriptor(
         &mut self,
         dset_layout: &mut vk::DescriptorSetLayout,

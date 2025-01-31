@@ -7,11 +7,17 @@ use vulkanalia_vma::Alloc;
 use vulkanalia_vma::{self as vma};
 
 impl Renderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_sampler(&self, sampler_info: &vk::SamplerCreateInfo) -> Result<vk::Sampler> {
         let sampler = unsafe { self.device.create_sampler(sampler_info, None) }?;
         Ok(sampler)
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_sampler(&self, sampler: vk::Sampler) {
         unsafe { self.device.destroy_sampler(sampler, None) };
     }

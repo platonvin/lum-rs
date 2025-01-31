@@ -7,6 +7,9 @@ use vk::MemoryBarrier;
 use vulkanalia::prelude::v1_3::*;
 
 impl Renderer {
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     pub fn copy_whole_image(&self, cmdbuf: vk::CommandBuffer, src: &Image, dst: &Image) {
         let copy_op = vk::ImageCopy::builder()
             .src_subresource(vk::ImageSubresourceLayers {
@@ -68,6 +71,9 @@ impl Renderer {
     }
 
     // basically copy image into another image (with possible dimension mismatch and thus scaling)
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     pub fn blit_whole_image(
         &self,
         cmdbuf: vk::CommandBuffer,
@@ -151,6 +157,9 @@ impl Renderer {
     }
 
     // finds first image format that is supported by device
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn find_supported_format(
         &self,
         candidates: &[vk::Format],
@@ -177,6 +186,9 @@ impl Renderer {
         None
     }
 
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     pub fn cmd_set_viewport(&self, cmdbuf: vk::CommandBuffer, width: u32, height: u32) {
         let viewport = vk::Viewport {
             x: 0.0,

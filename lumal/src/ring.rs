@@ -40,6 +40,11 @@ impl<T: std::default::Default + Clone> Ring<T> {
         let wrapped_index = index % self.data.len();
         &self.data[wrapped_index]
     }
+    pub fn next(&self) -> &T {
+        let index = self.index + 1;
+        let wrapped_index = index % self.data.len();
+        &self.data[wrapped_index]
+    }
 
     /// Mutably access the current element in the Ring.
     pub fn current_mut(&mut self) -> &mut T {
@@ -107,6 +112,10 @@ impl<T: std::default::Default + Clone> Ring<T> {
             ring: self,
             position: 0,
         }
+    }
+
+    pub fn first(&self) -> &T {
+        &self.data[0]
     }
 }
 

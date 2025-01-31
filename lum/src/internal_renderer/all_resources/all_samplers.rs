@@ -5,15 +5,16 @@ use vulkanalia::vk::{self};
 use crate::*;
 
 impl InternalRenderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_all_samplers(
         lumal: &Renderer,
         lum_settings: &Settings,
         lumal_settings: &LumalSettings,
     ) -> AllSamplers {
         let create_sampler = |info: vk::SamplerCreateInfo| -> vk::Sampler {
-            lumal
-                .create_sampler(&info)
-                .expect("Failed to create sampler")
+            lumal.create_sampler(&info).expect("Failed to create sampler")
         };
 
         let base_sampler_info = vk::SamplerCreateInfo {

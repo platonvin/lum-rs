@@ -9,5 +9,4 @@
     shaders = { path = "../shaders" } # Dependency on shaders crate (just compiles all of them)
     winit = "0.30.8"
     anyhow = "1"
-    rand = "0.8.5"
     flame = "0.2.2"

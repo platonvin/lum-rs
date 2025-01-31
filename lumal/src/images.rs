@@ -7,6 +7,9 @@ use vulkanalia_vma::Alloc;
 use vulkanalia_vma::{self as vma};
 
 impl Renderer {
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_image(
         &self,
         image_type: vk::ImageType,
@@ -49,12 +52,8 @@ impl Renderer {
             ..Default::default()
         };
 
-        let (vk_image, allocation) = unsafe {
-            self.allocator
-                .as_ref()
-                .unwrap()
-                .create_image(image_info, &alloc_info)
-        }?;
+        let (vk_image, allocation) =
+            unsafe { self.allocator.as_ref().unwrap().create_image(image_info, &alloc_info) }?;
 
         let image_image = vk_image;
         let image_allocation = allocation;
@@ -122,6 +121,9 @@ impl Renderer {
 
         Ok(image)
     }
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_image_ring(
         &self,
         size: usize,
@@ -161,16 +163,19 @@ impl Renderer {
         })
     }
 
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_image(&self, img: &Image) {
         unsafe {
             self.device.destroy_image_view(img.view, None);
-            self.allocator
-                .as_ref()
-                .unwrap()
-                .destroy_image(img.image, img.allocation);
+            self.allocator.as_ref().unwrap().destroy_image(img.image, img.allocation);
         };
     }
 
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_image_ring(&self, images: &Ring<Image>) {
         for img in images {
             self.destroy_image(img);

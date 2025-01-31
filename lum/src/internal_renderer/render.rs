@@ -1,16 +1,27 @@
-use crate::{assert_assume, consts::*, for_zyx, internal_renderer::*};
-use std::mem::transmute;
+use crate::{
+    assert_assume,
+    consts::*,
+    containers::BitArray3d,
+    internal_renderer::{ogt_vox::rand, *},
+};
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    intrinsics::assume,
+    mem::transmute,
+    ops::IndexMut,
+};
 
 use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
+use lumal::atrace;
 // use multiversion::multiversion;
-use vek::{Clamp, FrustumPlanes};
+use vek::{Clamp, FrustumPlanes, Vec4};
 use vulkanalia::vk::{
-    AccessFlags, DeviceV1_0, Handle, HasBuilder, ImageSubresource, ImageSubresourceLayers,
-    KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags,
+    AccessFlags, CopyMemoryToImageIndirectCommandNV, DeviceV1_0, Handle, HasBuilder,
+    ImageSubresourceLayers, KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags,
 };
 
-use crate::{containers::Array3D, types::*};
+use crate::types::*;
 
 use super::InternalRenderer;
 
@@ -153,7 +164,7 @@ impl InternalRenderer {
     pub fn index_block_xy(&self, n: usize) -> uvec2 {
         let x = n % BLOCK_PALETTE_SIZE_X as usize;
         let y = n / BLOCK_PALETTE_SIZE_X as usize;
-        assert!(y <= BLOCK_PALETTE_SIZE_Y as usize);
+        debug_assert!(y <= BLOCK_PALETTE_SIZE_Y as usize);
         uvec2::new(x as u32, y as u32)
     }
 
@@ -279,90 +290,299 @@ impl InternalRenderer {
         };
     }
 
-    pub fn update_radiance(&mut self) {
-        // separation for multiverse
-        Self::_update_radiance(self);
+    #[inline(always)]
+    fn function_i_had_to_write_to_be_able_to_use_goto(
+        world_size: &uvec3,
+        current_world: &Array3D<BlockId>,
+        visited: &mut BitArray3d<usize>,
+        zz: isize,
+        yy: isize,
+        xx: isize,
+    ) -> bool {
+        type TheType = isize;
+
+        macro_rules! check_neighbor {
+            ($total:expr, $dx:expr, $dy:expr, $dz:expr) => {
+                let dx = $dx;
+                let dy = $dy;
+                let dz = $dz;
+                let x = (xx as TheType + dx).max(0).min(world_size.x as TheType - 1);
+                let y = (yy as TheType + dy).max(0).min(world_size.y as TheType - 1);
+                let z = (zz as TheType + dz).max(0).min(world_size.z as TheType - 1);
+                let block = current_world.get(x as usize, y as usize, z as usize);
+
+                unsafe { assume((block > 0) == (block != 0)) };
+
+                // so, the idea is to make less checks, and also .set() only once
+                $total += block;
+                // if block > 0 {
+                //     // visited.set(xx as usize, yy as usize, zz as usize, true);
+                //     return true;
+                // }
+            };
+        }
+        let mut total = 0;
+        check_neighbor!(total, 0, 0, 0);
+        if total > 0 {
+            return true;
+        }
+        check_neighbor!(total, 1, 0, 0);
+        check_neighbor!(total, -1, 0, 0);
+        if total > 0 {
+            return true;
+        }
+        check_neighbor!(total, 0, -1, 0);
+        check_neighbor!(total, 1, -1, 0);
+        check_neighbor!(total, -1, -1, 0);
+        if total > 0 {
+            return true;
+        }
+        check_neighbor!(total, 0, 1, 0);
+        check_neighbor!(total, 1, 1, 0);
+        check_neighbor!(total, -1, 1, 0);
+        if total > 0 {
+            return true;
+        }
+        check_neighbor!(total, 0, 0, 1);
+        check_neighbor!(total, 1, 0, 1);
+        check_neighbor!(total, -1, 0, 1);
+        check_neighbor!(total, 0, 1, 1);
+        if total > 0 {
+            return true;
+        }
+        check_neighbor!(total, 1, 1, 1);
+        check_neighbor!(total, -1, 1, 1);
+        check_neighbor!(total, 0, -1, 1);
+        check_neighbor!(total, 1, -1, 1);
+        check_neighbor!(total, -1, -1, 1);
+        if total > 0 {
+            return true;
+        }
+        check_neighbor!(total, 0, 0, -1);
+        check_neighbor!(total, 1, 0, -1);
+        check_neighbor!(total, -1, 0, -1);
+        check_neighbor!(total, 0, 1, -1);
+        if total > 0 {
+            return true;
+        }
+        check_neighbor!(total, 1, 1, -1);
+        check_neighbor!(total, -1, 1, -1);
+        check_neighbor!(total, 0, -1, -1);
+        check_neighbor!(total, 1, -1, -1);
+        check_neighbor!(total, -1, -1, -1);
+        // Manual unrolling with spatial coherence (same z)
+        // TODO: is there a way to script stuff like this?
+        // self:
+        // Layer 0
+        // Layer +1
+
+        // Layer -1
+        if total > 0 {
+            visited.set(xx as usize, yy as usize, zz as usize, true);
+            // continue;
+        }
+
+        false
     }
 
-    // #[multiversion(targets("x86_64+avx2"))]
-    fn _update_radiance(self: &mut InternalRenderer) {
-        let command_buffer = self.cmdbufs.compute_command_buffers.current();
+    // i love the fact that none of these does anything
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize(3))]
+    // Note: this is the last function that can be called before Vulkan interraction
+    // which means that you HAVE to wait at most after it
+    pub fn find_radiance_to_update(&mut self) {
+        // separation for multiverse
+        // let self = &mut *__self;
+        flame::start("prepare");
+        // somehow caching allocated is slower...
+        // let mut visited = &mut self.m_ru_visited;
+        // visited.fill(false);
 
-        // set is like a hash_set, but optimized (no hashing, no collisions)
+        // like a hash_set, but optimized (no hashing, no collisions)
         // its literally 3d array of bools, each corresponding to "if set"
-        // flame::start("set_init");
-        let mut set = Array3D::<bool>::new_filled(
+        let mut visited = BitArray3d::<usize>::new_filled(
             self.settings.world_size.x as usize,
             self.settings.world_size.y as usize,
             self.settings.world_size.z as usize,
             false, // each value in set corresponds to "if the block is already updated"
         );
 
-        self.radiance_updates.clear();
-        // flame::end("set_init");
+        flame::end("prepare");
+        flame::start("algorithm");
 
-        // flame::start("push radiance updates");
+        // well, native size turned to be the fastest
+        type TheType = isize;
 
-        // manual SIMD
-        let world_size: uvec4 = self.settings.world_size.into();
-
-        // push block into queue of update requests if the block has neighbours
-        // dbg!(self.settings.world_size);
-
-        assert_assume!(self.settings.world_size.x > 0);
-        assert_assume!(self.settings.world_size.x < i16::MAX as u32);
-        assert_assume!(self.settings.world_size.y > 0);
-        assert_assume!(self.settings.world_size.y < i16::MAX as u32);
-        assert_assume!(self.settings.world_size.z > 0);
-        assert_assume!(self.settings.world_size.z < i16::MAX as u32);
-
-        let world_size = ivec4::new(
-            self.settings.world_size.x as i32,
-            self.settings.world_size.y as i32,
-            self.settings.world_size.z as i32,
+        let size = Vec4::<TheType>::new(
+            self.settings.world_size.x as TheType,
+            self.settings.world_size.y as TheType,
+            self.settings.world_size.z as TheType,
             0,
         );
-        // just moved it up to help compiler
-        let world_size_minus_1 = world_size - ivec4::new(1, 1, 1, 0);
+        // only radiance updates with this offset should be processed
 
-        for_zyx!(self.settings.world_size, |xx, yy, zz| {
-            // smarter algorithms resulted in less perfomance, at least in cpp
-            let mut sum_of_neighbours = 0;
+        let magic_number = 2;
+        self.counter += 1;
+        let current_offset = (self.counter) % magic_number;
 
-            for dz in -1_i32..=1 {
-                for dy in -1_i32..=1 {
-                    for dx in -1_i32..=1 {
-                        let mut xyz0 =
-                            ivec4::new(xx as i32 + dx, yy as i32 + dy, zz as i32 + dz, 0);
+        let mut pushed_radiance_count = 0;
+        // push block into queue of update requests if the block has neighbours
+        for xx in (0 as TheType)..(self.settings.world_size.x as TheType) {
+            for yy in (0 as TheType)..(self.settings.world_size.y as TheType) {
+                // skip some blocks to reduce the number of requests
+                for zz in ((current_offset as TheType)..(self.settings.world_size.z as TheType))
+                    .step_by(magic_number as usize)
+                {
+                    // simple version that is also ~2/570 slower (so not much)
+                    'free: for dz in -1..=1 {
+                        for dy in -1..=1 {
+                            for dx in -1..=1 {
+                                // clamp has an assert inside LOL
+                                let x = (xx as TheType + dx)
+                                    .max(0)
+                                    .min(self.settings.world_size.x as TheType - 1);
+                                let y = (yy as TheType + dy)
+                                    .max(0)
+                                    .min(self.settings.world_size.y as TheType - 1);
+                                let z = (zz as TheType + dz)
+                                    .max(0)
+                                    .min(self.settings.world_size.z as TheType - 1);
+                                let block =
+                                    self.current_world.get(x as usize, y as usize, z as usize);
 
-                        xyz0 = ivec4::clamp(xyz0, ivec4::zero(), world_size_minus_1);
+                                unsafe { assume((block > 0) == (block != 0)) };
 
-                        let neighbor_block = self.current_world[xyz0];
-                        // we could add one, but it does not matter - we only need presence of neighbours
-                        sum_of_neighbours += neighbor_block;
+                                if block > 0 {
+                                    visited.set(xx as usize, yy as usize, zz as usize, true);
+                                    pushed_radiance_count += 1;
+                                    //i want to
+                                    break 'free;
+                                }
+                            }
+                        }
+                    }
+
+                    // so, the idea is to make less checks, and also .set() only once (in asm)
+                    // let found_non_empty = Self::function_i_had_to_write_to_be_able_to_use_goto(
+                    //     &self.settings.world_size,
+                    //     &self.current_world,
+                    //     &mut visited,
+                    //     zz,
+                    //     yy,
+                    //     xx,
+                    // );
+                    // if found_non_empty {
+                    //     let offset = (xx + yy + zz) as i32 % magic_number;
+                    //     visited.set(xx as usize, yy as usize, zz as usize, true);
+                    //     pushed_radiance_count += 1;
+                    // }
+                }
+            }
+        }
+
+        // self.radiance_updates.clear();
+
+        // for zz in 0..self.settings.world_size.z {
+        //     for yy in 0..self.settings.world_size.y {
+        //         for xx in 0..self.settings.world_size.x {
+        //             if visited.get(xx as usize, yy as usize, zz as usize) {
+        //                 self.radiance_updates.push(i8vec4::new(xx as i8, yy as i8, zz as i8, 0));
+        //             }
+        //         }
+        //     }
+        // }
+
+        self.radiance_updates.resize(pushed_radiance_count as usize, i8vec4::zero());
+
+        let mut i = 0;
+        for zz in 0..self.settings.world_size.z {
+            for yy in 0..self.settings.world_size.y {
+                for xx in 0..self.settings.world_size.x {
+                    if visited.get(xx as usize, yy as usize, zz as usize) {
+                        assert_assume!(i < self.radiance_updates.len());
+                        self.radiance_updates[i] = i8vec4::new(xx as i8, yy as i8, zz as i8, 0);
+                        i += 1;
                     }
                 }
             }
+        }
 
-            if sum_of_neighbours > 0 {
-                self.radiance_updates.push(i8vec4::new(
-                    xx as i8, yy as i8, zz as i8, 0, // padding
-                ));
-                set[(xx as usize, yy as usize, zz as usize)] = true;
-            }
-        });
-
-        // flame::end("push radiance updates");
+        flame::end("algorithm");
+        flame::start("special");
 
         // special updates are ones requested via API
         for u in &self.special_radiance_updates {
             // if not already updated in loop before, add it to the queue
-            if !set[(u.x as usize, u.y as usize, u.z as usize)] {
+            if !visited.get(u.x as usize, u.y as usize, u.z as usize) {
                 self.radiance_updates.push(*u);
             }
         }
+        flame::end("special");
 
-        drop(set);
+        drop(visited);
+    }
+
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize(3))]
+    pub fn update_radiance(&mut self) {
+        // separation for multiverse
+        Self::_update_radiance(self);
+    }
+
+    // #[multiversion(targets("x86_64+avx2"))]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize(3))]
+    fn _update_radiance(self: &mut InternalRenderer) {
+        self.find_radiance_to_update();
+
+        let command_buffer = self.cmdbufs.compute_command_buffers.current();
+
+        flame::start("copy radiance updates");
+
+        // self.counter += 1;
+        // dbg!(&self.counter);
+        // dbg!(self.counter % 2);
+        // let mut d = self.counter as usize % 3;
+        // d = unsafe { rand() as usize } % 3;
+        // self.radiance_updates = match d {
+        //     0 => {
+        //         atrace!();
+        //         [
+        //             i8vec4::new(0 + 0, 12, 1, 0),
+        //             i8vec4::new(0 + 3, 12, 1, 0),
+        //             i8vec4::new(0 + 6, 12, 1, 0),
+        //             i8vec4::new(0 + 9, 12, 1, 0),
+        //             i8vec4::new(0 + 12, 12, 1, 0),
+        //             i8vec4::new(0 + 15, 12, 1, 0),
+        //         ]
+        //     }
+        //     .to_vec(),
+        //     1 => {
+        //         atrace!();
+        //         [
+        //             i8vec4::new(1 + 0, 12, 1, 1),
+        //             i8vec4::new(1 + 3, 12, 1, 1),
+        //             i8vec4::new(1 + 6, 12, 1, 1),
+        //             i8vec4::new(1 + 9, 12, 1, 1),
+        //             i8vec4::new(1 + 12, 12, 1, 10),
+        //             i8vec4::new(1 + 15, 12, 1, 10),
+        //         ]
+        //     }
+        //     .to_vec(),
+        //     2 => {
+        //         atrace!();
+        //         [
+        //             i8vec4::new(2 + 0, 12, 1, 0),
+        //             i8vec4::new(2 + 3, 12, 1, 0),
+        //             i8vec4::new(2 + 6, 12, 1, 0),
+        //             i8vec4::new(2 + 9, 12, 1, 0),
+        //             i8vec4::new(2 + 12, 12, 1, 0),
+        //             i8vec4::new(2 + 15, 12, 1, 0),
+        //         ]
+        //     }
+        //     .to_vec(),
+        //     _ => panic!(),
+        // };
 
         // flame::start("copy radiance updates");
         let count_to_copy = self.radiance_updates.len();
@@ -370,15 +590,15 @@ impl InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.radiance_updates.as_ptr(),
-                self.buffers.staging_radiance_updates.current().mapped.unwrap() as *mut i8vec4,
+                self.buffers.staging_radiance_updates.first().mapped.unwrap() as *mut i8vec4,
                 count_to_copy, // converts to size automatically
             )
         };
-        // flame::end("copy radiance updates");
+        flame::end("copy radiance updates");
 
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            self.buffers.staging_radiance_updates.current(),
+            self.buffers.staging_radiance_updates.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -386,7 +606,7 @@ impl InternalRenderer {
         );
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            self.buffers.gpu_radiance_updates.current(),
+            self.buffers.gpu_radiance_updates.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -399,22 +619,28 @@ impl InternalRenderer {
             dst_offset: 0,
         };
 
-        // flame::start("cmd copy");
+        flame::start("cmd copy");
         if count_to_copy > 0 {
             unsafe {
                 self.lumal.device.cmd_copy_buffer(
                     *command_buffer,
-                    self.buffers.staging_radiance_updates.current().buffer,
-                    self.buffers.gpu_radiance_updates.current().buffer,
+                    self.buffers.staging_radiance_updates.first().buffer,
+                    self.buffers.gpu_radiance_updates.first().buffer,
                     &[copy],
                 );
+                // self.lumal.device.cmd_copy_buffer(
+                //     *command_buffer,
+                //     self.buffers.staging_radiance_updates.current().buffer,
+                //     self.buffers.gpu_radiance_updates.next().buffer,
+                //     &[copy],
+                // );
             };
         }
-        // flame::end("cmd copy");
+        flame::end("cmd copy");
 
         self.lumal.buffer_memory_barrier(
             command_buffer,
-            self.buffers.gpu_radiance_updates.current(),
+            self.buffers.gpu_radiance_updates.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -424,22 +650,16 @@ impl InternalRenderer {
         // binds descriptor sets and pipeline itself
         self.lumal.bind_compute_pipe(command_buffer, &self.pipes.radiance_pipe);
 
-        let magic_number = 2;
-
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
             time: i32,
             iters: i32,
-            size: i32,
-            shift: i32,
         }
 
         let push_constant = PushConstant {
             time: self.lumal.frame,
             iters: 0,
-            size: magic_number,
-            shift: self.lumal.frame % magic_number,
         };
 
         unsafe {
@@ -452,7 +672,7 @@ impl InternalRenderer {
             );
         }
 
-        let wg_count = self.radiance_updates.len() / magic_number as usize;
+        let wg_count = self.radiance_updates.len();
 
         unsafe {
             self.lumal.device.cmd_dispatch(
@@ -460,6 +680,7 @@ impl InternalRenderer {
                 // TOOD: current implementation just marches through the whole array skipping a lot of elements
                 // Why didn't i just pack work tightly?
                 wg_count as u32,
+                // TODO: remove
                 1,
                 1,
             )
@@ -467,7 +688,7 @@ impl InternalRenderer {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            self.independent_images.radiance_cache.current(),
+            self.independent_images.radiance_cache.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
@@ -482,6 +703,7 @@ impl InternalRenderer {
         );
     }
 
+    // when shift is zero, no work is done (so dont cache this)
     pub fn shift_radiance(&mut self, radiance_shift: ivec3) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
@@ -732,7 +954,7 @@ impl InternalRenderer {
         );
 
         // TODO: multi-raw copy
-        assert!(self.static_block_palette_size < BLOCK_PALETTE_SIZE_X);
+        debug_assert!(self.static_block_palette_size < BLOCK_PALETTE_SIZE_X);
         let static_block_palette_copy = vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers::builder()
                 .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -888,7 +1110,7 @@ impl InternalRenderer {
     pub fn map_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
         let model_voxels_info = vk::DescriptorImageInfo::builder()
-            .image_view(self.independent_images.world.current().view)
+            .image_view(mesh.voxels.view)
             .image_layout(vk::ImageLayout::GENERAL);
         let binding = [model_voxels_info];
         let model_voxels_write = vk::WriteDescriptorSet::builder()
@@ -1156,7 +1378,7 @@ impl InternalRenderer {
 
     fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockId) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
-        assert!(block_id > 0);
+        debug_assert!(block_id > 0);
         let sum = normal.x + normal.y + normal.z;
         // u8 sign = (sum > 0) ? 0 : 1;
         let neg_sign = match (sum > 0) {
@@ -1169,7 +1391,7 @@ impl InternalRenderer {
             normal.y.unsigned_abs() as u8,
             normal.z.unsigned_abs() as u8,
         );
-        assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
+        debug_assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
         let pbn = { (neg_sign << 7) | absnorm.x | (absnorm.y << 1) | (absnorm.z << 2) };
         //signBit_4EmptyBits_xBit_yBit_zBit
         #[repr(C)] // for push constants
@@ -1182,7 +1404,7 @@ impl InternalRenderer {
         let push_constant = PushConstant {
             inorm: u8vec4::new(pbn, 0, 0, 0), // TODO: what the hell was i smoking?
         };
-        assert!(push_constant.as_u8_slice().len() == 4);
+        debug_assert!(push_constant.as_u8_slice().len() == 4);
 
         unsafe {
             self.lumal.device.cmd_push_constants(
@@ -1350,7 +1572,7 @@ impl InternalRenderer {
         }
 
         let model_voxels_info = vk::DescriptorImageInfo::builder()
-            .image_view(self.independent_images.world.current().view)
+            .image_view(model_mesh.voxels.view)
             .image_layout(vk::ImageLayout::GENERAL)
             .sampler(self.samplers.unnorm_nearest);
         let binding = [model_voxels_info];
@@ -1364,7 +1586,7 @@ impl InternalRenderer {
         unsafe {
             self.lumal.device.cmd_push_descriptor_set_khr(
                 *command_buffer,
-                vk::PipelineBindPoint::RAY_TRACING_KHR,
+                vk::PipelineBindPoint::GRAPHICS,
                 self.pipes.raygen_models_pipe.line_layout,
                 1,
                 &[model_voxels_write],

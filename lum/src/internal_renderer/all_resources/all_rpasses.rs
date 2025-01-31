@@ -5,6 +5,9 @@ use vulkanalia::vk::{self, Handle};
 use crate::*;
 
 impl InternalRenderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_all_rpasses(
         lumal: &mut Renderer,
         _lum_settings: &Settings,

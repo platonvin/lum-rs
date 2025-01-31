@@ -13,6 +13,9 @@ use crate::*;
 // it is setting up all the descriptors/layouts for pipes and pipes themeselves
 
 impl InternalRenderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn create_all_pipes(
         lumal: &mut Renderer,
         lum_settings: &Settings,
@@ -210,6 +213,15 @@ impl InternalRenderer {
         );
 
         lumal::trace!();
+
+        lumal.create_descriptor_set_layout(
+            &[ShortDescriptorInfo {
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                stages: vk::ShaderStageFlags::FRAGMENT,
+            }],
+            &mut pipes.raygen_models_push_layout,
+            vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
+        );
 
         lumal.create_raster_pipeline(
             &mut pipes.raygen_models_pipe,
@@ -644,7 +656,7 @@ impl InternalRenderer {
             &mut pipes.radiance_pipe,
             None,
             "radiance.comp.spv".to_string(),
-            (std::mem::size_of::<i32>() * 4) as u32,
+            (std::mem::size_of::<i32>() * 2) as u32,
             vk::PipelineCreateFlags::DISPATCH_BASE,
         );
 
@@ -694,6 +706,9 @@ impl InternalRenderer {
         );
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn destroy_all_pipes(lumal: &mut Renderer, mut pipes: AllPipes) {
         lumal.destroy_raster_pipe(pipes.lightmap_blocks_pipe);
         lumal.destroy_raster_pipe(pipes.lightmap_models_pipe);
@@ -730,6 +745,9 @@ impl InternalRenderer {
         lumal.destroy_compute_pipe(&mut pipes.gen_perlin3d_pipe); // generate noise for grass
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn do_smth_all_descriptors<Fun>(
         process: &Fun,
         lumal: &mut Renderer,
@@ -1372,6 +1390,9 @@ impl InternalRenderer {
     }
 
     // Sorry, i dont have enough iq to understand lifetimes
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn anounce_descriptor_setup_wrapper(
         lumal: &mut Renderer,
         dset_layout: &mut vk::DescriptorSetLayout,
@@ -1389,6 +1410,9 @@ impl InternalRenderer {
         );
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn acutally_setup_descriptor_wrapper(
         lumal: &mut Renderer,
         dset_layout: &mut vk::DescriptorSetLayout,
@@ -1407,6 +1431,9 @@ impl InternalRenderer {
     }
 }
 
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("s"))]
 fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPipes) {
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {

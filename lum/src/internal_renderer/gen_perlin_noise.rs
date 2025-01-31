@@ -4,6 +4,9 @@ use vulkanalia::vk::{AccessFlags, DeviceV1_0, ImageLayout, PipelineBindPoint, Pi
 use crate::*;
 
 impl super::InternalRenderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn gen_perlin_2d(&mut self) {
         let lumal = &mut self.lumal;
 
@@ -64,6 +67,9 @@ impl super::InternalRenderer {
         lumal.end_single_time_command_buffer(cmb);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn gen_perlin_3d(&mut self) {
         let lumal = &mut self.lumal;
 

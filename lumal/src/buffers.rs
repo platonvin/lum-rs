@@ -8,6 +8,9 @@ use vulkanalia_vma::{self as vma};
 
 impl Renderer {
     // creates a GPU buffer
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_buffer(&self, usage: vk::BufferUsageFlags, size: usize, host: bool) -> Buffer {
         // buffers.allocate(self.vulkan_data.settings.fif as usize);
         // buffers = Ring::new(self.vulkan_data.settings.fif as usize, Buffer::default());
@@ -40,13 +43,9 @@ impl Renderer {
             ..Default::default()
         };
 
-        let (vk_buffer, allocation) = unsafe {
-            self.allocator
-                .as_ref()
-                .unwrap()
-                .create_buffer(buffer_info, &alloc_info)
-        }
-        .unwrap();
+        let (vk_buffer, allocation) =
+            unsafe { self.allocator.as_ref().unwrap().create_buffer(buffer_info, &alloc_info) }
+                .unwrap();
 
         // TODO: Integrated CPU memory utilization
         // TODO: what if it fails? Different set of flags?
@@ -54,13 +53,8 @@ impl Renderer {
         if host {
             // basically make so CPU can read&write buffer memory
             // this is very complicated under the hood cause memory is literally on GPU and is accessed via PCI-E bus
-            mapped = Some(unsafe {
-                self.allocator
-                    .as_ref()
-                    .unwrap()
-                    .map_memory(allocation)
-                    .unwrap()
-            });
+            mapped =
+                Some(unsafe { self.allocator.as_ref().unwrap().map_memory(allocation).unwrap() });
         }
         Buffer {
             buffer: vk_buffer,
@@ -70,6 +64,9 @@ impl Renderer {
     }
 
     // creates ring of vulkan buffers. Optionally maps
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_buffer_rings(
         &self,
         ring_size: usize,
@@ -93,24 +90,23 @@ impl Renderer {
         })
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_buffer(&self, buf: Buffer) {
         unsafe {
             // unmap if mapped
             match buf.mapped {
-                Some(_) => self
-                    .allocator
-                    .as_ref()
-                    .unwrap()
-                    .unmap_memory(buf.allocation),
+                Some(_) => self.allocator.as_ref().unwrap().unmap_memory(buf.allocation),
                 None => {} // do nothing
             }
-            self.allocator
-                .as_ref()
-                .unwrap()
-                .destroy_buffer(buf.buffer, buf.allocation);
+            self.allocator.as_ref().unwrap().destroy_buffer(buf.buffer, buf.allocation);
         };
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_buffer_ring(&self, buffers: Ring<Buffer>) {
         for buf in buffers.data {
             self.destroy_buffer(buf);
@@ -118,6 +114,9 @@ impl Renderer {
     }
 
     // creates a GPU buffer and copies elements into it
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_elem_buffer<T>(
         &mut self,
         elements: &[T],

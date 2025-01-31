@@ -5,6 +5,9 @@ use vulkanalia::vk::{self, DeviceV1_0};
 use crate::*;
 
 impl InternalRenderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_independent_images(
         lumal: &Renderer,
         lum_settings: &Settings,
@@ -350,6 +353,9 @@ impl InternalRenderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_independent_images(lumal: &Renderer, independent_images: &AllIndependentImages) {
         println!("started destroying independent images");
         lumal.destroy_image_ring(&independent_images.grass_state);
@@ -364,6 +370,9 @@ impl InternalRenderer {
         println!("destroyed independent images");
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_dependent_images(
         lumal: &Renderer,
         dependent_images: &AllSwapchainDependentImages,

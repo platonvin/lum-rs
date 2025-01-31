@@ -8,6 +8,9 @@ use vulkanalia::prelude::v1_3::*;
 // it is missing a lot but it does not matter anyways - drivers dont give a fuck about precise barriers
 
 impl Renderer {
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     pub fn image_memory_barrier(
         &self,
         cmdbuf: &vk::CommandBuffer,
@@ -51,6 +54,9 @@ impl Renderer {
         };
     }
 
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     pub fn buffer_memory_barrier(
         &self,
         cmdbuf: &vk::CommandBuffer,

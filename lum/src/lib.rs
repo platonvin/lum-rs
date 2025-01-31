@@ -4,6 +4,8 @@
 #![allow(unused_parens)]
 #![feature(stmt_expr_attributes)]
 #![feature(custom_inner_attributes)]
+#![feature(core_intrinsics)]
+#![feature(optimize_attribute)]
 
 // This is a glue-file
 // files that start with "all_" are initializing / destroying resources (packed in structs)
@@ -22,14 +24,11 @@ pub mod types;
 #[macro_export]
 macro_rules! assert_assume {
     ($cond:expr) => {
-        if cfg!(debug_assertions) {
-            // In debug mode, use assert! for runtime checks
-            assert!($cond);
-        } else {
-            // In release mode, use assume to hint to the compiler
-            unsafe {
-                std::hint::assert_unchecked($cond);
-            }
+        // Do runtime checks in debug mode
+        debug_assert!($cond);
+        // but also provide assumption to the compiler
+        unsafe {
+            std::intrinsics::assume($cond);
         }
     };
 }
@@ -41,7 +40,6 @@ macro_rules! assert_unreachable {
             // In debug mode, verify that the code never executes
             panic!();
         } else {
-            // In release mode, use assume to hint to the compiler
             unreachable!();
         }
     };
@@ -59,7 +57,7 @@ macro_rules! for_zyx {
     };
 
     // Handle 3 separate integers with a closure
-    ($z_dim:expr, $y_dim:expr, $x_dim:expr, $body:expr) => {
+    ($x_dim:expr, $y_dim:expr, $z_dim:expr, $body:expr) => {
         for zz in 0..$z_dim {
         for yy in 0..$y_dim {
         for xx in 0..$x_dim {

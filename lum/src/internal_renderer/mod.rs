@@ -148,6 +148,7 @@ pub struct AllRenderPasses {
 
 #[pub_fields::pub_fields] // lol i use crate for this
 pub struct InternalRenderer {
+    counter: isize,
     lumal: lumal::Renderer,
     // renderer settings. Cannot be changed after creation
     settings: Settings,
@@ -165,6 +166,8 @@ pub struct InternalRenderer {
 
     // Queue of blocks whose radiance field needs to be updated. Filled automatically by the renderer
     radiance_updates: Vec<i8vec4>,
+    // somehow caching allocated is slower...
+    // m_ru_visited: BitArray3d<u64>,
     // same but requested by user (manually)
     special_radiance_updates: Vec<i8vec4>,
 
@@ -299,9 +302,15 @@ impl InternalRenderer {
             lum_settings.world_size.z as usize,
         );
         // same as initalization but cleaner imho
-        let current_world = origin_world.clone();
+        let current_world = Array3D {
+            data: origin_world.data.clone(),
+            x_size: origin_world.x_size,
+            y_size: origin_world.y_size,
+            z_size: origin_world.z_size,
+        };
 
         let mut lum = InternalRenderer {
+            counter: 69420,
             lumal,
             settings: Settings::default(),
             delta_time: 0.0,
@@ -322,6 +331,13 @@ impl InternalRenderer {
             origin_world,
             current_world,
             has_palette: false,
+            // somehow caching allocated is slower...
+            // m_ru_visited: BitArray3d::new_filled(
+            //     lum_settings.world_size.x as usize,
+            //     lum_settings.world_size.y as usize,
+            //     lum_settings.world_size.z as usize,
+            //     false,
+            // ),
             radiance_updates: vec![],
             special_radiance_updates: vec![],
             particles: vec![],

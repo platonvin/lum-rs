@@ -3,9 +3,13 @@
     version = "0.1.4"
     edition = "2021"
 
+[features]
+    optimized = []
+
 [dependencies]
     lumal = { path = "../lumal" } # lum' abstraction layer over vulkan
     as_u8_slice_derive = { path = "../as_u8_slice_derive" } # derive macro for AsU8Slice, needed by Vulkanalia
+    unchecked_integer = { path = "../unchecked_integer" } # UB overflow ints
     vulkanalia = { version = "0.25.0", features = [
         "libloading",
         "provisional",
@@ -19,7 +23,8 @@
     dot_vox = "5.1.1"
     block-mesh = "0.2.0"
     flame = "0.2.2"
-    rand = "0.8.5"
+    # rand was causing compilation errors
+    # rand = "0.9.0"
     # multiversion = "0.8.0"
     # dlopen = "0.1.8"
 
@@ -41,4 +46,8 @@
 
 [[bench]]
     name = "threads"
+    harness = false
+
+[[bench]]
+    name = "radiance"
     harness = false

@@ -19,7 +19,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-// i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityEnum -> LumMeshModel
+// i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityTypeEnum -> LumMeshModel
 // #[derive(Default)]
 struct AllMeshes {
     tank_body: MeshModel,
@@ -71,13 +71,12 @@ impl AllMeshes {
     }
 }
 
-// #[derive(Default)]
 struct AppState {
-    // event_loop: EventLoop<()>,
     window: Window,
     lum: lum::renderer::Renderer,
     meshes: AllMeshes,
     transforms: AllTransforms,
+    about_to_close: bool,
 }
 impl AppState {
     fn new(mut window: Window) -> Self {
@@ -121,6 +120,7 @@ impl AppState {
             lum,
             meshes,
             transforms: Default::default(),
+            about_to_close: false,
         }
     }
 
@@ -233,7 +233,8 @@ impl ApplicationHandler for AppState {
         event: WindowEvent,
     ) {
         if matches!(event, WindowEvent::CloseRequested) {
-            _event_loop.exit();
+            // _event_loop.exit();
+            self.about_to_close = true;
         }
     }
 
@@ -247,7 +248,14 @@ impl ApplicationHandler for AppState {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        self.render();
+        if self.about_to_close {
+            // self.render();
+            flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
+            _event_loop.exit();
+        } else {
+            flame::clear();
+            self.render();
+        }
     }
 }
 
@@ -266,9 +274,9 @@ fn main() {
     let result = event_loop.run_app(&mut state);
     state.destroy();
     result.unwrap();
+    flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
 }
 
-/// Reads an entire file into a Vec<u8> (efficiently handles large files)
 fn read_file_buffer<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut buffer = Vec::new();

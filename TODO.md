@@ -18,6 +18,7 @@ generic subpasses (e.g. for ui)
 
 vector (vec/mat) library that does not suck
  - JUST FUCKING IMPLEMENT CASTS WHY EVERY SINGLE ONE OF THEM IS MISSING HALF KEY FEATURES
+   - i8vec4 cant be casted into i16vec4???
 
 assume_assert
 
@@ -58,3 +59,6 @@ same for world size
 
 allow custom grass shapes:
  - what if you want thin grass rectangle or a very small batch of grass?
+
+
+report flame moving timestamps around

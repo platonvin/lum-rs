@@ -8,23 +8,27 @@
 
 [build]
     rustflags = [
-        "-C", "target-feature=+mmx,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+cx16,+avx,+pclmul",     # TODO: how to do this in local build and what is local build?
         "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
-        "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+        # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
     ]
 
 [env]
     RUST_BACKTRACE = "full" # this is what i love in Rust
-
+    
 [profile.native.build-override]
     rustflags = [
-        "-C", "target-feature=+mmx,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+cx16,+avx,+pclmul",
+        "-C", "target-cpu=native",
         "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
-        "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+        # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+        "-Zlocation-detail=none",
+        "-Zfmt-debug=none",
     ]
+    
 [profile.natsize.build-override]
     rustflags = [
-        "-C", "target-feature=+mmx,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+cx16,+avx,+pclmul",
+        "-C", "target-cpu=native",
         "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
-        "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+        # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+        "-Zlocation-detail=none",
+        "-Zfmt-debug=none",
     ]

@@ -1,7 +1,7 @@
 cargo-features = ["profile-rustflags"]
 
 [workspace]
-    resolver = "2"
+    resolver = "3"
     members = [
         "lum",                # Include the lum crate
         "lumal",              # Include the lumal crate
@@ -12,7 +12,7 @@ cargo-features = ["profile-rustflags"]
     ]
 
 [profile.dev]
-    opt-level = 3
+    opt-level = 0
     codegen-units = 12
     lto = false
     panic = "unwind"
@@ -20,12 +20,13 @@ cargo-features = ["profile-rustflags"]
     incremental = true
     debug = true
 
-[profile.dev.package.lum]
-    opt-level = 0
-[profile.dev.package.lumal]
-    opt-level = 0
-[profile.dev.package.examples]
-    opt-level = 0
+    [profile.dev.package.lum]
+        opt-level = 0
+    [profile.dev.package.lumal]
+        opt-level = 0
+    [profile.dev.package.examples]
+        opt-level = 0
+
 
 [profile.release]
     opt-level = 3           # "s" is 5 times slower lol. TODO: investigate
@@ -50,10 +51,153 @@ cargo-features = ["profile-rustflags"]
     codegen-units = 1
     lto = "fat"
     debug = false
-    panic ="abort"
+    panic = "abort"
     overflow-checks = false
     strip = "symbols"
+    [profile.native.package.dot_vox]
+        opt-level = "s"
+    [profile.native.package.autocfg]
+        opt-level = "z"
+    [profile.native.package.proc-macro2]
+        opt-level = "z"
+    [profile.native.package.unicode-ident]
+        opt-level = "z"
+    [profile.native.package.windows_x86_64_gnu]
+        opt-level = "z"
+    [profile.native.package.semver]
+        opt-level = "z"
+    [profile.native.package.shlex]
+        opt-level = "z"
+    [profile.native.package.serde]
+        opt-level = "s"
+    [profile.native.package.winapi-x86_64-pc-windows-gnu]
+        opt-level = "z"
+    [profile.native.package.memchr]
+        opt-level = "s"
+    [profile.native.package.version_check]
+        opt-level = "z"
+    [profile.native.package.winapi]
+        opt-level = "s"
+    [profile.native.package.raw-window-handle]
+        opt-level = "s"
+    [profile.native.package.bitflags]
+        opt-level = "z"
+    [profile.native.package.cc]
+        opt-level = "s"
+    [profile.native.package.cfg_aliases]
+        opt-level = "z"
+    [profile.native.package.winit]
+        opt-level = "s"
+    [profile.native.package.windows-targets]
+        opt-level = "s"
+    [profile.native.package.vulkanalia-sys]
+        opt-level = "z"
+    [profile.native.package.tracing-core]
+        opt-level = "s"
+    [profile.native.package.libloading]
+        opt-level = "s"
+    [profile.native.package.ahash]
+        opt-level = "z"
+    [profile.native.package.num-traits]
+        opt-level = "s"
+    [profile.native.package.cfg-if]
+        opt-level = "z"
+    [profile.native.package.rustc_version]
+        opt-level = "z"
+    [profile.native.package.serde_json]
+        opt-level = "s"
+    [profile.native.package.static_assertions]
+        opt-level = "z"
+    [profile.native.package.anyhow]
+        opt-level = "s"
+    [profile.native.package.pin-project-lite]
+        opt-level = "z"
+    [profile.native.package.tracing]
+        opt-level = "z"
+    [profile.native.package.ndshape]
+        opt-level = "z"
+    [profile.native.package.vek]
+        opt-level = 3
+    [profile.native.package.quote]
+        opt-level = "z"
+    [profile.native.package.getrandom]
+        opt-level = "z"
+    [profile.native.package.windows-sys]
+        opt-level = "z"
+    [profile.native.package.syn]
+        opt-level = "z"
+    [profile.native.package.zerocopy]
+        opt-level = "z"
+    [profile.native.package.ryu]
+        opt-level = "z"
+    [profile.native.package.once_cell]
+        opt-level = "z"
+    [profile.native.package.glam]
+        opt-level = "s"
+    [profile.native.package.itoa]
+        opt-level = "z"
+    [profile.native.package.dpi]
+        opt-level = "z"
+    [profile.native.package.unicode-segmentation]
+        opt-level = "z"
+    [profile.native.package.minimal-lexical]
+        opt-level = "z"
+    [profile.native.package.smol_str]
+        opt-level = "z"
+    [profile.native.package.cursor-icon]
+        opt-level = "z"
+    [profile.native.package.num-integer]
+        opt-level = "z"
+    [profile.native.package.approx]
+        opt-level = "z"
+    [profile.native.package.num-complex]
+        opt-level = "z"
+    [profile.native.package.nom]
+        opt-level = "z"
+    [profile.native.package.ndcopy]
+        opt-level = "z"
+    [profile.native.package.num-bigint]
+        opt-level = "z"
+    [profile.native.package.num-iter]
+        opt-level = "z"
+    [profile.native.package.thread-id]
+        opt-level = "z"
+    [profile.native.package.vulkanalia-vma]
+        opt-level = 3
+    [profile.native.package.shader]
+        opt-level = "z"
+    [profile.native.package.lazy_static]
+        opt-level = "z"
+    [profile.native.package.log]
+        opt-level = "z"
+    [profile.native.package.num-rational]
+        opt-level = "z"
+    [profile.native.package.ilattice]
+        opt-level = "z"
+    [profile.native.package.num]
+        opt-level = "z"
+    [profile.native.package.block-mesh]
+        opt-level = "s"
+    [profile.native.package.serde_derive]
+        opt-level = "z"
+    [profile.native.package.pub-fields]
+        opt-level = "z"
+    [profile.native.package.flame]
+        opt-level = "z"
+    [profile.native.package.vulkanalia]
+        opt-level = 3
 
+[profile.bench]
+    inherits = "release"
+    opt-level = 3
+    codegen-units = 1
+    lto = "thin"
+    debug = false
+    panic = "abort"
+    overflow-checks = false
+    strip = false
+
+#"z" is just too slow
 [profile.natsize]
     inherits = "release"
     opt-level = "s"

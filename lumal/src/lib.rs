@@ -1,5 +1,6 @@
 #![allow(dead_code, unused)]
 #![allow(unused_parens)]
+#![feature(optimize_attribute)]
 
 // lumal is divided into files (aka modules)
 // this in needed for whole thing to compile
@@ -308,6 +309,9 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create(settings: &LumalSettings, window: &Window) -> Result<Renderer> {
         println!("Starting app.");
 
@@ -360,6 +364,9 @@ impl Renderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn create_instance(
         window: &Window,
         entry: &Entry,
@@ -454,6 +461,9 @@ impl Renderer {
         self.instance.destroy_instance(None);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     unsafe fn destroy_swapchain(&self) {
         // self.device.free_command_buffers(self.vulkan_data.command_pool, &self.vulkan_data.command_buffers.as_slice());
         self.vulkan_data
@@ -471,6 +481,9 @@ impl Renderer {
         self.device.destroy_swapchain_khr(self.vulkan_data.swapchain, None);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     unsafe fn destroy_sync_primitives(&self) {
         self.vulkan_data
             .in_flight_fences
@@ -486,6 +499,9 @@ impl Renderer {
             .for_each(|s| self.device.destroy_semaphore(*s, None));
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn begin_single_time_command_buffer(&self) -> vk::CommandBuffer {
         let alloc_info = vk::CommandBufferAllocateInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
@@ -503,6 +519,10 @@ impl Renderer {
         }
         command_buffer
     }
+
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn end_single_time_command_buffer(&self, command_buffer: vk::CommandBuffer) {
         unsafe {
             self.device.end_command_buffer(command_buffer).unwrap();
@@ -532,6 +552,9 @@ impl Renderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn bind_compute_pipe(&self, cmb: &vk::CommandBuffer, pipe: &ComputePipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
@@ -545,6 +568,10 @@ impl Renderer {
             );
         }
     }
+
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn bind_raster_pipe(&self, cmb: &vk::CommandBuffer, pipe: &RasterPipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
@@ -560,6 +587,9 @@ impl Renderer {
     }
 
     // creates primary command buffer. Lumal does not interact with non-primary command buffers
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_command_buffer(&self) -> Ring<vk::CommandBuffer> {
         let info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(self.vulkan_data.command_pool)
@@ -569,6 +599,9 @@ impl Renderer {
         Ring::from_vec(unsafe { self.device.allocate_command_buffers(&info).unwrap() })
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_command_buffer(&self, compute_command_buffers: &Ring<vk::CommandBuffer>) {
         unsafe {
             self.device.free_command_buffers(
@@ -578,6 +611,9 @@ impl Renderer {
         };
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn transition_image_layout_single_time(
         &self,
         image: &Image,
@@ -612,6 +648,9 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn copy_buffer_to_image_single_time(
         &self,
         buffer: vk::Buffer,
@@ -641,6 +680,9 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn copy_buffer_to_buffer_single_time(
         &mut self,
         src_buffer: vk::Buffer,
@@ -663,6 +705,9 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn process_deletion_queues(&mut self) {
         let mut write_index = 0;
         for i in 0..self.buffer_deletion_queue.len() {
@@ -713,6 +758,9 @@ impl Renderer {
     }
 
     // The only use i can imagine for this is the indented one - freing resources
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn process_deletion_queues_untill_all_done(&mut self) {
         while !self.buffer_deletion_queue.is_empty() || !self.image_deletion_queue.is_empty() {
             self.process_deletion_queues();
@@ -756,6 +804,9 @@ pub struct VulkanData {
 }
 
 /// Logs debug messages.
+#[cold]
+#[optimize(speed)]
+#[cfg_attr(feature = "optimized", optimize("s"))]
 extern "system" fn debug_callback(
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     type_: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -789,6 +840,9 @@ extern "system" fn debug_callback(
 pub struct SuitabilityError(pub &'static str);
 
 /// Picks a suitable physical device.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn pick_physical_device(instance: &Instance, data: &mut VulkanData) -> Result<()> {
     for physical_device in instance.enumerate_physical_devices()? {
         let properties = instance.get_physical_device_properties(physical_device);
@@ -809,6 +863,9 @@ unsafe fn pick_physical_device(instance: &Instance, data: &mut VulkanData) -> Re
 }
 
 /// Checks that a physical device is suitable.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn check_physical_device(
     instance: &Instance,
     data: &VulkanData,
@@ -828,6 +885,9 @@ unsafe fn check_physical_device(
 }
 
 /// Checks that a physical device supports the required device extensions.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn check_physical_device_extensions(
     instance: &Instance,
     physical_device: vk::PhysicalDevice,
@@ -852,6 +912,9 @@ unsafe fn check_physical_device_extensions(
 
 /// Creates a logical device for the picked physical device.
 #[allow(unused_variables)]
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn create_logical_device(
     entry: &Entry,
     instance: &Instance,
@@ -942,6 +1005,9 @@ unsafe fn create_logical_device(
 //================================================
 
 /// Creates a swapchain and swapchain images.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn create_swapchain(
     window: &Window,
     instance: &Instance,
@@ -1005,6 +1071,9 @@ unsafe fn create_swapchain(
 }
 
 /// Gets a suitable swapchain surface format.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
     formats
         .iter()
@@ -1017,6 +1086,9 @@ fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::Surface
 }
 
 /// Gets a suitable swapchain present mode.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
     present_modes
         .iter()
@@ -1027,6 +1099,9 @@ fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::Prese
 
 /// Gets a suitable swapchain extent.
 #[rustfmt::skip]
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
     if capabilities.current_extent.width != u32::MAX {
         capabilities.current_extent
@@ -1045,6 +1120,9 @@ fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKH
 }
 
 /// Creates image views for the swapchain images.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn create_swapchain_image_views(device: &Device, data: &mut VulkanData) -> Result<()> {
     data.swapchain_image_views = data
         .swapchain_images
@@ -1081,6 +1159,9 @@ unsafe fn create_swapchain_image_views(device: &Device, data: &mut VulkanData) -
 //================================================
 
 /// Creates a command pool.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn create_command_pool(
     instance: &Instance,
     device: &Device,
@@ -1098,6 +1179,9 @@ unsafe fn create_command_pool(
 }
 
 /// Creates synchronization objects to manage command buffer reuse and rendering.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 unsafe fn create_sync_objects(device: &Device, data: &mut VulkanData) -> Result<()> {
     let semaphore_info = vk::SemaphoreCreateInfo::builder();
     let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
@@ -1124,6 +1208,9 @@ struct QueueFamilyIndices {
 
 impl QueueFamilyIndices {
     /// Gets the indices of the required queue families for a physical device.
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     unsafe fn get(
         instance: &Instance,
         data: &VulkanData,
@@ -1168,6 +1255,9 @@ struct SwapchainSupport {
 
 impl SwapchainSupport {
     /// Gets the swapchain support for a physical device.
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     unsafe fn get(
         instance: &Instance,
         data: &VulkanData,
@@ -1188,6 +1278,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("z"))]
 fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
     let possible_error = "Failed to open file: ".to_owned() + path.as_ref().to_str().unwrap();
     let mut file = File::open(path).expect(&possible_error);

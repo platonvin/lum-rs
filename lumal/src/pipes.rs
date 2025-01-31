@@ -3,14 +3,16 @@ use crate::{read_file, ring::Ring, ComputePipe, RasterPipe, RenderPass};
 use crate::*;
 use descriptors::*;
 
-use bytemuck;
-use std::{error, ffi::CStr};
+use std::{error, ffi::CStr, ptr::slice_from_raw_parts};
 use vulkanalia::prelude::v1_3::*;
 use vulkanalia::vk::{self, Cast, CompareOp, DeviceV1_3, DynamicState, StencilOp};
 
 const PREFIXES: &[&str] = &["../shaders/", "../../shaders/", "shaders/compiled/"];
 
 impl Renderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_compute_pipe(&mut self, pipe: &mut ComputePipe) {
         assert!(pipe.line != vk::Pipeline::null());
         assert!(pipe.line_layout != vk::PipelineLayout::null());
@@ -28,6 +30,9 @@ impl Renderer {
             set_layout: vk::DescriptorSetLayout::null(),
         };
     }
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_raster_pipe(&mut self, pipe: RasterPipe) {
         assert!(pipe.line != vk::Pipeline::null());
         assert!(pipe.line_layout != vk::PipelineLayout::null());
@@ -48,6 +53,9 @@ impl Renderer {
         // };
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_compute_pipeline(
         &self,
         pipe: &mut ComputePipe,
@@ -143,6 +151,9 @@ impl Renderer {
         pipe.line_layout = line_layout;
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_raster_pipeline(
         &self,
         pipe: &mut RasterPipe,
@@ -428,6 +439,9 @@ impl Renderer {
         pipe.line_layout = pipeline_layout;
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     fn stencil_is_empty(stencil: vk::StencilOpState) -> bool {
         (stencil.fail_op == StencilOp::KEEP)
             && (stencil.pass_op == StencilOp::KEEP)
@@ -438,8 +452,14 @@ impl Renderer {
             && (stencil.reference == 0)
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn create_shader_module(&self, code: &[u8]) -> vk::ShaderModule {
-        let create_info = vk::ShaderModuleCreateInfo::builder().code(bytemuck::cast_slice(code));
+        let code_u32 =
+            unsafe { std::slice::from_raw_parts(code.as_ptr() as *const u32, code.len() / 4) };
+
+        let create_info = vk::ShaderModuleCreateInfo::builder().code(code_u32);
 
         unsafe {
             self.device
@@ -449,6 +469,9 @@ impl Renderer {
     }
 
     // Helper function for resolving shader paths
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     fn resolve_shader_path(prefixes: &[&str], file_name: String) -> Option<std::path::PathBuf> {
         for prefix in prefixes {
             let candidate = std::path::Path::new(prefix).join(file_name.as_str());
@@ -460,6 +483,9 @@ impl Renderer {
     }
 
     // Helper function for loading SPIR-V shader modules
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     fn load_shader_module(device: &Device, path: &std::path::Path) -> vk::ShaderModule {
         use std::fs::File;
         use std::io::Read;

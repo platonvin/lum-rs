@@ -21,6 +21,7 @@ layout(set = 0, binding = 3) uniform sampler3D radianceCache2read;
 layout(set = 0, binding = 4, rgb10_a2) uniform writeonly image3D radianceCache2write;
 
 layout(std430,set = 0, binding = 5) restrict readonly buffer ReqBuffer{
+    // we only need i8vec3, but extra i8 padding is cheap and makes it aligned better
 	i8vec4 updateReqests[];
 } reqBuffer;
 
@@ -29,9 +30,8 @@ layout(constant_id = 2) const float REACTIVNESS = 0.01;
 
 layout(push_constant) uniform restrict readonly constants{
     int timeSeed;
+    // unused:
     int iters;
-    int size;
-    int sihft;
 } pco;
 
 #define RAYS_PER_PROBE (64) //TODO: change to spec const
@@ -357,15 +357,14 @@ void store_probe(ivec3 probe_pos, vec3 accumulated_light){
 //TODO: does AMD allocate for unused?
 shared vec3 _light[RAYS_PER_PROBE / 32]; //maximum possible requires size
 
+// local_size_x = RAYS_PER_PROBE is what makes 1->RAYS_PER_PROBE
 layout(local_size_x = RAYS_PER_PROBE, local_size_y = 1, local_size_z = 1) in;
 void main(){
     ivec3 local_pos = ivec3(gl_GlobalInvocationID.xyz);
 
     int probe_id = local_pos.x % RAYS_PER_PROBE;
 
-    int scaled_relative_req_num = local_pos.x / (RAYS_PER_PROBE);
-
-    int req_num = scaled_relative_req_num*pco.size + pco.sihft;
+    int req_num = local_pos.x / int(RAYS_PER_PROBE);
     ivec3 probe_pos = reqBuffer.updateReqests[req_num].xyz;
     random_storage = uvec3(local_pos.xy+pco.timeSeed, pco.timeSeed);
 

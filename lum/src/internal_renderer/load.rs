@@ -15,6 +15,9 @@ impl super::InternalRenderer {
     // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is
     // due to perfomance win + hw limitations E.g. just doing 16*len x 16 x 16
     // will not work cause 16xlen will be too big size for some gpus
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     pub fn update_block_palette_to_gpu(&mut self) {
         assert!(self.block_palette_voxels.len() == self.static_block_palette_size as usize);
         // create 3d array to be copied to gpu-side image after it is filled
@@ -82,6 +85,9 @@ impl super::InternalRenderer {
         self.lumal.destroy_buffer(staging_buffer);
     }
 
+    #[cold]
+    #[optimize(speed)]
+    #[cfg_attr(feature = "optimized", optimize("s"))]
     pub fn update_material_palette_to_gpu(&mut self) {
         // we do not write it to intermediate buffer cuz its already in right layout - 6
         // float rows one by one 256 total
@@ -119,7 +125,10 @@ impl super::InternalRenderer {
         self.lumal.destroy_buffer(staging_buffer);
     }
 
-    #[deprecated]
+    // #[deprecated]
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn extract_palette_from_scene(&mut self, scene: &dot_vox::DotVoxData) {
         assert!(self.material_palette.len() == scene.materials.len());
         assert!(
@@ -176,7 +185,7 @@ impl super::InternalRenderer {
             // dbg!(material);
         }
 
-        let mut rng = rand::thread_rng();
+        // let mut rng = rand::thread_rng();
 
         // for (material) in self.material_palette.iter_mut() {
         //     material.transparency = rng.gen_range(0.0..1.0);
@@ -191,6 +200,9 @@ impl super::InternalRenderer {
         // dbg!(&self.material_palette);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn extract_palette_from_scene_ogt(&mut self, scene: &ogt_vox::ogt_vox_scene) {
         for i in 0..scene.materials.matl.len() {
             self.material_palette[i].albedo = vec3::new(
@@ -224,11 +236,17 @@ impl super::InternalRenderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn extract_palette_from_file(&mut self, scene_file: &str) {
         let scene = dot_vox::load(scene_file).unwrap();
         self.extract_palette_from_scene(&scene);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn extract_palette_from_file_ogt(&mut self, scene_file: &str) {
         let scene_data = std::fs::read(scene_file).unwrap();
         let scene = unsafe {
@@ -237,6 +255,9 @@ impl super::InternalRenderer {
         self.extract_palette_from_scene_ogt(from_addr(scene));
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_mesh_from_file(
         &mut self,
         mesh_file: &str,
@@ -257,6 +278,9 @@ impl super::InternalRenderer {
         self.load_mesh_from_memory(model, true)
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_mesh_from_file_ogt(
         &mut self,
         mesh_file: &str,
@@ -281,6 +305,9 @@ impl super::InternalRenderer {
         self.load_mesh_from_memory_ogt(model, true)
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_mesh_from_memory_ogt(
         &mut self,
         model: &ogt_vox::ogt_vox_model,
@@ -331,6 +358,9 @@ impl super::InternalRenderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_mesh_from_memory(
         &mut self,
         model: &dot_vox::Model,
@@ -371,6 +401,9 @@ impl super::InternalRenderer {
     }
 
     // does not return a mesh because you should only access it via BlockID_t
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_block_from_file(&mut self, block: BlockId, path: &str) {
         let scene = dot_vox::load(path).unwrap();
         assert!(scene.models.len() == 1); // only one model per file supported for now
@@ -380,6 +413,9 @@ impl super::InternalRenderer {
         self.load_block_from_memory(block, model);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_block_from_file_ogt(&mut self, block: BlockId, path: &str) {
         let scene_data = std::fs::read(path).unwrap();
         let scene = unsafe {
@@ -393,6 +429,9 @@ impl super::InternalRenderer {
         self.load_block_from_memory_ogt(block, model);
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_block_from_memory_ogt(
         &mut self,
         block_id: BlockId,
@@ -434,6 +473,9 @@ impl super::InternalRenderer {
     }
 
     // does not return a mesh because you should only access it via BlockID_t
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_block_from_memory(&mut self, block: BlockId, model: &dot_vox::Model) {
         let size = uvec3::new(model.size.x, model.size.y, model.size.z);
 
@@ -454,6 +496,9 @@ impl super::InternalRenderer {
         self.block_palette_meshes[block as usize] = InternalMeshBlock { triangles };
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn make_contour_vertices(
         &mut self,
         // real size. TODO: do i need this?
@@ -593,6 +638,9 @@ impl super::InternalRenderer {
         triangles
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn free_mesh(&mut self, mesh: InternalMeshModel) {
         assert!(mesh.triangles.vertexes.buffer != vk::Buffer::null());
         assert!(mesh.triangles.indices.buffer != vk::Buffer::null());
@@ -615,6 +663,9 @@ impl super::InternalRenderer {
 }
 
 // converts array of position+id into 3d array of id's. Padded.
+#[cold]
+#[optimize(size)]
+#[cfg_attr(feature = "optimized", optimize("s"))]
 fn make_padded_array(voxels: &[dot_vox::Voxel], size: vek::Vec3<u32>) -> Array3D<VoxelForContour> {
     // plain 3d array representation
     let mut plain_voxel_data = Array3D::<VoxelForContour>::new(
@@ -649,6 +700,9 @@ fn make_padded_array(voxels: &[dot_vox::Voxel], size: vek::Vec3<u32>) -> Array3D
 impl super::InternalRenderer {
     // TODO: runtime copies in single copy command buffer instead of per-model cmb
     // creation
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_rayrace_voxel_image(&mut self, voxels: &[Voxel], size: uvec3) -> lumal::Image {
         let buffer_count = size.x * size.y * size.z;
         let buffer_size = buffer_count * std::mem::size_of::<Voxel>() as u32;
@@ -709,6 +763,9 @@ impl super::InternalRenderer {
 pub struct VoxelForContour(pub Voxel);
 
 impl block_mesh::Voxel for VoxelForContour {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn get_visibility(&self) -> VoxelVisibility {
         if self.0 == 0 {
             VoxelVisibility::Empty
@@ -721,6 +778,9 @@ impl block_mesh::Voxel for VoxelForContour {
 impl block_mesh::MergeVoxel for VoxelForContour {
     type MergeValue = Self;
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn merge_value(&self) -> Self::MergeValue {
         // we only care about contour, thus if not emtpy, merging is allowed
         match self.0 {

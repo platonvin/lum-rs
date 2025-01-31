@@ -88,6 +88,28 @@ macro_rules! impl_unchecked_ops {
                 }
             }
 
+            impl vek::num_traits::Zero for UncheckedInt<$t> {
+                fn zero() -> Self {
+                    Self(0)
+                }
+
+                fn is_zero(&self) -> bool {
+                    self.0 == 0
+                }
+            }
+
+            // impl vek:: for UncheckedInt<$t> {
+            //     fn clamped(self, lower: Self, upper: Self) -> Self {
+            //         // assert!(lower <= upper);
+            //         Self(partial_min(self.0, upper.0).clamp(lower.0, upper.0))
+            //     }
+            //     fn clamped01(self) -> Self {
+            //         Self(self.0.clamp(0, 1))
+            //     }
+            // }
+
+            // impl
+
             // impl<FromType, ToType> From<UncheckedInt<FromType>> for UncheckedInt<ToType>
             // where
             //     FromType: Into<ToType>,

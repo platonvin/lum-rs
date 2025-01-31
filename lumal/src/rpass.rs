@@ -14,6 +14,9 @@ use crate::function;
 use vulkanalia::prelude::v1_3::*;
 
 impl Renderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_render_pass(&mut self, rpass: &mut RenderPass) {
         assert!(rpass.render_pass != vk::RenderPass::null());
         assert!(!rpass.framebuffers.is_empty());
@@ -31,6 +34,9 @@ impl Renderer {
         *rpass = RenderPass::default();
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_render_pass(
         &self,
         attachments: &[AttachmentDescription],
@@ -204,6 +210,9 @@ impl Renderer {
     }
 
     // Function to create subpass dependencies
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn create_subpass_dependencies(
         spass_attachs: &[SubpassDescription],
     ) -> Vec<vk::SubpassDependency> {
@@ -252,6 +261,9 @@ impl Renderer {
     }
 
     // Function to create framebuffers
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn create_framebuffers(
         &self,
         // device: &vulkanalia::Device,
@@ -301,6 +313,9 @@ impl Renderer {
         framebuffers
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn cmd_begin_renderpass(
         &self,
         command_buffer: &vk::CommandBuffer,
@@ -317,8 +332,7 @@ impl Renderer {
             .clear_values(render_pass.clear_colors.as_slice());
 
         unsafe {
-            self.device
-                .cmd_begin_render_pass(*command_buffer, &begin_info, inline);
+            self.device.cmd_begin_render_pass(*command_buffer, &begin_info, inline);
             self.cmd_set_viewport(
                 *command_buffer,
                 render_pass.extent.width,
@@ -327,6 +341,9 @@ impl Renderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn cmd_end_renderpass(
         &self,
         command_buffer: &vk::CommandBuffer,

@@ -4,6 +4,9 @@ use lumal::{LumalSettings, Renderer};
 use crate::*;
 
 impl InternalRenderer {
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_all_command_buffers(
         lumal: &Renderer,
         lum_settings: &Settings,
@@ -22,6 +25,9 @@ impl InternalRenderer {
         }
     }
 
+    #[cold]
+    #[optimize(size)]
+    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_all_command_buffers(lumal: &Renderer, command_buffers: &AllCommandBuffers) {
         lumal.destroy_command_buffer(&command_buffers.compute_command_buffers);
         lumal.destroy_command_buffer(&command_buffers.lightmap_command_buffers);
