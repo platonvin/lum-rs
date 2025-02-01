@@ -8,7 +8,7 @@
 
 [build]
     rustflags = [
-        "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
+        # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
         # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
     ]
 
@@ -18,7 +18,7 @@
 [profile.native.build-override]
     rustflags = [
         "-C", "target-cpu=native",
-        "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
+        # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
         # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
         "-Zlocation-detail=none",
         "-Zfmt-debug=none",
@@ -27,7 +27,7 @@
 [profile.natsize.build-override]
     rustflags = [
         "-C", "target-cpu=native",
-        "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
+        # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
         # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
         "-Zlocation-detail=none",
         "-Zfmt-debug=none",

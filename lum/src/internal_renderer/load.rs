@@ -126,105 +126,105 @@ impl super::InternalRenderer {
     }
 
     // #[deprecated]
+    // #[cold]
+    // #[optimize(size)]
+    // #[cfg_attr(feature = "optimized", optimize("z"))]
+    // pub fn extract_palette_from_scene(&mut self, scene: &dot_vox::DotVoxData) {
+    //     assert!(self.material_palette.len() == scene.materials.len());
+    //     assert!(
+    //         scene.palette.len() == scene.materials.len()
+    //             && scene.materials.len() == self.material_palette.len()
+    //     );
+
+    //     // now fill emission and roughness
+    //     for (i, mv_mat) in scene.materials.iter().enumerate() {
+    //         // there is 256 non-zero materials, which is stupid, so i cutoff the last one
+    //         // dbg!(mv_mat.id);
+    //         let actual_mat_idx = mv_mat.id as usize;
+    //         if actual_mat_idx >= self.material_palette.len() {
+    //             break;
+    //         }
+
+    //         // dbg!(actual_mat_idx);
+    //         let material = &mut self.material_palette[actual_mat_idx];
+
+    //         material.albedo = vec3::new(
+    //             scene.palette[actual_mat_idx].r as f32 / 255.0,
+    //             scene.palette[actual_mat_idx].g as f32 / 255.0,
+    //             scene.palette[actual_mat_idx].b as f32 / 255.0,
+    //         );
+
+    //         material.emmitness = mv_mat.emission().unwrap_or(0.0);
+    //         material.roughness = mv_mat.roughness().unwrap_or(0.0);
+
+    //         // mappings from MagicaVoxel materials to my materials are weird
+    //         match mv_mat.properties.get("_type").map(String::as_str) {
+    //             Some("_diffuse") => {
+    //                 material.roughness = 1.0;
+    //             }
+    //             Some("_metal") => {
+    //                 let old_rough = material.roughness;
+    //                 let metalness = mv_mat.metalness().unwrap_or(0.0);
+    //                 material.roughness = (old_rough + (1.0 - metalness)) / 2.0;
+    //             }
+    //             Some("_emit") => {
+    //                 let old_emit = material.emmitness;
+    //                 let fluxness = mv_mat.radiant_flux().unwrap_or(0.0);
+    //                 material.emmitness = (old_emit * (2.0 + fluxness * 4.0)); // yep i store it in IEEE 754 float
+    //                 material.roughness = 0.5; // when just shiny it looks worse
+    //             }
+    //             Some(wtf) => {
+    //                 println!("Unknown material type");
+    //                 println!("{:?}", wtf);
+    //                 panic!();
+    //             }
+    //             None => {
+    //                 // panic!("Unknown material type");
+    //             }
+    //         }
+    //         // dbg!(material);
+    //     }
+
+    //     // let mut rng = rand::thread_rng();
+
+    //     // for (material) in self.material_palette.iter_mut() {
+    //     //     material.transparency = rng.gen_range(0.0..1.0);
+    //     //     material.emmitness = rng.gen_range(0.0..1.0);
+    //     //     material.roughness = rng.gen_range(0.0..1.0);
+    //     // }
+    //     // self.material_palette[0].albedo = vec3::new(0.0, 0.0, 0.0);
+    //     // self.material_palette[0].transparency = 0.0;
+    //     // self.material_palette[0].emmitness = 0.0;
+    //     // self.material_palette[0].roughness = 0.0;
+
+    //     // dbg!(&self.material_palette);
+    // }
+
     #[cold]
     #[optimize(size)]
     #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn extract_palette_from_scene(&mut self, scene: &dot_vox::DotVoxData) {
-        assert!(self.material_palette.len() == scene.materials.len());
-        assert!(
-            scene.palette.len() == scene.materials.len()
-                && scene.materials.len() == self.material_palette.len()
-        );
-
-        // now fill emission and roughness
-        for (i, mv_mat) in scene.materials.iter().enumerate() {
-            // there is 256 non-zero materials, which is stupid, so i cutoff the last one
-            // dbg!(mv_mat.id);
-            let actual_mat_idx = mv_mat.id as usize;
-            if actual_mat_idx >= self.material_palette.len() {
-                break;
-            }
-
-            // dbg!(actual_mat_idx);
-            let material = &mut self.material_palette[actual_mat_idx];
-
-            material.albedo = vec3::new(
-                scene.palette[actual_mat_idx].r as f32 / 255.0,
-                scene.palette[actual_mat_idx].g as f32 / 255.0,
-                scene.palette[actual_mat_idx].b as f32 / 255.0,
-            );
-
-            material.emmitness = mv_mat.emission().unwrap_or(0.0);
-            material.roughness = mv_mat.roughness().unwrap_or(0.0);
-
-            // mappings from MagicaVoxel materials to my materials are weird
-            match mv_mat.properties.get("_type").map(String::as_str) {
-                Some("_diffuse") => {
-                    material.roughness = 1.0;
-                }
-                Some("_metal") => {
-                    let old_rough = material.roughness;
-                    let metalness = mv_mat.metalness().unwrap_or(0.0);
-                    material.roughness = (old_rough + (1.0 - metalness)) / 2.0;
-                }
-                Some("_emit") => {
-                    let old_emit = material.emmitness;
-                    let fluxness = mv_mat.radiant_flux().unwrap_or(0.0);
-                    material.emmitness = (old_emit * (2.0 + fluxness * 4.0)); // yep i store it in IEEE 754 float
-                    material.roughness = 0.5; // when just shiny it looks worse
-                }
-                Some(wtf) => {
-                    println!("Unknown material type");
-                    println!("{:?}", wtf);
-                    panic!();
-                }
-                None => {
-                    // panic!("Unknown material type");
-                }
-            }
-            // dbg!(material);
-        }
-
-        // let mut rng = rand::thread_rng();
-
-        // for (material) in self.material_palette.iter_mut() {
-        //     material.transparency = rng.gen_range(0.0..1.0);
-        //     material.emmitness = rng.gen_range(0.0..1.0);
-        //     material.roughness = rng.gen_range(0.0..1.0);
-        // }
-        // self.material_palette[0].albedo = vec3::new(0.0, 0.0, 0.0);
-        // self.material_palette[0].transparency = 0.0;
-        // self.material_palette[0].emmitness = 0.0;
-        // self.material_palette[0].roughness = 0.0;
-
-        // dbg!(&self.material_palette);
-    }
-
-    #[cold]
-    #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn extract_palette_from_scene_ogt(&mut self, scene: &ogt_vox::ogt_vox_scene) {
+    pub fn extract_palette_from_scene_ogt(&mut self, scene: &ogt_vox::VoxScene) {
         for i in 0..scene.materials.matl.len() {
             self.material_palette[i].albedo = vec3::new(
-                scene.palette.color[i].r as f32 / 255.0,
-                scene.palette.color[i].g as f32 / 255.0,
-                scene.palette.color[i].b as f32 / 255.0,
+                scene.palette.color[i].x as f32 / 255.0,
+                scene.palette.color[i].y as f32 / 255.0,
+                scene.palette.color[i].z as f32 / 255.0,
             );
-            self.material_palette[i].transparency = scene.palette.color[i].a as f32 / 255.0;
+            self.material_palette[i].transparency = scene.palette.color[i].w as f32 / 255.0;
             self.material_palette[i].emmitness = 0.0;
             self.material_palette[i].roughness = 0.0;
 
             match scene.materials.matl[i].type_ {
-                ogt_vox::ogt_matl_type_matl_type_diffuse => {
+                ogt_vox::MatlType::Diffuse => {
                     self.material_palette[i].emmitness = 0.0;
                     self.material_palette[i].roughness = 1.0;
                 }
-                ogt_vox::ogt_matl_type_matl_type_emit => {
+                ogt_vox::MatlType::Emit => {
                     self.material_palette[i].emmitness =
                         scene.materials.matl[i].emit * (2.0 + scene.materials.matl[i].flux * 4.0);
                     self.material_palette[i].roughness = 0.5;
                 }
-                ogt_vox::ogt_matl_type_matl_type_metal => {
+                ogt_vox::MatlType::Metal => {
                     self.material_palette[i].emmitness = 0.0;
                     self.material_palette[i].roughness =
                         scene.materials.matl[i].rough + (1.0 - scene.materials.matl[i].metal) / 2.0;
@@ -236,47 +236,47 @@ impl super::InternalRenderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn extract_palette_from_file(&mut self, scene_file: &str) {
-        let scene = dot_vox::load(scene_file).unwrap();
-        self.extract_palette_from_scene(&scene);
-    }
+    // #[cold]
+    // #[optimize(size)]
+    // #[cfg_attr(feature = "optimized", optimize("z"))]
+    // pub fn extract_palette_from_file(&mut self, scene_file: &str) {
+    //     let scene = dot_vox::load(scene_file).unwrap();
+    //     self.extract_palette_from_scene(&scene);
+    // }
 
-    #[cold]
-    #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn extract_palette_from_file_ogt(&mut self, scene_file: &str) {
-        let scene_data = std::fs::read(scene_file).unwrap();
-        let scene = unsafe {
-            ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
-        };
-        self.extract_palette_from_scene_ogt(from_addr(scene));
-    }
+    // #[cold]
+    // #[optimize(size)]
+    // #[cfg_attr(feature = "optimized", optimize("z"))]
+    // pub fn extract_palette_from_file_ogt(&mut self, scene_file: &str) {
+    //     let scene_data = std::fs::read(scene_file).unwrap();
+    //     let scene = unsafe {
+    //         ogt_vox2::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
+    //     };
+    //     self.extract_palette_from_scene_ogt(from_addr(scene));
+    // }
 
-    #[cold]
-    #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn load_mesh_from_file(
-        &mut self,
-        mesh_file: &str,
-        make_vertices: bool,
-        extrude_palette: bool,
-    ) -> InternalMeshModel {
-        let scene = dot_vox::load(mesh_file).unwrap();
-        assert!(scene.models.len() == 1); // only one model per file supported for now
-        let model = &scene.models[0];
-        assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
+    // #[cold]
+    // #[optimize(size)]
+    // #[cfg_attr(feature = "optimized", optimize("z"))]
+    // pub fn load_mesh_from_file(
+    //     &mut self,
+    //     mesh_file: &str,
+    //     make_vertices: bool,
+    //     extrude_palette: bool,
+    // ) -> InternalMeshModel {
+    //     let scene = dot_vox::load(mesh_file).unwrap();
+    //     assert!(scene.models.len() == 1); // only one model per file supported for now
+    //     let model = &scene.models[0];
+    //     assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
 
-        if extrude_palette && !self.has_palette {
-            println!("Extruding palette");
-            self.extract_palette_from_scene(&scene);
-            self.has_palette = true;
-        }
+    //     if extrude_palette && !self.has_palette {
+    //         println!("Extruding palette");
+    //         self.extract_palette_from_scene(&scene);
+    //         self.has_palette = true;
+    //     }
 
-        self.load_mesh_from_memory(model, true)
-    }
+    //     self.load_mesh_from_memory(model, true)
+    // }
 
     #[cold]
     #[optimize(size)]
@@ -287,18 +287,16 @@ impl super::InternalRenderer {
         make_vertices: bool,
         extrude_palette: bool,
     ) -> InternalMeshModel {
-        let scene_data = std::fs::read(mesh_file).unwrap();
-        let scene = unsafe {
-            ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
-        };
-        let scene = from_addr(scene);
-        assert!(scene.num_models == 1); // only one model per file supported for now
-        let model = unsafe { &(**scene.models.offset(0).offset(0)) };
+        // let scene_data = std::fs::read(mesh_file).unwrap();
+        let scene = ogt_vox::read_scene_from_file(mesh_file).unwrap();
+        // let scene = from_addr(scene);
+        assert!(scene.models.len() == 1); // only one model per file supported for now
+        let model = &scene.models[0];
         assert!(model.size_x > 0 && model.size_y > 0 && model.size_z > 0);
 
         if extrude_palette && !self.has_palette {
             println!("Extruding palette");
-            self.extract_palette_from_scene_ogt(scene);
+            self.extract_palette_from_scene_ogt(&scene);
             self.has_palette = true;
         }
 
@@ -310,7 +308,7 @@ impl super::InternalRenderer {
     #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_mesh_from_memory_ogt(
         &mut self,
-        model: &ogt_vox::ogt_vox_model,
+        model: &ogt_vox::VoxModel,
         make_vertices: bool,
     ) -> InternalMeshModel {
         let size = uvec3 {
@@ -330,9 +328,8 @@ impl super::InternalRenderer {
         for xx in 0..size.x {
             for yy in 0..size.y {
                 for zz in 0..size.z {
-                    let voxel = unsafe {
-                        *model.voxel_data.offset((xx + yy * size.x + zz * size.x * size.y) as isize)
-                    };
+                    let voxel =
+                        model.voxel_data[(xx + yy * size.x + zz * size.x * size.y) as usize];
                     // some padding for generator
                     padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] =
                         VoxelForContour(voxel);
@@ -342,7 +339,7 @@ impl super::InternalRenderer {
 
         let pvd_data_slice = unsafe {
             std::slice::from_raw_parts(
-                model.voxel_data as *const Voxel,
+                model.voxel_data.as_ptr() as *const Voxel,
                 (size.x * size.y * size.z) as usize,
             )
         };
@@ -358,73 +355,71 @@ impl super::InternalRenderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn load_mesh_from_memory(
-        &mut self,
-        model: &dot_vox::Model,
-        make_vertices: bool,
-    ) -> InternalMeshModel {
-        assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
-        // They do not necessarily have to be equal, e.g. for big grid single-voxel
-        // model is len()==1 assert!(model.voxels.len() == (model.size.x *
-        // model.size.y * model.size.z) as usize);
+    // #[cold]
+    // #[optimize(size)]
+    // #[cfg_attr(feature = "optimized", optimize("z"))]
+    // pub fn load_mesh_from_memory(
+    //     &mut self,
+    //     model: &dot_vox::Model,
+    //     make_vertices: bool,
+    // ) -> InternalMeshModel {
+    //     assert!(model.size.x > 0 && model.size.y > 0 && model.size.z > 0);
+    //     // They do not necessarily have to be equal, e.g. for big grid single-voxel
+    //     // model is len()==1 assert!(model.voxels.len() == (model.size.x *
+    //     // model.size.y * model.size.z) as usize);
 
-        let size = uvec3 {
-            x: model.size.x,
-            y: model.size.y,
-            z: model.size.z,
-        };
+    //     let size = uvec3 {
+    //         x: model.size.x,
+    //         y: model.size.y,
+    //         z: model.size.z,
+    //     };
 
-        let padded_voxel_data = make_padded_array(&model.voxels, size);
-        // let plain_voxel_data =
+    //     let padded_voxel_data = make_padded_array(&model.voxels, size);
+    //     // let plain_voxel_data =
 
-        // we need 3d array as slice of u8s but we also need a separate type for trait.
-        // Here we are
-        let pvd_data_slice = unsafe {
-            std::slice::from_raw_parts(
-                padded_voxel_data.data.as_ptr() as *const Voxel,
-                padded_voxel_data.data.len(),
-            )
-        };
+    //     // we need 3d array as slice of u8s but we also need a separate type for trait.
+    //     // Here we are
+    //     let pvd_data_slice = unsafe {
+    //         std::slice::from_raw_parts(
+    //             padded_voxel_data.data.as_ptr() as *const Voxel,
+    //             padded_voxel_data.data.len(),
+    //         )
+    //     };
 
-        let voxels = self.create_rayrace_voxel_image(pvd_data_slice, size);
+    //     let voxels = self.create_rayrace_voxel_image(pvd_data_slice, size);
 
-        let triangles = self.make_contour_vertices(size, padded_voxel_data);
+    //     let triangles = self.make_contour_vertices(size, padded_voxel_data);
 
-        InternalMeshModel {
-            triangles,
-            voxels,
-            size,
-        }
-    }
+    //     InternalMeshModel {
+    //         triangles,
+    //         voxels,
+    //         size,
+    //     }
+    // }
 
-    // does not return a mesh because you should only access it via BlockID_t
-    #[cold]
-    #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn load_block_from_file(&mut self, block: BlockId, path: &str) {
-        let scene = dot_vox::load(path).unwrap();
-        assert!(scene.models.len() == 1); // only one model per file supported for now
-        let model = &scene.models[0];
-        // blocks are always 16x16x16
-        assert!(model.size.x == 16 && model.size.y == 16 && model.size.z == 16);
-        self.load_block_from_memory(block, model);
-    }
+    // // does not return a mesh because you should only access it via BlockID_t
+    // #[cold]
+    // #[optimize(size)]
+    // #[cfg_attr(feature = "optimized", optimize("z"))]
+    // pub fn load_block_from_file(&mut self, block: BlockId, path: &str) {
+    //     let scene = dot_vox::load(path).unwrap();
+    //     assert!(scene.models.len() == 1); // only one model per file supported for now
+    //     let model = &scene.models[0];
+    //     // blocks are always 16x16x16
+    //     assert!(model.size.x == 16 && model.size.y == 16 && model.size.z == 16);
+    //     self.load_block_from_memory(block, model);
+    // }
 
     #[cold]
     #[optimize(size)]
     #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn load_block_from_file_ogt(&mut self, block: BlockId, path: &str) {
-        let scene_data = std::fs::read(path).unwrap();
-        let scene = unsafe {
-            ogt_vox::ogt_vox_read_scene_with_flags(scene_data.as_ptr(), scene_data.len() as u32, 0)
-        };
-        let scene = from_addr(scene);
-        assert!(scene.num_models == 1); // only one model per file supported for now
-        let model = unsafe { &(**scene.models.offset(0).offset(0)) };
-        // blocks are always 16x16x16
+        // let scene_data = std::fs::read(path).unwrap();
+        let scene = ogt_vox::read_scene_from_file(path).unwrap(); // TODO: handle error
+                                                                  // let scene = from_addr(scene);
+                                                                  // assert!(scene.num_models == 1); // only one model per file supported for now
+                                                                  // blocks are always 16x16x16
+        let model = &scene.models[0];
         assert!(model.size_x == 16 && model.size_y == 16 && model.size_z == 16);
         self.load_block_from_memory_ogt(block, model);
     }
@@ -432,11 +427,7 @@ impl super::InternalRenderer {
     #[cold]
     #[optimize(size)]
     #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn load_block_from_memory_ogt(
-        &mut self,
-        block_id: BlockId,
-        model: &ogt_vox::ogt_vox_model,
-    ) {
+    pub fn load_block_from_memory_ogt(&mut self, block_id: BlockId, model: &ogt_vox::VoxModel) {
         let size = uvec3::new(model.size_x, model.size_y, model.size_z);
 
         let mut padded_voxel_data = Array3D::<VoxelForContour>::new(
@@ -450,9 +441,8 @@ impl super::InternalRenderer {
         for xx in 0..size.x {
             for yy in 0..size.y {
                 for zz in 0..size.z {
-                    let voxel = unsafe {
-                        *model.voxel_data.offset((xx + yy * size.x + zz * size.x * size.y) as isize)
-                    };
+                    let voxel =
+                        model.voxel_data[(xx + yy * size.x + zz * size.x * size.y) as usize];
                     // some padding for generator
                     padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] =
                         VoxelForContour(voxel);
@@ -473,28 +463,28 @@ impl super::InternalRenderer {
     }
 
     // does not return a mesh because you should only access it via BlockID_t
-    #[cold]
-    #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn load_block_from_memory(&mut self, block: BlockId, model: &dot_vox::Model) {
-        let size = uvec3::new(model.size.x, model.size.y, model.size.z);
+    // #[cold]
+    // #[optimize(size)]
+    // #[cfg_attr(feature = "optimized", optimize("z"))]
+    // pub fn load_block_from_memory(&mut self, block: BlockId, model: &dot_vox::Model) {
+    //     let size = uvec3::new(model.size.x, model.size.y, model.size.z);
 
-        let mut array = make_padded_array(&model.voxels, size);
-        // yep, there is padding. Its to reuse memory. TODO: find nicer approach
-        let padding = uvec3::new(1, 1, 1);
+    //     let mut array = make_padded_array(&model.voxels, size);
+    //     // yep, there is padding. Its to reuse memory. TODO: find nicer approach
+    //     let padding = uvec3::new(1, 1, 1);
 
-        assert!(size.x == 16 && size.y == 16 && size.z == 16);
-        let target_block = block as usize;
+    //     assert!(size.x == 16 && size.y == 16 && size.z == 16);
+    //     let target_block = block as usize;
 
-        for_zyx!(size, |xx, yy, zz| {
-            self.block_palette_voxels[target_block][xx as usize][yy as usize][zz as usize] =
-                array[((xx + 1) as usize, (yy + 1) as usize, (zz + 1) as usize)].0;
-        });
+    //     for_zyx!(size, |xx, yy, zz| {
+    //         self.block_palette_voxels[target_block][xx as usize][yy as usize][zz as usize] =
+    //             array[((xx + 1) as usize, (yy + 1) as usize, (zz + 1) as usize)].0;
+    //     });
 
-        let triangles = self.make_contour_vertices(size, array);
+    //     let triangles = self.make_contour_vertices(size, array);
 
-        self.block_palette_meshes[block as usize] = InternalMeshBlock { triangles };
-    }
+    //     self.block_palette_meshes[block as usize] = InternalMeshBlock { triangles };
+    // }
 
     #[cold]
     #[optimize(size)]
@@ -663,39 +653,39 @@ impl super::InternalRenderer {
 }
 
 // converts array of position+id into 3d array of id's. Padded.
-#[cold]
-#[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
-fn make_padded_array(voxels: &[dot_vox::Voxel], size: vek::Vec3<u32>) -> Array3D<VoxelForContour> {
-    // plain 3d array representation
-    let mut plain_voxel_data = Array3D::<VoxelForContour>::new(
-        // +2 cause padding of 1 from each side
-        (size.x + 2) as usize,
-        (size.y + 2) as usize,
-        (size.z + 2) as usize,
-    );
-    plain_voxel_data.data.fill(VoxelForContour(0));
+// #[cold]
+// #[optimize(size)]
+// #[cfg_attr(feature = "optimized", optimize("s"))]
+// fn make_padded_array(voxels: &[dot_vox::Voxel], size: vek::Vec3<u32>) -> Array3D<VoxelForContour> {
+//     // plain 3d array representation
+//     let mut plain_voxel_data = Array3D::<VoxelForContour>::new(
+//         // +2 cause padding of 1 from each side
+//         (size.x + 2) as usize,
+//         (size.y + 2) as usize,
+//         (size.z + 2) as usize,
+//     );
+//     plain_voxel_data.data.fill(VoxelForContour(0));
 
-    // contour means that 2 different voxels (different color, roughness, etc) will
-    // be meshed into same triangle(s)
-    // - But where does material come from then?
-    // - from GPU-side 3d voxel arrays. That is faster (cause triangles without such
-    //   approach are too small and overhead of raster is too heavy)
-    // NOTE: data is still represented with u8
-    // but type is VoxelForContour to implement a trait for mesher lib
-    // In original C++ implementation this was separate array
-    voxels.iter().for_each(|voxel| {
-        // dbg!(voxel);
-        // +1 cause padding of 1 from each side
-        // TODO: check if it is actually needed
-        plain_voxel_data[(
-            (voxel.x + 1) as usize,
-            (voxel.y + 1) as usize,
-            (voxel.z + 1) as usize,
-        )] = VoxelForContour(voxel.i);
-    });
-    plain_voxel_data
-}
+//     // contour means that 2 different voxels (different color, roughness, etc) will
+//     // be meshed into same triangle(s)
+//     // - But where does material come from then?
+//     // - from GPU-side 3d voxel arrays. That is faster (cause triangles without such
+//     //   approach are too small and overhead of raster is too heavy)
+//     // NOTE: data is still represented with u8
+//     // but type is VoxelForContour to implement a trait for mesher lib
+//     // In original C++ implementation this was separate array
+//     voxels.iter().for_each(|voxel| {
+//         // dbg!(voxel);
+//         // +1 cause padding of 1 from each side
+//         // TODO: check if it is actually needed
+//         plain_voxel_data[(
+//             (voxel.x + 1) as usize,
+//             (voxel.y + 1) as usize,
+//             (voxel.z + 1) as usize,
+//         )] = VoxelForContour(voxel.i);
+//     });
+//     plain_voxel_data
+// }
 
 impl super::InternalRenderer {
     // TODO: runtime copies in single copy command buffer instead of per-model cmb

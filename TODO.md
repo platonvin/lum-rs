@@ -62,3 +62,5 @@ allow custom grass shapes:
 
 
 report flame moving timestamps around
+
+sample light differently for more glossy surfaces

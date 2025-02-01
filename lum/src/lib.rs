@@ -4,7 +4,7 @@
 #![allow(unused_parens)]
 #![feature(stmt_expr_attributes)]
 #![feature(custom_inner_attributes)]
-#![feature(core_intrinsics)]
+// #![feature(core_intrinsics)]
 #![feature(optimize_attribute)]
 
 // This is a glue-file
@@ -20,17 +20,17 @@ pub mod types;
 
 // this is basically safier version of assert! that is checked in debug mode
 // in release mode opens into just assume!
-
+// std::intrinsics::assume
 #[macro_export]
 macro_rules! assert_assume {
-    ($cond:expr) => {
+    ($cond:expr) => {{
         // Do runtime checks in debug mode
         debug_assert!($cond);
         // but also provide assumption to the compiler
         unsafe {
-            std::intrinsics::assume($cond);
+            std::hint::assert_unchecked($cond);
         }
-    };
+    }};
 }
 
 #[macro_export]

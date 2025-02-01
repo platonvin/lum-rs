@@ -3,9 +3,9 @@ pub mod all_resources;
 pub mod ao_lut;
 pub mod gen_perlin_noise;
 pub mod load;
+// pub mod ogt_vox;
 pub mod ogt_vox;
 pub mod render;
-// pub mod ogt_vox2;
 
 use anyhow::Result;
 use lumal::{ring::Ring, trace, RasterPipe};
@@ -216,9 +216,9 @@ const DEPTH_FORMAT_SPARE: vk::Format = vk::Format::D24_UNORM_S8_UINT; // TODO so
 const DEPTH_FORMAT_PREFERED: vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
 
 // TODO: separate file
-extern "C" {
-    fn my_cpp_function();
-}
+// extern "C" {
+//     fn my_cpp_function();
+// }
 
 impl InternalRenderer {
     // Creates Lum::InternalRenderer. You should use Renderer::create() and then .init() instead
@@ -227,7 +227,7 @@ impl InternalRenderer {
         window: &Window,
         mut foliage_descriptions: Vec<InternalMeshFoliageDesc>,
     ) -> Result<InternalRenderer> {
-        my_cpp_function();
+        // my_cpp_function();
 
         let mut
         // that's the codestyle i use for Vulkan. It allows small ident and esier typing errors check

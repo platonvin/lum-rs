@@ -1,29 +1,18 @@
-use crate::{
-    assert_assume,
-    consts::*,
-    containers::BitArray3d,
-    internal_renderer::{ogt_vox::rand, *},
-};
-use std::{
-    hash::{DefaultHasher, Hash, Hasher},
-    intrinsics::assume,
-    mem::transmute,
-    ops::IndexMut,
-};
+use crate::{assert_assume, consts::*, containers::BitArray3d, internal_renderer::*};
+use std::mem::transmute;
 
 use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
-use lumal::atrace;
 // use multiversion::multiversion;
 use vek::{Clamp, FrustumPlanes, Vec4};
 use vulkanalia::vk::{
-    AccessFlags, CopyMemoryToImageIndirectCommandNV, DeviceV1_0, Handle, HasBuilder,
-    ImageSubresourceLayers, KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags,
+    AccessFlags, DeviceV1_0, Handle, HasBuilder, ImageSubresourceLayers,
+    KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags,
 };
 
 use crate::types::*;
 
-use super::InternalRenderer;
+use super::{aabb, InternalRenderer};
 
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
@@ -311,7 +300,7 @@ impl InternalRenderer {
                 let z = (zz as TheType + dz).max(0).min(world_size.z as TheType - 1);
                 let block = current_world.get(x as usize, y as usize, z as usize);
 
-                unsafe { assume((block > 0) == (block != 0)) };
+                assert_assume!((block > 0) == (block != 0));
 
                 // so, the idea is to make less checks, and also .set() only once
                 $total += block;
@@ -450,7 +439,7 @@ impl InternalRenderer {
                                 let block =
                                     self.current_world.get(x as usize, y as usize, z as usize);
 
-                                unsafe { assume((block > 0) == (block != 0)) };
+                                assert_assume!((block > 0) == (block != 0));
 
                                 if block > 0 {
                                     visited.set(xx as usize, yy as usize, zz as usize, true);

@@ -16,10 +16,10 @@ analysis.json
 analysis.jsoncargo
 /tree.txt
 /temp3.md
-/lum/src/internal_renderer/ogt_vox2.rs
 /assets/scene
 /assets/robot.vox
 
 /move.md
 # imgui file created by nvidia nsight 
 /imgui.ini
+/lum/cpp/ogt_vox.cpp

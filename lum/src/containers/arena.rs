@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::{assert_assume, assert_unreachable};
+use crate::assert_unreachable;
 
 #[derive(Default)]
 pub struct Arena<T: Clone> {

@@ -1,8 +1,8 @@
 #include "macros.hpp"
-#include <iostream>
+// #include <iostream>
 
 
-ERUST void my_cpp_function() {
+ERUST void my_cpp_function() noexcept {
   // TODO: estimate bloat
-  std::cout << "Hello from C++!" << std::endl;
+  // std::cout << "Hello from C++!" << std::endl;
 }

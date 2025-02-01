@@ -30,7 +30,7 @@ pub type vec4 = vek::Vec4<f32>;
 pub type vec3 = vek::Vec3<f32>;
 pub type vec2 = vek::Vec2<f32>;
 
-pub type i8vec4u = vek::Vec4<unchecked_integer::UncheckedInt<i8>>;
+// pub type i8vec4u = vek::Vec4<unchecked_integer::UncheckedInt<i8>>;
 
 pub type mat4 = vek::Mat4<f32>;
 // pub type dmat4 = vek::Mat4<f32>;

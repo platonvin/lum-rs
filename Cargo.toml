@@ -8,7 +8,7 @@ cargo-features = ["profile-rustflags"]
         "shaders",
         "examples",           # example programs
         "as_u8_slice_derive",
-        "unchecked_integer",  # derive macro for AsU8Slice
+        # "unchecked_integer",  # derive macro for AsU8Slice
     ]
 
 [profile.dev]
