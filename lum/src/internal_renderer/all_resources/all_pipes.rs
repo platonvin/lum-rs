@@ -183,9 +183,18 @@ impl InternalRenderer {
 
         lumal::trace!();
 
+        lumal.create_descriptor_set_layout(
+            &[ShortDescriptorInfo {
+                descriptor_type: UNIFORM_BUFFER,
+                stages: vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::VERTEX,
+            }],
+            &mut pipes.temp_push_layout,
+            vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
+        );
+
         lumal.create_raster_pipe(
             &mut pipes.raygen_blocks_pipe,
-            None,
+            Some(pipes.temp_push_layout),
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
@@ -1463,6 +1472,14 @@ fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPi
             stages: vk::ShaderStageFlags::FRAGMENT,
         }],
         &mut pipes.raygen_models_push_layout,
+        vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
+    );
+    lumal.create_descriptor_set_layout(
+        &[ShortDescriptorInfo {
+            descriptor_type: UNIFORM_BUFFER,
+            stages: vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::VERTEX,
+        }],
+        &mut pipes.temp_push_layout,
         vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
     );
 }

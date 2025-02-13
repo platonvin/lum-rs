@@ -11,6 +11,17 @@ precision varp float;
 #include "common\consts.glsl"
 
 layout(binding = 1, set = 0) uniform usampler3D blockPalette;
+layout(binding = 0, set = 1)  uniform restrict readonly UniformBufferObject1 {
+    mat4 trans_w2s;
+    vec4 campos;
+    vec4 camdir;
+    vec4 horizline_scaled;
+    vec4 vertiline_scaled;
+    vec4 globalLightDir;
+    mat4 lightmap_proj;
+    vec2 frame_size;
+    int timeseed;
+} ubo1;
 
 layout(location = 0) in vec3 sample_point;
 layout(location = 1) in flat uint bunorm;

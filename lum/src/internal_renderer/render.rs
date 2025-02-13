@@ -1354,6 +1354,34 @@ impl InternalRenderer {
             )
         };
 
+        let rnd = ((normal.x + normal.y + normal.z) % 2) == 0;
+        let rnd_ubo = if rnd {
+            self.buffers.uniform.current().buffer
+        } else {
+            self.buffers.uniform.previous().buffer
+        };
+        let ubo_info = vk::DescriptorBufferInfo::builder()
+            .buffer(rnd_ubo)
+            .range(vk::WHOLE_SIZE as u64)
+            .build();
+        let binding = [ubo_info];
+        let model_voxels_write = vk::WriteDescriptorSet::builder()
+            .dst_set(vk::DescriptorSet::null())
+            .dst_binding(0)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .buffer_info(&binding);
+
+        unsafe {
+            self.lumal.device.cmd_push_descriptor_set_khr(
+                *command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipes.raygen_blocks_pipe.line_layout,
+                1,
+                &[model_voxels_write],
+            )
+        }
+
         unsafe {
             self.lumal
                 .device

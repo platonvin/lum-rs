@@ -14,6 +14,17 @@ layout(location = 0) out vec3 sample_point;
 layout(location = 1) out flat uint bunorm;
 
 layout(binding = 1, set = 0) uniform usampler3D blockPalette;
+layout(binding = 0, set = 1) uniform restrict readonly UniformBufferObject1 {
+    mat4 trans_w2s;
+    vec4 campos;
+    vec4 camdir;
+    vec4 horizline_scaled;
+    vec4 vertiline_scaled;
+    vec4 globalLightDir;
+    mat4 lightmap_proj;
+    vec2 frame_size;
+    int timeseed;
+} ubo1;
 
 layout(scalar, push_constant) restrict readonly uniform constants{
     int16_t block;
@@ -40,7 +51,7 @@ void main() {
     ivec3 uworld_pos = ivec3(upos + (pco.shift));
      vec4 fworld_pos = vec4(uworld_pos, 1);
 
-    vec3 clip_coords = (ubo.trans_w2s*fworld_pos).xyz; //move up
+    vec3 clip_coords = (ubo1.trans_w2s*fworld_pos).xyz; //move up
          clip_coords.z = 1+clip_coords.z;
 
     gl_Position  = vec4(clip_coords, 1);    

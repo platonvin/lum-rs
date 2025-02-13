@@ -54,6 +54,8 @@ pub struct AllPipes {
     lightmap_blocks_pipe: RasterPipe,
     lightmap_models_pipe: RasterPipe,
 
+    temp_push_layout: vk::DescriptorSetLayout,
+
     raygen_blocks_pipe: RasterPipe,
     raygen_models_pipe: RasterPipe,
     raygen_models_push_layout: vk::DescriptorSetLayout,
