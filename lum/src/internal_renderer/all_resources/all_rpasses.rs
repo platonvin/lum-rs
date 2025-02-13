@@ -7,19 +7,18 @@ use crate::*;
 impl InternalRenderer {
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_all_rpasses(
         lumal: &mut Renderer,
         _lum_settings: &Settings,
         _lumal_settings: &LumalSettings,
-        iimages: &mut AllIndependentImages,
+        iimages: &AllIndependentImages,
         dimages: &mut AllSwapchainDependentImages,
         pipes: &mut AllPipes,
     ) -> AllRenderPasses {
         println!("creating rpass: lightmap");
-        let lightmap_rpass = lumal.create_render_pass(
+        let lightmap_rpass = lumal.create_renderpass(
             &[AttachmentDescription {
-                images: Some(&iimages.lightmap),
+                images: &iimages.lightmap,
                 load: LoadStoreOp::Clear,
                 store: LoadStoreOp::Store,
                 sload: LoadStoreOp::DontCare,
@@ -37,8 +36,8 @@ impl InternalRenderer {
                     &mut pipes.lightmap_blocks_pipe,
                     &mut pipes.lightmap_models_pipe,
                 ],
-                a_input: &[None],
-                a_color: &[None],
+                a_input: &[],
+                a_color: &[],
                 a_depth: Some(&iimages.lightmap),
             }],
         );
@@ -51,10 +50,10 @@ impl InternalRenderer {
             foliage_pipes.push(pipe);
         }
 
-        let gbuffer_rpass = lumal.create_render_pass(
+        let gbuffer_rpass = lumal.create_renderpass(
             &[
                 AttachmentDescription {
-                    images: Some(&dimages.highres_mat_norm),
+                    images: &dimages.highres_mat_norm,
                     load: LoadStoreOp::DontCare,
                     store: LoadStoreOp::Store,
                     sload: LoadStoreOp::DontCare,
@@ -63,7 +62,7 @@ impl InternalRenderer {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: Some(&dimages.highres_depth_stencil),
+                    images: &dimages.highres_depth_stencil,
                     load: LoadStoreOp::Clear,
                     store: LoadStoreOp::Store,
                     sload: LoadStoreOp::Clear,
@@ -80,32 +79,32 @@ impl InternalRenderer {
             &mut [
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_blocks_pipe],
-                    a_input: &[None],
-                    a_color: &[Some(&dimages.highres_mat_norm)],
+                    a_input: &[],
+                    a_color: &[(&dimages.highres_mat_norm)],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_models_pipe],
-                    a_input: &[None],
-                    a_color: &[Some(&dimages.highres_mat_norm)],
+                    a_input: &[],
+                    a_color: &[(&dimages.highres_mat_norm)],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_particles_pipe],
-                    a_input: &[None],
-                    a_color: &[Some(&dimages.highres_mat_norm)],
+                    a_input: &[],
+                    a_color: &[(&dimages.highres_mat_norm)],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut foliage_pipes,
-                    a_input: &[None],
-                    a_color: &[Some(&dimages.highres_mat_norm)],
+                    a_input: &[],
+                    a_color: &[(&dimages.highres_mat_norm)],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_water_pipe],
-                    a_input: &[None],
-                    a_color: &[Some(&dimages.highres_mat_norm)],
+                    a_input: &[],
+                    a_color: &[(&dimages.highres_mat_norm)],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
             ],
@@ -115,10 +114,10 @@ impl InternalRenderer {
 
         // Third render pass
         println!("creating rpass: shade");
-        let shade_rpass = lumal.create_render_pass(
+        let shade_rpass = lumal.create_renderpass(
             &[
                 AttachmentDescription {
-                    images: Some(&dimages.highres_mat_norm),
+                    images: &dimages.highres_mat_norm,
                     load: LoadStoreOp::Load,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -127,7 +126,7 @@ impl InternalRenderer {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: Some(&dimages.highres_frame),
+                    images: &dimages.highres_frame,
                     load: LoadStoreOp::DontCare,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -136,7 +135,7 @@ impl InternalRenderer {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: Some(&dimages.swapchain_images),
+                    images: &lumal.vulkan_data.swapchain_images,
                     load: LoadStoreOp::DontCare,
                     store: LoadStoreOp::Store,
                     sload: LoadStoreOp::DontCare,
@@ -145,7 +144,7 @@ impl InternalRenderer {
                     final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 },
                 AttachmentDescription {
-                    images: Some(&dimages.highres_depth_stencil),
+                    images: &dimages.highres_depth_stencil,
                     load: LoadStoreOp::Load,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::Load,
@@ -159,7 +158,7 @@ impl InternalRenderer {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: Some(&dimages.far_depth),
+                    images: &dimages.far_depth,
                     load: LoadStoreOp::Clear,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -172,7 +171,7 @@ impl InternalRenderer {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: Some(&dimages.near_depth),
+                    images: &dimages.near_depth,
                     load: LoadStoreOp::Clear,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -188,56 +187,50 @@ impl InternalRenderer {
             &mut [
                 SubpassDescription {
                     pipes: &mut [&mut pipes.diffuse_pipe],
-                    a_input: &[
-                        Some(&dimages.highres_mat_norm),
-                        Some(&dimages.highres_depth_stencil),
-                    ],
-                    a_color: &[Some(&dimages.highres_frame)],
+                    a_input: &[&dimages.highres_mat_norm, &dimages.highres_depth_stencil],
+                    a_color: &[(&dimages.highres_frame)],
                     a_depth: None,
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.ao_pipe],
-                    a_input: &[
-                        Some(&dimages.highres_mat_norm),
-                        Some(&dimages.highres_depth_stencil),
-                    ],
-                    a_color: &[Some(&dimages.highres_frame)],
+                    a_input: &[&dimages.highres_mat_norm, &dimages.highres_depth_stencil],
+                    a_color: &[(&dimages.highres_frame)],
                     a_depth: None,
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.fill_stencil_glossy_pipe],
-                    a_input: &[Some(&dimages.highres_mat_norm)],
+                    a_input: &[&dimages.highres_mat_norm],
                     a_color: &[],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.fill_stencil_smoke_pipe],
                     a_input: &[],
-                    a_color: &[Some(&dimages.far_depth), Some(&dimages.near_depth)],
+                    a_color: &[&dimages.far_depth, &dimages.near_depth],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.glossy_pipe],
                     a_input: &[],
-                    a_color: &[Some(&dimages.highres_frame)],
+                    a_color: &[(&dimages.highres_frame)],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.smoke_pipe],
-                    a_input: &[Some(&dimages.near_depth), Some(&dimages.far_depth)],
-                    a_color: &[Some(&dimages.highres_frame)],
+                    a_input: &[&dimages.near_depth, &dimages.far_depth],
+                    a_color: &[(&dimages.highres_frame)],
                     a_depth: Some(&dimages.highres_depth_stencil),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.tonemap_pipe],
-                    a_input: &[Some(&dimages.highres_frame)],
-                    a_color: &[Some(&dimages.swapchain_images)],
+                    a_input: &[&dimages.highres_frame],
+                    a_color: &[(&lumal.vulkan_data.swapchain_images)],
                     a_depth: None,
                 },
                 // SubpassDescription {
                 //     pipes: &mut [&mut pipes.overlay_pipe],
                 //     a_input: &[],
-                //     a_color: &[Some(&dimages.swapchain_images)],
+                //     a_color: &[(&dimages.swapchain_images)],
                 //     a_depth: None,
                 // },
             ],
@@ -252,9 +245,9 @@ impl InternalRenderer {
         }
     }
 
-    pub fn destroy_all_rpasses(lumal: &mut Renderer, rpasses: &mut AllRenderPasses) {
-        lumal.destroy_render_pass(&mut rpasses.lightmap_rpass);
-        lumal.destroy_render_pass(&mut rpasses.gbuffer_rpass);
-        lumal.destroy_render_pass(&mut rpasses.shade_rpass);
+    pub fn destroy_all_rpasses(lumal: &mut Renderer, rpasses: AllRenderPasses) {
+        lumal.destroy_renderpass(rpasses.lightmap_rpass);
+        lumal.destroy_renderpass(rpasses.gbuffer_rpass);
+        lumal.destroy_renderpass(rpasses.shade_rpass);
     }
 }

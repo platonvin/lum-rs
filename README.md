@@ -1,11 +1,9 @@
-This is a complete* rewrite of Lum in Rust programming language
-
-* but MagicaVoxel loader is still in C++ and accessed via Rust FFI (generated with bindgen)
+This is a complete rewrite of Lum Renderer in Rust programming language
 
 ### Prerequisites
 
 - nightly Rust
-- Vulkan SDK (at least, glslc)
+- Vulkan SDK (at least, glslc and validation layers for debug)
 
 ### How to run demo
 
@@ -18,6 +16,6 @@ note: release is not very optimized, and there are custom profiles available, wi
 ```bash
 cargo build -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --profile native
 ```
-adding `optimize_for_size` to `build-std-features` makes binary under a megabyte (on windows) 
+adding `optimize_for_size` to `build-std-features` makes binary under a megabyte 
 
-I did it because i need to find out best language to build renderers in, if you have any suggestions, please let me know
+I did it because i need to find out the best language for renderers. If you have any suggestions, please let me know

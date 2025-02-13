@@ -16,12 +16,11 @@ use winit::window::Window;
 use crate::{containers::Array3D, types::*};
 
 #[derive(Clone, Copy)]
-#[pub_fields::pub_fields]
 pub struct Settings {
-    world_size: uvec3,
-    static_block_palette_size: u32,
-    max_particle_count: u32,
-    lightmap_extent: vk::Extent2D,
+    pub world_size: uvec3,
+    pub static_block_palette_size: u32,
+    pub max_particle_count: u32,
+    pub lightmap_extent: vk::Extent2D,
 }
 
 impl Default for Settings {
@@ -48,9 +47,9 @@ const BLOCK_PALETTE_SIZE_X: u32 = 64;
 const BLOCK_PALETTE_SIZE_Y: u32 = 64;
 const FRAMES_IN_FLIGHT: usize = 2;
 
-#[derive(Default)]
 // groups all Pipes (abstraction on top of Vulkan Pipelines) into one struct
 // most of them are hardcoded, but foliage pipes are optional and partially managed by user
+#[derive(Default)]
 pub struct AllPipes {
     lightmap_blocks_pipe: RasterPipe,
     lightmap_models_pipe: RasterPipe,
@@ -96,9 +95,10 @@ pub struct AllSamplers {
     unnorm_nearest: vk::Sampler,
 }
 
+#[derive(Default)]
 pub struct AllSwapchainDependentImages {
     // my brain is too small to handle lifetimes
-    swapchain_images: Ring<lumal::Image>,
+    // swapchain_images: Ring<lumal::Image>,
     highres_frame: Ring<lumal::Image>,
     highres_depth_stencil: Ring<lumal::Image>,
     highres_mat_norm: Ring<lumal::Image>,
@@ -140,11 +140,14 @@ pub struct AllCommandBuffers {
     copy_command_buffers: Ring<vk::CommandBuffer>, /* runtime copies for ui. Also does first frame resources */
 }
 
+#[derive(Default)]
 pub struct AllRenderPasses {
     lightmap_rpass: lumal::RenderPass,
     gbuffer_rpass: lumal::RenderPass,
     shade_rpass: lumal::RenderPass, // for no downscaling
 }
+
+pub struct AllSwapchainDependent {}
 
 #[pub_fields::pub_fields] // lol i use crate for this
 pub struct InternalRenderer {
@@ -158,11 +161,11 @@ pub struct InternalRenderer {
     pipes: AllPipes,
     foliage_descriptions: Vec<InternalMeshFoliageDesc>,
     dependent_images: AllSwapchainDependentImages,
+    rpasses: AllRenderPasses,
     independent_images: AllIndependentImages,
     buffers: AllBuffers,
     samplers: AllSamplers,
     cmdbufs: AllCommandBuffers,
-    rpasses: AllRenderPasses,
 
     // Queue of blocks whose radiance field needs to be updated. Filled automatically by the renderer
     radiance_updates: Vec<i8vec4>,
@@ -227,11 +230,7 @@ impl InternalRenderer {
         window: &Window,
         mut foliage_descriptions: Vec<InternalMeshFoliageDesc>,
     ) -> Result<InternalRenderer> {
-        // my_cpp_function();
-
-        let mut
-        // that's the codestyle i use for Vulkan. It allows small ident and esier typing errors check
-        lumal_settings = lumal::LumalSettings::create_default();
+        let mut lumal_settings = lumal::LumalSettings::create_default();
         if cfg!(debug_assertions) {
             lumal_settings.debug = true;
         }
@@ -256,8 +255,6 @@ impl InternalRenderer {
             .unwrap();
 
         // section where most important (not init-related) vulkan resources are created. Some of them will be recreated on window resize
-        let mut dependent_images =
-            InternalRenderer::create_dependent_images(&lumal, lum_settings, &lumal_settings);
         let mut independent_images =
             InternalRenderer::create_independent_images(&lumal, lum_settings, &lumal_settings);
         let buffers = InternalRenderer::create_all_buffers(&lumal, lum_settings, &lumal_settings);
@@ -265,31 +262,14 @@ impl InternalRenderer {
         let command_buffers =
             InternalRenderer::create_all_command_buffers(&lumal, lum_settings, &lumal_settings);
 
-        let mut pipes: AllPipes = AllPipes::default();
-        pipes
-            .raygen_foliage_pipes
-            .resize(foliage_descriptions.len(), RasterPipe::default());
-
-        let renderpasses: AllRenderPasses = InternalRenderer::create_all_rpasses(
+        let (dependent_images, pipes, renderpasses) = create_dependent(
             &mut lumal,
             lum_settings,
-            &lumal_settings,
-            &mut independent_images,
-            &mut dependent_images,
-            &mut pipes,
-        );
-        trace!();
-
-        InternalRenderer::create_all_pipes(
-            &mut lumal,
-            lum_settings,
-            &lumal_settings,
-            &buffers,
-            &independent_images,
-            &dependent_images,
-            &samplers,
-            &mut pipes,
             &foliage_descriptions,
+            &lumal_settings,
+            &independent_images,
+            &buffers,
+            &samplers,
         );
 
         let camera = Camera::default();
@@ -348,7 +328,7 @@ impl InternalRenderer {
             ],
             block_copies_queue: vec![],
             block_clear_queue: vec![],
-            foliage_descriptions: foliage_descriptions,
+            foliage_descriptions,
             block_palette_meshes: vec![
                 Default::default();
                 lum_settings.static_block_palette_size as usize
@@ -364,6 +344,50 @@ impl InternalRenderer {
         Ok(lum)
     }
 
+    // pub fn create_swapchain_dependent(&mut lumal) {
+    //     self.dependent_images = InternalRenderer::create_dependent_images(
+    //         &self.lumal,
+    //         &self.settings,
+    //         &self.lumal.settings,
+    //     );
+    // }
+
+    // disassemble the renderer, recreate resources, and reassemble it back
+    #[cold]
+    #[optimize(size)]
+    pub fn recreate_window(&mut self, window: &Window) {
+        unsafe { self.lumal.device.device_wait_idle().unwrap() };
+        lumal::atrace!();
+        unsafe {
+            Self::destroy_dependent(
+                &mut self.lumal,
+                std::mem::take(&mut self.dependent_images),
+                std::mem::take(&mut self.pipes),
+                std::mem::take(&mut self.rpasses),
+            )
+        };
+        lumal::atrace!();
+        self.lumal.recreate_swapchain(window);
+        lumal::atrace!();
+
+        let settings_copy = self.lumal.settings.clone();
+        let (dimages, pipes, rpasses) = create_dependent(
+            &mut self.lumal,
+            &self.settings,
+            &self.foliage_descriptions,
+            &settings_copy, // damn it
+            &self.independent_images,
+            &self.buffers,
+            &self.samplers,
+        );
+        lumal::atrace!();
+
+        // return back the values
+        self.dependent_images = dimages;
+        self.pipes = pipes;
+        self.rpasses = rpasses;
+    }
+
     /// Destroys our Vulkan app.
     pub unsafe fn destroy(mut self) {
         let mut lumal = self.lumal;
@@ -371,16 +395,68 @@ impl InternalRenderer {
         // TODO: there is something im missing in winit that should make this unnecessary. How did i do it in C++?
         lumal.device.device_wait_idle().unwrap();
         Self::destroy_independent_images(&lumal, &mut self.independent_images);
-        Self::destroy_dependent_images(&lumal, &mut self.dependent_images);
         Self::destroy_all_buffers(&lumal, self.buffers);
 
         lumal.process_deletion_queues_untill_all_done();
 
-        Self::destroy_all_pipes(&mut lumal, self.pipes);
-        Self::destroy_all_rpasses(&mut lumal, &mut self.rpasses);
+        Self::destroy_dependent(&mut lumal, self.dependent_images, self.pipes, self.rpasses);
+
         Self::destroy_all_samplers(&mut lumal, &mut self.samplers);
         Self::destroy_all_command_buffers(&mut lumal, &self.cmdbufs);
 
         lumal.destroy();
     }
+
+    unsafe fn destroy_dependent(
+        lumal: &mut lumal::Renderer,
+        dependent_images: AllSwapchainDependentImages,
+        pipes: AllPipes,
+        rpasses: AllRenderPasses,
+    ) {
+        Self::destroy_dependent_images(&*lumal, dependent_images);
+        Self::destroy_all_pipes(lumal, pipes);
+        Self::destroy_all_rpasses(lumal, rpasses);
+    }
+}
+
+fn create_dependent(
+    lumal: &mut lumal::Renderer,
+    lum_settings: &Settings,
+    foliage_descriptions: &Vec<InternalMeshFoliageDesc>,
+    lumal_settings: &lumal::LumalSettings,
+    independent_images: &AllIndependentImages,
+    buffers: &AllBuffers,
+    samplers: &AllSamplers,
+) -> (AllSwapchainDependentImages, AllPipes, AllRenderPasses) {
+    let mut dependent_images =
+        InternalRenderer::create_dependent_images(&*lumal, lum_settings, &lumal_settings);
+    let mut pipes: AllPipes = AllPipes::default();
+    pipes
+        .raygen_foliage_pipes
+        .resize(foliage_descriptions.len(), RasterPipe::default());
+
+    let renderpasses: AllRenderPasses = InternalRenderer::create_all_rpasses(
+        lumal,
+        lum_settings,
+        &lumal_settings,
+        independent_images,
+        &mut dependent_images,
+        &mut pipes,
+    );
+    trace!();
+
+    unsafe {
+        InternalRenderer::create_all_pipes(
+            lumal,
+            lum_settings,
+            &lumal_settings,
+            buffers,
+            &*independent_images,
+            &dependent_images,
+            samplers,
+            &mut pipes,
+            foliage_descriptions,
+        )
+    };
+    (dependent_images, pipes, renderpasses)
 }

@@ -7,8 +7,7 @@ use crate::*;
 impl InternalRenderer {
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
-    pub fn create_all_samplers(
+        pub fn create_all_samplers(
         lumal: &Renderer,
         lum_settings: &Settings,
         lumal_settings: &LumalSettings,

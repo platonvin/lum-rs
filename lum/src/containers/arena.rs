@@ -28,7 +28,7 @@ impl<T: Clone> Arena<T> {
             self.storage[index] = Some(value);
             Some(index)
         } else {
-            if self.storage.len() == 0 {
+            if self.storage.is_empty() {
                 self.grow(1); // Grow the arena to 1 element
             } else {
                 self.grow(self.storage.len() * 2); // Double the size of the arena

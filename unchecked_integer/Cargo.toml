@@ -1,7 +1,0 @@
-[package]
-name = "unchecked_integer"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-    vek = "0.17.1"

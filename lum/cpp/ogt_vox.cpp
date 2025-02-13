@@ -1,5 +1,4 @@
-// Rust bindings are in src/internal_renderer/ogt_vox.rs
-// ogt_vox2.rs is an attempt to rewrite the entire thing in pure Rust
+// pure Rust version is in src/internal_renderer/ogt_vox.rs
 
 //exists to make compiler happy
 //TODO: move code here so parsing headers isnt painfully slow

@@ -367,7 +367,6 @@ fn dict_get_u32(dict: &HashMap<String, String>, key: &str, default: u32) -> u32 
 
 /// Converts packed rotation and translation strings into a 4x4 transformation matrix.
 #[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
 fn parse_transform(rotation_string: &str, translation_string: &str) -> mat4 {
     let mut transform = mat4::identity();
 
@@ -429,20 +428,17 @@ pub struct VoxScene {
 }
 
 #[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
 pub fn read_scene_from_file(path: &str) -> anyhow::Result<VoxScene> {
     let buffer = std::fs::read(path)?;
     read_scene_from_memory(&buffer)
 }
 
 #[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
 fn read_scene_from_memory(buffer: &[u8]) -> Result<VoxScene, anyhow::Error> {
     read_scene_from_memory_with_flags(buffer, 0)
 }
 
 #[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
 fn read_scene_from_memory_with_flags(
     buffer: &[u8],
     read_flags: u32,
@@ -544,7 +540,7 @@ fn read_scene_from_memory_with_flags(
                     let k_stride_z = size_x * size_y;
 
                     let voxels_to_read =
-                        (fp.bytes_remaining() as usize / 4).min(num_voxels_in_chunk as usize);
+                        (fp.bytes_remaining() / 4).min(num_voxels_in_chunk as usize);
                     let packed_voxel_data = fp.current_data_ref();
                     for i in 0..voxels_to_read as usize {
                         let x = packed_voxel_data[i * 4 + 0] as usize;
@@ -745,7 +741,7 @@ fn read_scene_from_memory_with_flags(
             }
             CHUNK_ID_MATL => {
                 let mut material_id = fp.read::<i32>() as usize;
-                material_id = material_id & 0xFF; // incoming material 256 is material 0
+                material_id &= 0xFF; // incoming material 256 is material 0
 
                 let dict = fp.read_dict();
                 let mut material = &mut materials.matl[material_id];
@@ -955,8 +951,7 @@ fn read_scene_from_memory_with_flags(
                 let mut flattened_transform = instance.transform;
                 let mut group_index = instance.group_index;
                 while group_index != K_INVALID_GROUP_INDEX {
-                    flattened_transform =
-                        flattened_transform * groups[group_index as usize].transform;
+                    flattened_transform *= groups[group_index as usize].transform;
                     group_index = groups[group_index as usize].parent_group_index;
                 }
                 instance.transform = flattened_transform;
@@ -1083,11 +1078,11 @@ fn read_scene_from_memory_with_flags(
 
     Ok(VoxScene {
         models: models.iter().map(|m| m.clone().unwrap()).collect(),
-        instances: instances,
-        layers: layers,
-        groups: groups,
-        palette: palette,
-        materials: materials,
+        instances,
+        layers,
+        groups,
+        palette,
+        materials,
     })
 }
 
@@ -1121,7 +1116,7 @@ fn generate_instances_for_node(
             stack.pop();
         }
         VoxSceneNode::Group(node) => {
-            let next_group_index = 0 as u32;
+            let next_group_index = 0_u32;
             {
                 let last_transform_idx = *stack.last().unwrap();
                 let last_transform = &nodes[last_transform_idx as usize];
@@ -1230,7 +1225,6 @@ fn generate_instances_for_node(
 }
 
 #[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
 fn sample_keyframe_transform(
     keyframes: &[VoxKeyframeTransform],
     loop_animation: bool,
@@ -1281,7 +1275,6 @@ fn sample_keyframe_transform(
 }
 
 #[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
 fn compute_looped_frame_index(
     first_loop_frame: u32,
     last_loop_frame: u32,

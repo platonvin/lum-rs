@@ -164,6 +164,9 @@ impl Renderer {
     pub fn load_block(&mut self, block: BlockId, path: &str) {
         self.renderer.load_block_from_file_ogt(block, path);
     }
+    pub fn unload_block(&mut self, block: BlockId) {
+        self.renderer.free_block(block);
+    }
 
     // volumetrics can be loaded any time (no context on GPU). But please, load them in the same way as models / foliage
     // rendered using same shader, mesh is just "uniforms"
@@ -409,7 +412,7 @@ impl Renderer {
         Self::calculate_and_sort_by_cam_dist(&mut self.volumetric_que, cam);
     }
 
-    pub fn end_frame(&mut self) {
+    pub fn end_frame(&mut self, window: &Window) {
         // yes, started here cause no reason not to group
         flame::start("GLOBAL_FRAME");
 
@@ -425,9 +428,9 @@ impl Renderer {
         flame::start("end_blockify");
         self.renderer.end_blockify();
         flame::end("end_blockify");
-        // flame::start("find_radiance_to_update");
-        // self.renderer.find_radiance_to_update();
-        // flame::end("find_radiance_to_update");
+        flame::start("find_radiance_to_update");
+        self.renderer.find_radiance_to_update();
+        flame::end("find_radiance_to_update");
         // you may wonder why is start_frame here, and not in the beginning
         // this is because it contains syncronization, which im trying to delay as much as possible
         // sadly, it does not help when you are CPU-bound (which is the case here). But still useful
@@ -569,7 +572,7 @@ impl Renderer {
         self.renderer.end_2nd_spass();
         flame::end("end_2nd_spass");
         flame::start("end_frame");
-        self.renderer.end_frame();
+        self.renderer.end_frame(window);
         flame::end("end_frame");
 
         flame::end("GLOBAL_FRAME");

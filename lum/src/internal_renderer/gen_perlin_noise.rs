@@ -6,7 +6,6 @@ use crate::*;
 impl super::InternalRenderer {
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn gen_perlin_2d(&mut self) {
         let lumal = &mut self.lumal;
 
@@ -69,7 +68,6 @@ impl super::InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn gen_perlin_3d(&mut self) {
         let lumal = &mut self.lumal;
 
@@ -82,7 +80,7 @@ impl super::InternalRenderer {
         // bind sets
         // place barriers
         // dispatch the perlin noise compute shader
-        assert!(pipe.sets.len() != 0);
+        assert!(!pipe.sets.is_empty());
         for frame_i in 0..FRAMES_IN_FLIGHT {
             unsafe {
                 lumal.device.cmd_bind_descriptor_sets(

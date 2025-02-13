@@ -8,16 +8,13 @@ use lum::{
     assert_assume,
     containers::{Array3D, BitArray3d, Multiprocessor},
     for_zyx,
-    types::{i8vec4, ivec4, uvec3},
+    types::{i8vec4, uvec3},
 };
 
 use std::{
     cell::UnsafeCell,
     simd::cmp::SimdPartialOrd,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 use std::{simd::i32x32, sync::Mutex};
 
@@ -118,8 +115,8 @@ fn update_radiance_unrolled(world: &mut World, settings: &Settings) {
     let wx = sx - 1;
     let wy = sy - 1;
     let wz = sz - 1;
-    let x_size = world.blocks.dimensions().0 as usize;
-    let y_size = world.blocks.dimensions().1 as usize;
+    let x_size = world.blocks.dimensions().0;
+    let y_size = world.blocks.dimensions().1;
     assert_assume!(x_size == settings.world_size.x as usize);
     assert_assume!(y_size == settings.world_size.y as usize);
 
@@ -198,7 +195,7 @@ fn get_block_with_neighbors_parallel(
     multiprocessor: &Multiprocessor,
 ) -> Vec<i8vec4> {
     let mut thread_count = multiprocessor.optimal_dispatch_size();
-    let chunk_size = (size.z as usize + thread_count - 1) / thread_count;
+    let chunk_size = (size.z as usize).div_ceil(thread_count);
 
     // Wrap Array3D<bool> in UnsafeCell to allow interior mutability
     let visited = Arc::new(Array3D::<FakeSyncBool>::new_filled_by_generator(
@@ -292,7 +289,7 @@ fn update_radiance_separated(world: &Array3D<BlockId>, size: uvec3) -> Vec<i8vec
                             unsafe { std::intrinsics::assume((block > 0) == (block != 0)) };
 
                             if block > 0 {
-                                included.set(xx as usize, yy as usize, zz as usize, true);
+                                included.set(xx, yy, zz, true);
                                 count += 1;
                                 //i want to
                                 break 'free;
@@ -369,19 +366,19 @@ fn update_radiance_simd(world: &mut World, settings: &Settings) {
     #[rustfmt::skip]
     const MEM_OFFSETS: [i32; 32] = [
         // -Z layer
-        -1-1*48-1*48*48, -1-1*48+0*48*48, -1-1*48+1*48*48,
-        -1+0*48-1*48*48, -1+0*48+0*48*48, -1+0*48+1*48*48,
-        -1+1*48-1*48*48, -1+1*48+0*48*48, -1+1*48+1*48*48,
+        -1-48-48*48, (-1-48), -1-48+48*48,
+        -1-48*48, -1, -1+48*48,
+        -1+48-48*48, (-1+48), -1+48+48*48,
         
         // Same Z layer
-        0-1*48-1*48*48, 0-1*48+0*48*48, 0-1*48+1*48*48,
-        0+0*48-1*48*48,                 0+0*48+1*48*48,
-        0+1*48-1*48*48, 0+1*48+0*48*48, 0+1*48+1*48*48,
+        0-48-48*48, (0-48), 0-48+48*48,
+        (0*48)-48*48,                 (48*48),
+        48-48*48, 48, 48+48*48,
         
         // +Z layer
-        1-1*48-1*48*48, 1-1*48+0*48*48, 1-1*48+1*48*48,
-        1+0*48-1*48*48, 1+0*48+0*48*48, 1+0*48+1*48*48,
-        1+1*48-1*48*48, 1+1*48+0*48*48, 1+1*48+1*48*48,
+        1-48-48*48, (1-48), 1-48+48*48,
+        1-48*48, 1, 1+48*48,
+        1+48-48*48, (1+48), 1+48+48*48,
         
         // Padding (including self-check)
         0, 0, 0, 0, 0, 0
@@ -426,10 +423,8 @@ fn update_radiance_simd(world: &mut World, settings: &Settings) {
 fn benchmark_radiance(c: &mut Criterion) {
     let mut group = c.benchmark_group("radiance-updates");
 
-    for (name, size) in [
-        ("small", uvec3::new(48, 48, 16)),
-        // ("large", uvec3::new(64, 64, 32)),
-    ] {
+    {
+        let (name, size) = ("small", uvec3::new(48, 48, 16));
         // group.bench_function(&format!("SIMD-{}", name), |b| {
         //     let mut world = World::new(size);
         //     world.generate_realistic();
@@ -440,7 +435,7 @@ fn benchmark_radiance(c: &mut Criterion) {
         //         update_radiance_simd(black_box(&mut world), black_box(&settings));
         //     })
         // });
-        group.bench_function(&format!("parallel-{}", name), |b| {
+        group.bench_function(format!("parallel-{}", name), |b| {
             let mut world = World::new(size);
             world.generate();
             let settings = Settings { world_size: size };
@@ -452,7 +447,7 @@ fn benchmark_radiance(c: &mut Criterion) {
             })
         });
 
-        group.bench_function(&format!("separated-{}", name), |b| {
+        group.bench_function(format!("separated-{}", name), |b| {
             let mut world = World::new(size);
             world.generate();
 
@@ -462,7 +457,7 @@ fn benchmark_radiance(c: &mut Criterion) {
             })
         });
 
-        group.bench_function(&format!("separated-bits-{}", name), |b| {
+        group.bench_function(format!("separated-bits-{}", name), |b| {
             let mut world = World::new(size);
             world.generate();
 
@@ -472,7 +467,7 @@ fn benchmark_radiance(c: &mut Criterion) {
             })
         });
 
-        group.bench_function(&format!("original-{}", name), |b| {
+        group.bench_function(format!("original-{}", name), |b| {
             let mut world = World::new(size);
             world.generate();
             let settings = Settings { world_size: size };
@@ -483,7 +478,7 @@ fn benchmark_radiance(c: &mut Criterion) {
             })
         });
 
-        group.bench_function(&format!("unrolled-{}", name), |b| {
+        group.bench_function(format!("unrolled-{}", name), |b| {
             let mut world = World::new(size);
             world.generate();
             let settings = Settings { world_size: size };

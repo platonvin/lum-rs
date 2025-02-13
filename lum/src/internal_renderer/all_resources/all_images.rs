@@ -7,7 +7,6 @@ use crate::*;
 impl InternalRenderer {
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_independent_images(
         lumal: &Renderer,
         lum_settings: &Settings,
@@ -311,38 +310,38 @@ impl InternalRenderer {
             )
             .unwrap();
 
-        let mut swapchain_images_ring = Ring::new(
-            lumal.vulkan_data.swapchain_images.len(),
-            lumal::Image::default(), // Initial value for the Ring
-        );
+        // let mut swapchain_images_ring = Ring::new(
+        //     lumal.vulkan_data.swapchain_images.len(),
+        //     lumal::Image::default(), // Initial value for the Ring
+        // );
 
-        for (i, swapchain_image) in lumal.vulkan_data.swapchain_images.iter().enumerate() {
-            let image_view = lumal.vulkan_data.swapchain_image_views[i];
-            let extent = vk::Extent3D {
-                width: lumal.vulkan_data.swapchain_extent.width,
-                height: lumal.vulkan_data.swapchain_extent.height,
-                depth: 1,
-            };
+        // for (i, swapchain_image) in lumal.vulkan_data.swapchain_images.iter().enumerate() {
+        //     let image_view = lumal.vulkan_data.swapchain_image_views[i];
+        //     let extent = vk::Extent3D {
+        //         width: lumal.vulkan_data.swapchain_extent.width,
+        //         height: lumal.vulkan_data.swapchain_extent.height,
+        //         depth: 1,
+        //     };
 
-            let noalloc: vulkanalia_vma::Allocation =
-                unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-            // as vulkanalia_vma::vma::VmaAllocation;
+        //     let noalloc: vulkanalia_vma::Allocation =
+        //         unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+        //     // as vulkanalia_vma::vma::VmaAllocation;
 
-            // Populate the Ring with actual data
-            swapchain_images_ring.data[i] = lumal::Image {
-                image: *swapchain_image,
-                allocation: noalloc, // or some default/constructed allocation
-                view: image_view,
-                mip_views: vec![image_view], // Add more mip views if necessary
-                format: lumal.vulkan_data.swapchain_format,
-                aspect: vk::ImageAspectFlags::COLOR,
-                extent,
-                mip_levels: 1, // Set this according to your mip levels
-            };
-        }
+        //     // Populate the Ring with actual data
+        //     swapchain_images_ring.data[i] = lumal::Image {
+        //         image: *swapchain_image,
+        //         allocation: noalloc, // Vulkanalia fucking sucks
+        //         view: image_view,
+        //         mip_views: vec![image_view],
+        //         format: lumal.vulkan_data.swapchain_format,
+        //         aspect: vk::ImageAspectFlags::COLOR,
+        //         extent,
+        //         mip_levels: 1,
+        //     };
+        // }
 
         AllSwapchainDependentImages {
-            swapchain_images: swapchain_images_ring,
+            // swapchain_images: swapchain_images_ring,
             highres_frame,
             highres_depth_stencil,
             highres_mat_norm,
@@ -355,7 +354,6 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_independent_images(lumal: &Renderer, independent_images: &AllIndependentImages) {
         println!("started destroying independent images");
         lumal.destroy_image_ring(&independent_images.grass_state);
@@ -372,10 +370,9 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_dependent_images(
         lumal: &Renderer,
-        dependent_images: &AllSwapchainDependentImages,
+        dependent_images: AllSwapchainDependentImages,
     ) {
         println!("started destroying swapchain dependent images");
 

@@ -9,7 +9,6 @@ use crate::*;
 impl InternalRenderer {
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn create_all_buffers(
         lumal: &Renderer,
         lum_settings: &Settings,
@@ -24,9 +23,9 @@ impl InternalRenderer {
         let uniform = lumal.create_buffer_rings(
             lumal_settings.fif,
             vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-            220,
-            false,
-        ); // no way i write it with mem::size_of::<
+            220,   // pre-calculated size of UBO. No way i write it with mem::size_of::<
+            false, // if should be visible to CPU
+        );
         let light_uniform = lumal.create_buffer_rings(
             lumal_settings.fif,
             vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
@@ -80,7 +79,6 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub fn destroy_all_buffers(lumal: &Renderer, buffers: AllBuffers) {
         println!("started destroying buffers");
         lumal.destroy_buffer_ring(buffers.staging_world);

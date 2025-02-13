@@ -23,3 +23,5 @@ analysis.jsoncargo
 # imgui file created by nvidia nsight 
 /imgui.ini
 /lum/cpp/ogt_vox.cpp
+/hole.md
+/ipcr.md

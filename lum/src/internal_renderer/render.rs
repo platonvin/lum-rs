@@ -18,17 +18,16 @@ use super::{aabb, InternalRenderer};
 // if someone has a good idea on how to do it, message me (or just make a PR)
 
 #[derive(Debug, Clone, Copy)]
-#[pub_fields::pub_fields]
 pub struct Camera {
-    camera_pos: vec3,
-    camera_dir: vec3,
-    camera_transform: mat4,
-    pixels_in_voxel: f32,
-    origin_view_size: vec2,
-    view_size: vec2,
-    camera_ray_dir_plane: vec3,
-    horizline: vec3,
-    vertiline: vec3,
+    pub camera_pos: vec3,
+    pub camera_dir: vec3,
+    pub camera_transform: mat4,
+    pub pixels_in_voxel: f32,
+    pub origin_view_size: vec2,
+    pub view_size: vec2,
+    pub camera_ray_dir_plane: vec3,
+    pub horizline: vec3,
+    pub vertiline: vec3,
 }
 impl Default for Camera {
     fn default() -> Self {
@@ -376,7 +375,6 @@ impl InternalRenderer {
 
     // i love the fact that none of these does anything
     #[optimize(speed)]
-    #[cfg_attr(feature = "optimized", optimize(3))]
     // Note: this is the last function that can be called before Vulkan interraction
     // which means that you HAVE to wait at most after it
     pub fn find_radiance_to_update(&mut self) {
@@ -512,7 +510,6 @@ impl InternalRenderer {
     }
 
     #[optimize(speed)]
-    #[cfg_attr(feature = "optimized", optimize(3))]
     pub fn update_radiance(&mut self) {
         // separation for multiverse
         Self::_update_radiance(self);
@@ -520,58 +517,10 @@ impl InternalRenderer {
 
     // #[multiversion(targets("x86_64+avx2"))]
     #[optimize(speed)]
-    #[cfg_attr(feature = "optimized", optimize(3))]
     fn _update_radiance(self: &mut InternalRenderer) {
-        self.find_radiance_to_update();
-
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         flame::start("copy radiance updates");
-
-        // self.counter += 1;
-        // dbg!(&self.counter);
-        // dbg!(self.counter % 2);
-        // let mut d = self.counter as usize % 3;
-        // d = unsafe { rand() as usize } % 3;
-        // self.radiance_updates = match d {
-        //     0 => {
-        //         atrace!();
-        //         [
-        //             i8vec4::new(0 + 0, 12, 1, 0),
-        //             i8vec4::new(0 + 3, 12, 1, 0),
-        //             i8vec4::new(0 + 6, 12, 1, 0),
-        //             i8vec4::new(0 + 9, 12, 1, 0),
-        //             i8vec4::new(0 + 12, 12, 1, 0),
-        //             i8vec4::new(0 + 15, 12, 1, 0),
-        //         ]
-        //     }
-        //     .to_vec(),
-        //     1 => {
-        //         atrace!();
-        //         [
-        //             i8vec4::new(1 + 0, 12, 1, 1),
-        //             i8vec4::new(1 + 3, 12, 1, 1),
-        //             i8vec4::new(1 + 6, 12, 1, 1),
-        //             i8vec4::new(1 + 9, 12, 1, 1),
-        //             i8vec4::new(1 + 12, 12, 1, 10),
-        //             i8vec4::new(1 + 15, 12, 1, 10),
-        //         ]
-        //     }
-        //     .to_vec(),
-        //     2 => {
-        //         atrace!();
-        //         [
-        //             i8vec4::new(2 + 0, 12, 1, 0),
-        //             i8vec4::new(2 + 3, 12, 1, 0),
-        //             i8vec4::new(2 + 6, 12, 1, 0),
-        //             i8vec4::new(2 + 9, 12, 1, 0),
-        //             i8vec4::new(2 + 12, 12, 1, 0),
-        //             i8vec4::new(2 + 15, 12, 1, 0),
-        //         ]
-        //     }
-        //     .to_vec(),
-        //     _ => panic!(),
-        // };
 
         // flame::start("copy radiance updates");
         let count_to_copy = self.radiance_updates.len();
@@ -1909,8 +1858,8 @@ impl InternalRenderer {
             self.lumal.device.cmd_dispatch(
                 //2x8 2x8 1x1
                 *command_buffer,
-                (self.settings.world_size.x * 2 + 7) / 8,
-                (self.settings.world_size.y * 2 + 7) / 8,
+                (self.settings.world_size.x * 2).div_ceil(8),
+                (self.settings.world_size.y * 2).div_ceil(8),
                 1,
             );
         }
@@ -2308,19 +2257,22 @@ impl InternalRenderer {
         self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
     }
 
-    pub fn end_frame(&mut self) {
-        self.lumal.end_frame(&[
-            // "Special" cmb used by UI copies & layout transitions HAS to be first
-            // Otherwise copied images are in LAYOUT_UNDEFINED because copies did not happen yet
-            // so, copy before using the copy (makes sense, right?)
-            *self.cmdbufs.copy_command_buffers.current(),
-            // world-space things
-            *self.cmdbufs.compute_command_buffers.current(),
-            // lightmap! yes, a single one. But we can always add more!
-            *self.cmdbufs.lightmap_command_buffers.current(),
-            // per-pixel
-            *self.cmdbufs.graphics_command_buffers.current(),
-        ]);
+    pub fn end_frame(&mut self, window: &Window) {
+        self.lumal.end_frame(
+            &[
+                // "Special" cmb used by UI copies & layout transitions HAS to be first
+                // Otherwise copied images are in LAYOUT_UNDEFINED because copies did not happen yet
+                // so, copy before using the copy (makes sense, right?)
+                *self.cmdbufs.copy_command_buffers.current(),
+                // world-space things
+                *self.cmdbufs.compute_command_buffers.current(),
+                // lightmap! yes, a single one. But we can always add more!
+                *self.cmdbufs.lightmap_command_buffers.current(),
+                // per-pixel
+                *self.cmdbufs.graphics_command_buffers.current(),
+            ],
+            window,
+        );
 
         self.cmdbufs.copy_command_buffers.move_next(); //runtime copies for ui. Also does first frame resources
         self.cmdbufs.compute_command_buffers.move_next();
@@ -2352,5 +2304,13 @@ impl InternalRenderer {
 
         self.independent_images.grass_state.move_next(); //full-world grass shift (~direction) texture sampled in grass
         self.independent_images.water_state.move_next(); //~same but water
+
+        let should_recreate = self.lumal.should_recreate;
+        if should_recreate {
+            self.recreate_window(window);
+            self.lumal.should_recreate = false;
+        }
+
+        // self
     }
 }

@@ -127,6 +127,20 @@ impl AppState {
     pub fn destroy(mut self) {
         println!("Shutting down renderer");
         self.meshes.unload(&mut self.lum);
+        self.lum.unload_block(1);
+        self.lum.unload_block(2);
+        self.lum.unload_block(3);
+        self.lum.unload_block(4);
+        self.lum.unload_block(5);
+        self.lum.unload_block(6);
+        self.lum.unload_block(7);
+        self.lum.unload_block(8);
+        self.lum.unload_block(9);
+        self.lum.unload_block(10);
+        self.lum.unload_block(11);
+        self.lum.unload_block(12);
+        self.lum.unload_block(13);
+        self.lum.unload_block(14);
         self.lum.destroy();
     }
 
@@ -192,7 +206,7 @@ impl AppState {
         // literally procedural grass placement every frame. You probably want to store it as entities in your own structures
         for xx in 4..20 {
             for yy in 4..20 {
-                if xx >= 5 && xx < 12 && yy >= 6 && yy < 16 {
+                if (5..12).contains(&xx) && (6..16).contains(&yy) {
                     continue;
                 };
                 let pos = vec3::new(xx as f32 * 16.0, yy as f32 * 16.0, 16.0);
@@ -217,7 +231,7 @@ impl AppState {
         }
 
         self.lum.prepare_frame();
-        self.lum.end_frame();
+        self.lum.end_frame(&self.window);
     }
 }
 
@@ -232,9 +246,22 @@ impl ApplicationHandler for AppState {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        if matches!(event, WindowEvent::CloseRequested) {
-            // _event_loop.exit();
-            self.about_to_close = true;
+        match event {
+            WindowEvent::CloseRequested => {
+                self.about_to_close = true;
+            }
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                if event.logical_key
+                    == winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape)
+                {
+                    self.about_to_close = true;
+                }
+            }
+            _ => {}
         }
     }
 

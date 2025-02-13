@@ -3,13 +3,11 @@
     version = "0.1.4"
     edition = "2021"
 
-[features]
-    optimized = []
-
 [dependencies]
-    lumal = { path = "../lumal" } # lum' abstraction layer over vulkan
+    # lumal = { git = "https://github.com/platonvin/lumal-rs.git", rev = "4e11f82"} # lumal is lum's abstraction layer over vulkan
+    lumal = { path = "../../lumal-rs" } # for development
     as_u8_slice_derive = { path = "../as_u8_slice_derive" } # derive macro for AsU8Slice, needed by Vulkanalia
-    unchecked_integer = { path = "../unchecked_integer" } # UB overflow ints
+    # unchecked_integer = { path = "../unchecked_integer" } # UB overflow ints
     vulkanalia = { version = "0.25.0", features = [
         "libloading",
         "provisional",
@@ -20,13 +18,13 @@
     anyhow = "1"
     vek = "0.17.1"
     pub-fields = "0.1.1"
+    # dot vox is magicavoxel loader. It took less time to port 2kloc of C++ then understand how dot_vox works, lol
     # dot_vox = "5.1.1"
     block-mesh = "0.2.0"
     flame = "0.2.2"
     # rand was causing compilation errors
     # rand = "0.9.0"
     # multiversion = "0.8.0"
-    # dlopen = "0.1.8"
 
 [build-dependencies]
     cc = "1.0"

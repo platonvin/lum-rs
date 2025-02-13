@@ -15,7 +15,6 @@ use crate::*;
 impl InternalRenderer {
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn create_all_pipes(
         lumal: &mut Renderer,
         lum_settings: &Settings,
@@ -78,7 +77,7 @@ impl InternalRenderer {
 
         lumal::trace!();
         // (actually) allocate space that is enough for all descriptors
-        lumal.flush_descriptor_setup().unwrap();
+        lumal.flush_descriptor_setup();
 
         lumal::trace!();
         // allocate each descriptor set
@@ -126,7 +125,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.lightmap_blocks_pipe,
             None, // extra_dynamic_layout
             &[
@@ -136,6 +135,7 @@ impl InternalRenderer {
                 }, // Fragment shader is not needed
             ],
             &[AttrFormOffs {
+                binding: 0,
                 format: vk::Format::R8G8B8_UINT,
                 offset: offset_of!(PackedVoxelCircuit, pos),
             }],
@@ -154,7 +154,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.lightmap_models_pipe,
             None,
             &[
@@ -164,6 +164,7 @@ impl InternalRenderer {
                 }, // Fragment shader is not needed
             ],
             &[AttrFormOffs {
+                binding: 0,
                 format: vk::Format::R8G8B8_UINT,
                 offset: offset_of!(PackedVoxelCircuit, pos),
             }],
@@ -182,7 +183,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.raygen_blocks_pipe,
             None,
             &[
@@ -196,6 +197,7 @@ impl InternalRenderer {
                 },
             ],
             &[AttrFormOffs {
+                binding: 0,
                 format: vk::Format::R8G8B8_UINT, // TODO: automatic in macro
                 offset: offset_of!(PackedVoxelCircuit, pos),
             }],
@@ -223,7 +225,7 @@ impl InternalRenderer {
             vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
         );
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.raygen_models_pipe,
             Some(pipes.raygen_models_push_layout),
             &[
@@ -237,6 +239,7 @@ impl InternalRenderer {
                 },
             ],
             &[AttrFormOffs {
+                binding: 0,
                 format: vk::Format::R8G8B8_UINT,
                 offset: offset_of!(PackedVoxelCircuit, pos),
             }],
@@ -255,7 +258,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.raygen_particles_pipe,
             None,
             &[
@@ -274,18 +277,22 @@ impl InternalRenderer {
             ],
             &[
                 AttrFormOffs {
+                    binding: 0,
                     format: vk::Format::R32G32B32_SFLOAT,
                     offset: offset_of!(Particle, pos),
                 },
                 AttrFormOffs {
+                    binding: 0,
                     format: vk::Format::R32G32B32_SFLOAT,
                     offset: offset_of!(Particle, vel),
                 },
                 AttrFormOffs {
+                    binding: 0,
                     format: vk::Format::R32_SFLOAT,
                     offset: offset_of!(Particle, life_time),
                 },
                 AttrFormOffs {
+                    binding: 0,
                     format: vk::Format::R8_UINT,
                     offset: offset_of!(Particle, mat_id),
                 },
@@ -305,7 +312,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.raygen_water_pipe,
             None,
             &[
@@ -337,7 +344,7 @@ impl InternalRenderer {
         for (i, foliage) in pipes.raygen_foliage_pipes.iter_mut().enumerate() {
             let desc = &foliage_descriptions[i];
             // let vs = desc.vertex_shader_file.as_str();
-            lumal.create_raster_pipeline(
+            lumal.create_raster_pipe(
                 foliage,
                 None,
                 &[
@@ -351,6 +358,7 @@ impl InternalRenderer {
                     },
                 ],
                 &[AttrFormOffs {
+                    binding: 0,
                     format: vk::Format::R8G8B8_UINT,
                     offset: offset_of!(PackedVoxelCircuit, pos),
                 }],
@@ -368,7 +376,7 @@ impl InternalRenderer {
             );
         }
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.diffuse_pipe,
             None,
             &[
@@ -399,7 +407,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.ao_pipe,
             None,
             &[
@@ -428,7 +436,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.fill_stencil_glossy_pipe,
             None,
             &[
@@ -465,7 +473,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.fill_stencil_smoke_pipe,
             None,
             &[
@@ -506,7 +514,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.glossy_pipe,
             None,
             &[
@@ -543,7 +551,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.smoke_pipe,
             None,
             &[
@@ -580,7 +588,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        lumal.create_raster_pipeline(
+        lumal.create_raster_pipe(
             &mut pipes.tonemap_pipe,
             None,
             &[
@@ -611,7 +619,7 @@ impl InternalRenderer {
 
         lumal::trace!();
 
-        // lumal.create_raster_pipeline(
+        // lumal.create_raster_pipe(
         //     &mut pipes.overlay_pipe,
         //     None,
         //     &[
@@ -626,14 +634,17 @@ impl InternalRenderer {
         //     ],
         //     &[
         //         AttrFormOffs {
+        //             binding: 0,
         //             format: vk::Format::R32G32_SFLOAT,
         //             offset: offset_of!(RmlVertex, position),
         //         },
         //         AttrFormOffs {
+        //             binding: 0,
         //             format: vk::Format::R8G8B8A8_UNORM,
         //             offset: offset_of!(RmlVertex, colour),
         //         },
         //         AttrFormOffs {
+        //             binding: 0,
         //             format: vk::Format::R32G32_SFLOAT,
         //             offset: offset_of!(RmlVertex, tex_coord),
         //         },
@@ -652,7 +663,7 @@ impl InternalRenderer {
 
         lumal::trace!();
         // Compute pipelines
-        lumal.create_compute_pipeline(
+        lumal.create_compute_pipe(
             &mut pipes.radiance_pipe,
             None,
             "radiance.comp.spv".to_string(),
@@ -661,7 +672,7 @@ impl InternalRenderer {
         );
 
         lumal::trace!();
-        lumal.create_compute_pipeline(
+        lumal.create_compute_pipe(
             &mut pipes.update_grass_pipe,
             None,
             "updateGrass.comp.spv".to_string(),
@@ -670,7 +681,7 @@ impl InternalRenderer {
         );
 
         lumal::trace!();
-        lumal.create_compute_pipeline(
+        lumal.create_compute_pipe(
             &mut pipes.update_water_pipe,
             None,
             "updateWater.comp.spv".to_string(),
@@ -679,7 +690,7 @@ impl InternalRenderer {
         );
 
         lumal::trace!();
-        lumal.create_compute_pipeline(
+        lumal.create_compute_pipe(
             &mut pipes.gen_perlin2d_pipe,
             None,
             "perlin2.comp.spv".to_string(),
@@ -688,7 +699,7 @@ impl InternalRenderer {
         );
 
         lumal::trace!();
-        lumal.create_compute_pipeline(
+        lumal.create_compute_pipe(
             &mut pipes.gen_perlin3d_pipe,
             None,
             "perlin3.comp.spv".to_string(),
@@ -697,7 +708,7 @@ impl InternalRenderer {
         );
 
         lumal::trace!();
-        lumal.create_compute_pipeline(
+        lumal.create_compute_pipe(
             &mut pipes.map_pipe,
             Some(pipes.map_push_layout),
             "map.comp.spv".to_string(),
@@ -708,7 +719,6 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     pub unsafe fn destroy_all_pipes(lumal: &mut Renderer, mut pipes: AllPipes) {
         lumal.destroy_raster_pipe(pipes.lightmap_blocks_pipe);
         lumal.destroy_raster_pipe(pipes.lightmap_models_pipe);
@@ -747,7 +757,6 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn do_smth_all_descriptors<Fun>(
         process: &Fun,
         lumal: &mut Renderer,
@@ -1392,7 +1401,6 @@ impl InternalRenderer {
     // Sorry, i dont have enough iq to understand lifetimes
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn anounce_descriptor_setup_wrapper(
         lumal: &mut Renderer,
         dset_layout: &mut vk::DescriptorSetLayout,
@@ -1412,7 +1420,6 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    #[cfg_attr(feature = "optimized", optimize("z"))]
     fn acutally_setup_descriptor_wrapper(
         lumal: &mut Renderer,
         dset_layout: &mut vk::DescriptorSetLayout,
@@ -1433,7 +1440,6 @@ impl InternalRenderer {
 
 #[cold]
 #[optimize(size)]
-#[cfg_attr(feature = "optimized", optimize("s"))]
 fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPipes) {
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {

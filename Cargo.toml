@@ -3,12 +3,10 @@ cargo-features = ["profile-rustflags"]
 [workspace]
     resolver = "3"
     members = [
-        "lum",                # Include the lum crate
-        "lumal",              # Include the lumal crate
+        "lum",
         "shaders",
-        "examples",           # example programs
+        "examples",
         "as_u8_slice_derive",
-        # "unchecked_integer",  # derive macro for AsU8Slice
     ]
 
 [profile.dev]
@@ -27,7 +25,6 @@ cargo-features = ["profile-rustflags"]
     [profile.dev.package.examples]
         opt-level = 0
 
-
 [profile.release]
     opt-level = 3           # "s" is 5 times slower lol. TODO: investigate
     panic = "abort"
@@ -45,6 +42,8 @@ cargo-features = ["profile-rustflags"]
     debug = false
 
 # Highest possible optimizations
+# these profile settings are not a good example to use. They are somewhat internal to see how small can the binary be
+# dont forget to build std lib with the project to see good size
 [profile.native]
     inherits = "release"
     opt-level = 3
@@ -54,8 +53,6 @@ cargo-features = ["profile-rustflags"]
     panic = "abort"
     overflow-checks = false
     strip = "symbols"
-    [profile.native.package.dot_vox]
-        opt-level = "s"
     [profile.native.package.autocfg]
         opt-level = "z"
     [profile.native.package.proc-macro2]
@@ -140,8 +137,6 @@ cargo-features = ["profile-rustflags"]
         opt-level = "z"
     [profile.native.package.unicode-segmentation]
         opt-level = "z"
-    [profile.native.package.minimal-lexical]
-        opt-level = "z"
     [profile.native.package.smol_str]
         opt-level = "z"
     [profile.native.package.cursor-icon]
@@ -151,8 +146,6 @@ cargo-features = ["profile-rustflags"]
     [profile.native.package.approx]
         opt-level = "z"
     [profile.native.package.num-complex]
-        opt-level = "z"
-    [profile.native.package.nom]
         opt-level = "z"
     [profile.native.package.ndcopy]
         opt-level = "z"
@@ -164,8 +157,6 @@ cargo-features = ["profile-rustflags"]
         opt-level = "z"
     [profile.native.package.vulkanalia-vma]
         opt-level = 3
-    [profile.native.package.shader]
-        opt-level = "z"
     [profile.native.package.lazy_static]
         opt-level = "z"
     [profile.native.package.log]
@@ -193,14 +184,14 @@ cargo-features = ["profile-rustflags"]
     codegen-units = 1
     lto = "thin"
     debug = false
-    panic = "abort"
     overflow-checks = false
     strip = false
 
-#"z" is just too slow
+# dont forget to build std lib with the project
+# "z" is very slow, but too get the smallest binary...
 [profile.natsize]
     inherits = "release"
-    opt-level = "s"
+    opt-level = "z"
     lto = "fat"
     codegen-units = 1
     debug = false
