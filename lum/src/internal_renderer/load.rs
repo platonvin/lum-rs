@@ -125,7 +125,7 @@ impl super::InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    pub fn extract_palette_from_scene_ogt(&mut self, scene: &ogt_vox::VoxScene) {
+    pub fn extract_palette_from_scene(&mut self, scene: &ogt_vox::VoxScene) {
         for i in 0..scene.materials.matl.len() {
             self.material_palette[i].albedo = vec3::new(
                 scene.palette.color[i].x as f32 / 255.0,
@@ -160,7 +160,7 @@ impl super::InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    pub fn load_mesh_from_file_ogt(
+    pub fn load_mesh_from_file(
         &mut self,
         mesh_file: &str,
         make_vertices: bool,
@@ -175,16 +175,44 @@ impl super::InternalRenderer {
 
         if extrude_palette && !self.has_palette {
             println!("Extruding palette");
-            self.extract_palette_from_scene_ogt(&scene);
+            self.extract_palette_from_scene(&scene);
             self.has_palette = true;
         }
 
-        self.load_mesh_from_memory_ogt(model, true)
+        self.load_mesh_from_memory(model, true)
     }
 
     #[cold]
     #[optimize(size)]
-    pub fn load_mesh_from_memory_ogt(
+    pub fn load_meshes_from_file(
+        &mut self,
+        meshes_file: &str,
+        make_vertices: bool,
+        extrude_palette: bool,
+    ) -> Vec<InternalMeshModel> {
+        let scene = ogt_vox::read_scene_from_file(meshes_file).unwrap();
+
+        if extrude_palette && !self.has_palette {
+            println!("Extruding palette");
+            self.extract_palette_from_scene(&scene);
+            self.has_palette = true;
+        }
+
+        scene
+            .models
+            .iter()
+            .enumerate()
+            .map(|(i, model)| {
+                assert!(model.size_x > 0 && model.size_y > 0 && model.size_z > 0);
+
+                self.load_mesh_from_memory(model, true)
+            })
+            .collect()
+    }
+
+    #[cold]
+    #[optimize(size)]
+    pub fn load_mesh_from_memory(
         &mut self,
         model: &ogt_vox::VoxModel,
         make_vertices: bool,
@@ -229,7 +257,8 @@ impl super::InternalRenderer {
         InternalMeshModel {
             triangles,
             voxels,
-            size,
+            total_size: size,
+            // sprites: vec![],
         }
     }
 
@@ -253,7 +282,7 @@ impl super::InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    pub fn load_block_from_file_ogt(&mut self, block: BlockId, path: &str) {
+    pub fn load_block_from_file(&mut self, block: BlockId, path: &str) {
         // let scene_data = std::fs::read(path).unwrap();
         let scene = ogt_vox::read_scene_from_file(path).unwrap(); // TODO: handle error
                                                                   // let scene = from_addr(scene);
@@ -261,12 +290,12 @@ impl super::InternalRenderer {
                                                                   // blocks are always 16x16x16
         let model = &scene.models[0];
         assert!(model.size_x == 16 && model.size_y == 16 && model.size_z == 16);
-        self.load_block_from_memory_ogt(block, model);
+        self.load_block_from_memory(block, model);
     }
 
     #[cold]
     #[optimize(size)]
-    pub fn load_block_from_memory_ogt(&mut self, block_id: BlockId, model: &ogt_vox::VoxModel) {
+    pub fn load_block_from_memory(&mut self, block_id: BlockId, model: &ogt_vox::VoxModel) {
         let size = uvec3::new(model.size_x, model.size_y, model.size_z);
 
         let mut padded_voxel_data = Array3D::<VoxelForContour>::new(
@@ -429,12 +458,12 @@ impl super::InternalRenderer {
         offset_and_insert(&mut verts_idxs_zzP, &mut triangles.zzP);
         offset_and_insert(&mut verts_idxs_zzN, &mut triangles.zzN);
 
-        triangles.vertexes = self.lumal.create_elem_buffer::<PackedVoxelCircuit>(
+        triangles.vertexes = self.lumal.create_and_upload_buffer::<PackedVoxelCircuit>(
             &circ_verts,
             vk::BufferUsageFlags::TRANSFER_DST // trans_dst needed internally but specified explicitly 
             | vk::BufferUsageFlags::VERTEX_BUFFER,
         );
-        triangles.indices = self.lumal.create_elem_buffer::<u16>(
+        triangles.indices = self.lumal.create_and_upload_buffer::<u16>(
             &all_indices,
             vk::BufferUsageFlags::TRANSFER_DST // trans_dst needed internally but specified explicitly 
             | vk::BufferUsageFlags::INDEX_BUFFER,

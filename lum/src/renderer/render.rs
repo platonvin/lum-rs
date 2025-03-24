@@ -151,7 +151,7 @@ impl Renderer {
     }
 
     pub fn load_model(&mut self, path: &str) -> MeshModel {
-        let model_mesh = self.renderer.load_mesh_from_file_ogt(path, true, true);
+        let model_mesh = self.renderer.load_mesh_from_file(path, true, true);
         let index = self.storage.models.allocate(model_mesh).unwrap();
         MeshModel(index)
     }
@@ -162,7 +162,7 @@ impl Renderer {
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
     pub fn load_block(&mut self, block: BlockId, path: &str) {
-        self.renderer.load_block_from_file_ogt(block, path);
+        self.renderer.load_block_from_file(block, path);
     }
     pub fn unload_block(&mut self, block: BlockId) {
         self.renderer.free_block(block);
@@ -359,7 +359,8 @@ impl Renderer {
 
     pub fn draw_model(&mut self, model: &MeshModel, trans: &MeshTransform) {
         let model_mesh = self.storage.models.get(model.0).unwrap();
-        if self.is_model_visible(&model_mesh.size, trans) {
+        // model size also happens to be >= its bounding box (dont leave voxel padding)
+        if self.is_model_visible(&model_mesh.total_size, trans) {
             self.model_que.push(ModelRenderRequest {
                 cam_dist: 0.0,
                 mesh: *model,
@@ -369,6 +370,7 @@ impl Renderer {
     }
 
     pub fn draw_foliage(&mut self, foliage: &MeshFoliage, pos: &vec3) {
+        // foliage is assumed to be somewhat block constrained
         if self.is_block_visible(*pos) {
             self.foliage_que.push(FoliageRenderRequest {
                 cam_dist: 0.0,
@@ -379,6 +381,7 @@ impl Renderer {
     }
 
     pub fn draw_liquid(&mut self, liquid: &MeshLiquid, pos: &vec3) {
+        // liquids are assumed to be somewhat block constrained
         if self.is_block_visible(*pos) {
             self.liquid_que.push(LiquidRenderRequest {
                 cam_dist: 0.0,
@@ -389,6 +392,7 @@ impl Renderer {
     }
 
     pub fn draw_volumetric(&mut self, volumetric: &MeshVolumetric, pos: &vec3) {
+        // volumetrics are assumed to be somewhat block constrained
         if self.is_block_visible(*pos) {
             self.volumetric_que.push(VolumetricRenderRequest {
                 cam_dist: 0.0,

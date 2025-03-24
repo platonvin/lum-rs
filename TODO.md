@@ -1,6 +1,5 @@
 inherit TODO from lum++
 try_into<Type>().unwrap() -> as Type 
-port C++ ogt mesher
 
 profile query
 stack Ring (FIFO_Ring / FIFRing) for known resources. How to have no-size stored reference in Rust? E.g. to "lumal.frame" for resource access
@@ -64,3 +63,31 @@ allow custom grass shapes:
 report flame moving timestamps around
 
 sample light differently for more glossy surfaces
+
+investigate typed lumal_buffers, pipelines, etc.
+arena of voxel data instead of per-mapcall image bind (bind less)
+ - uniform voxelArena
+ - push_constants {ivec3 shift, ivec3 size} 
+ - free sprite sheets
+
+instead of extracting roughness in subpass, rasterize with stencil mask:
+ - this needs separate vertices for reflective / non-reflective
+  - just separate and mesh as two meshes
+  - one more pipeline, same subpass?
+ - this also is completely redundant if im going to have blurred reflections instead of no reflections for high roughness
+
+2d sprites:
+ - raster to 3d voxels
+ - so they have materials!
+ - actually, that sucks. You now have to either make pixel editors support materials, or implement a converter
+ - special case for renderer? Or just orient models to camera, idk
+ - if no special case, then no engine code required
+ - they are just 3d models then
+
+sprite sheets:
+  - basic 3d grid-aligned animations 
+  - raster to 3d and put into the same arena
+  - 2d sprite sheets will fit here too
+
+no float conversions for -0.5f in fragment
+ - fixed point math?

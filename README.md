@@ -1,4 +1,5 @@
-This is a complete rewrite of Lum Renderer in Rust programming language
+# Lum
+Voxel renderer
 
 ### Prerequisites
 
@@ -19,3 +20,6 @@ cargo build -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_a
 adding `optimize_for_size` to `build-std-features` makes binary under a megabyte 
 
 I did it because i need to find out the best language for renderers. If you have any suggestions, please let me know
+
+### Limitation
+apart from hardware limitations (which can be bypassed, but at a cost of complexity), there are arbitrary limitations like 255 materials max. They can be manually edited and will be moved to template parameters in future (shaders can be aware of them via specialization constants)

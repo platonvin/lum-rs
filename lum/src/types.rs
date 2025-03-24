@@ -104,9 +104,10 @@ pub struct PackedVoxelCircuit {
 }
 
 // IndexedVertices is just another way to store where the data is in (single) allocated buffer
-// this could have been 6 buffers, but insted it is 1 buffer and 6 offsets
+// this could have been 6 buffers, but insted it is 1 buffer and 6 (offset+index_count)s
 #[derive(Clone, Copy, Debug, Default)]
 pub struct IndexedVertices {
+    // TODO: u16
     pub offset: u32, // yes, they are all stored in same buffer and accessed with offset
     pub icount: u32,
 }
@@ -126,24 +127,61 @@ pub struct FaceBuffers {
     pub indices: lumal::Buffer,
 }
 
-#[derive(Debug, Default, Clone)]
-// handle (reference) to a mesh.
-// You can clone it but still need to unload one time
-pub struct InternalMeshModel {
-    pub triangles: FaceBuffers,
-    pub voxels: lumal::Image,
-    pub size: uvec3, // integer because in voxels
+#[allow(non_snake_case)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct FaceBuffersShared {
+    // zPz means zero-Positive-zero
+    // zzN means zero-zero-Negative
+    pub Pzz: IndexedVertices,
+    pub Nzz: IndexedVertices,
+    pub zPz: IndexedVertices,
+    pub zNz: IndexedVertices,
+    pub zzP: IndexedVertices,
+    pub zzN: IndexedVertices,
 }
 
+// #[allow(non_snake_case)]
+// #[derive(Debug, Default, Clone)]
+// pub struct FaceBuffersData {
+//     pub vertexes: lumal::Buffer,
+//     pub indices: lumal::Buffer,
+// }
+
+// #[derive(Clone, Copy, Debug, Default)]
+// pub struct SpriteDescription {
+//     // offset & size of voxel data
+//     pub offset: u8vec3,
+//     pub size: u8vec3,
+//     pub faces: FaceBuffersShared,
+// }
+
+// handle (reference) to a mesh.
+// You can clone it but still need to unload one time
 #[derive(Debug, Default, Clone)]
+pub struct InternalMeshModel {
+    pub triangles: FaceBuffers,
+    // when model has multiple sprites in a spritesheet, `voxels` contains all of them, stacked along `Y`
+    pub voxels: lumal::Image,
+    // size of voxels. So if only one sprite, equal to its size, but when multiple - equal to sum of sizes
+    pub total_size: uvec3, // integer because in voxels
+
+                           // // array of offset + size for all the sprites in a spritesheet
+                           // pub sprites: Vec<SpriteDescription>,
+}
+
+//5.76k bytes for compact 100 sprites (models)
+//11.1k bytes for non-compact 100 sprites (models)
+
 // handle (reference) to a block triangles.
 // You can clone it but still need to unload one time
+#[derive(Debug, Default, Clone)]
 pub struct InternalMeshBlock {
     pub triangles: FaceBuffers,
 }
 
-#[derive(Debug, Clone, Default)]
 // not accessed directly by user, instead indexed
+// classic Rust reinventing memory to trick borrow checker
+#[derive(Debug, Clone, Default)]
 pub struct InternalMeshFoliageDesc {
     pub vertex_shader_file: String,
 

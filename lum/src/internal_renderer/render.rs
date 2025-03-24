@@ -160,7 +160,7 @@ impl InternalRenderer {
     pub fn blockify_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
         let rotate = mat4::from(trans.rotation);
         let shift = mat4::identity().translated_3d(trans.translation);
-        let border_in_voxel = get_shift(shift * rotate, mesh.size);
+        let border_in_voxel = get_shift(shift * rotate, mesh.total_size);
 
         let mut border = iAABB {
             min: ivec3::new(
@@ -1071,9 +1071,9 @@ impl InternalRenderer {
         let rotate = mat4::from(trans.rotation);
         let shift = mat4::identity().translated_3d(trans.translation);
         let transform = shift * rotate;
-        let border_in_voxel = get_shift(shift * rotate, mesh.size);
+        let border_in_voxel = get_shift(shift * rotate, mesh.total_size);
 
-        let mut border_in_voxel = get_shift(transform, mesh.size);
+        let mut border_in_voxel = get_shift(transform, mesh.total_size);
 
         let mut border = iAABB {
             min: ivec3::new(
