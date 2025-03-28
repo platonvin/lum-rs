@@ -3,8 +3,18 @@
     version = "0.1.4"
     edition = "2021"
 
+[features]
+    default = []
+    # controls wether Lum uses Lumal feature for validation layer names
+    debug_validation_names = ["lumal/debug_validation_names"]
+    
+[profile.dev]
+    # enable debug names for validation_layers use in Lum
+    features = ["debug_validation_names"]
+
 [dependencies]
     # lumal = { git = "https://github.com/platonvin/lumal-rs.git", rev = "4e11f82"} # lumal is lum's abstraction layer over vulkan
+    shaders = { path = "../shaders" }
     lumal = { path = "../../lumal-rs" } # for development
     as_u8_slice_derive = { path = "../as_u8_slice_derive" } # derive macro for AsU8Slice, needed by Vulkanalia
     # unchecked_integer = { path = "../unchecked_integer" } # UB overflow ints

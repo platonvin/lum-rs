@@ -183,7 +183,9 @@ pub struct InternalMeshBlock {
 // classic Rust reinventing memory to trick borrow checker
 #[derive(Debug, Clone, Default)]
 pub struct InternalMeshFoliageDesc {
-    pub vertex_shader_file: String,
+    // shader, compiled into spirv
+    // owned by description for siplicity
+    pub spirv_code: Vec<u8>,
 
     // Stored separately cause im fell in love with ecs
     // pub pipe: lumal::RasterPipe,

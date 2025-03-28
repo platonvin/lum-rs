@@ -18,7 +18,6 @@ use winit::{
     event_loop::{ActiveEventLoop, EventLoop},
     window::{Window, WindowId},
 };
-
 // i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityTypeEnum -> LumMeshModel
 // #[derive(Default)]
 struct AllMeshes {
@@ -88,7 +87,10 @@ impl AppState {
         let mut pre_init_lum = Renderer::create().unwrap();
         let grass = pre_init_lum.load_foliage(
             // this is compiled by lum. But you should compile such shaders yourself
-            "grass.vert.spv",
+            // "shaders" is sub-crate that embeds some shaders into binary for simplicity
+            // i can make it work fine without this, but only for local build, and distribution then becomes a problem
+            // so embedding just makes you never care about where are shaders
+            shaders::get_shader("grass.vert.spv").unwrap().into(),
             13,
             100,
         );
@@ -97,7 +99,6 @@ impl AppState {
         let meshes = AllMeshes::new(&mut lum, grass);
 
         lum.load_block(1, "assets/dirt.vox");
-        // lum.load_block(1, "assets/black_block.vox");
         lum.load_block(2, "assets/grass.vox");
         lum.load_block(3, "assets/grassNdirt.vox");
         lum.load_block(4, "assets/stone_dirt.vox");
@@ -304,6 +305,7 @@ fn main() {
     flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
 }
 
+// wtf did i put it into bottom?
 fn read_file_buffer<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut buffer = Vec::new();

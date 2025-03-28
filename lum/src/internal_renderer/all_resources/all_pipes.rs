@@ -72,6 +72,8 @@ impl InternalRenderer {
                 ],
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 vk::DescriptorSetLayoutCreateFlags::empty(),
+                // #[cfg(feature = "debug_validation_names")]
+                Some("Foliage Descriptor Set Layout"),
             );
         });
 
@@ -120,6 +122,8 @@ impl InternalRenderer {
                 ],
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 vk::DescriptorSetLayoutCreateFlags::empty(),
+                // #[cfg(feature = "debug_validation_names")]
+                Some("Fill Stencil for Smoke Descriptor Set Layout"),
             );
         });
 
@@ -131,7 +135,7 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "lightmapBlocks.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("lightmapBlocks.vert.spv").unwrap(),
                 }, // Fragment shader is not needed
             ],
             &[AttrFormOffs {
@@ -150,6 +154,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            Some(&"Lightmap Blocks"),
         );
 
         lumal::trace!();
@@ -160,7 +165,7 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "lightmapModels.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("lightmapModels.vert.spv").unwrap(),
                 }, // Fragment shader is not needed
             ],
             &[AttrFormOffs {
@@ -179,6 +184,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            Some(&"Lightmap Models"),
         );
 
         lumal::trace!();
@@ -189,11 +195,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "rayGenBlocks.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("rayGenBlocks.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "rayGenBlocks.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("rayGenBlocks.frag.spv").unwrap(),
                 },
             ],
             &[AttrFormOffs {
@@ -212,18 +218,10 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            Some(&"Raygen Blocks"),
         );
 
         lumal::trace!();
-
-        lumal.create_descriptor_set_layout(
-            &[ShortDescriptorInfo {
-                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                stages: vk::ShaderStageFlags::FRAGMENT,
-            }],
-            &mut pipes.raygen_models_push_layout,
-            vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
-        );
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_models_pipe,
@@ -231,11 +229,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "rayGenModels.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("rayGenModels.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "rayGenModels.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("rayGenModels.frag.spv").unwrap(),
                 },
             ],
             &[AttrFormOffs {
@@ -254,6 +252,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            Some(&"Raygen Models"),
         );
 
         lumal::trace!();
@@ -264,15 +263,15 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "rayGenParticles.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("rayGenParticles.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::GEOMETRY,
-                    src: "rayGenParticles.geom.spv".to_string(),
+                    spirv_code: shaders::get_shader("rayGenParticles.geom.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "rayGenParticles.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("rayGenParticles.frag.spv").unwrap(),
                 },
             ],
             &[
@@ -308,6 +307,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            Some(&"Raygen Particles"),
         );
 
         lumal::trace!();
@@ -318,11 +318,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "water.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("water.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "water.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("water.frag.spv").unwrap(),
                 },
             ],
             &[],
@@ -337,6 +337,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            Some(&"Raygen Water"),
         );
 
         lumal::trace!();
@@ -350,11 +351,11 @@ impl InternalRenderer {
                 &[
                     ShaderStage {
                         stage: vk::ShaderStageFlags::VERTEX,
-                        src: desc.vertex_shader_file.clone(),
+                        spirv_code: &desc.spirv_code,
                     },
                     ShaderStage {
                         stage: vk::ShaderStageFlags::FRAGMENT,
-                        src: "grass.frag.spv".to_string(),
+                        spirv_code: shaders::get_shader("grass.frag.spv").unwrap(),
                     },
                 ],
                 &[AttrFormOffs {
@@ -373,6 +374,7 @@ impl InternalRenderer {
                 vk::CompareOp::LESS,
                 vk::CullModeFlags::NONE,
                 vk::StencilOpState::default(),
+                Some(&"Raygen Foliage"),
             );
         }
 
@@ -382,11 +384,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "diffuse.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("diffuse.frag.spv").unwrap(),
                 },
             ],
             &[],
@@ -403,6 +405,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            Some(&"Diffuse"),
         );
 
         lumal::trace!();
@@ -413,11 +416,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "hbao.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("hbao.frag.spv").unwrap(),
                 },
             ],
             &[],
@@ -432,6 +435,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            Some(&"Ambient Occlusion"),
         );
 
         lumal::trace!();
@@ -442,11 +446,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "fillStencilGlossy.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("fillStencilGlossy.frag.spv").unwrap(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -469,6 +473,7 @@ impl InternalRenderer {
                 write_mask: 0b01, // 01 for reflection
                 reference: 0b01,
             },
+            Some(&"Fill Stencil+Glossy"),
         );
 
         lumal::trace!();
@@ -479,11 +484,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fillStencilSmoke.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("fillStencilSmoke.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "fillStencilSmoke.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("fillStencilSmoke.frag.spv").unwrap(),
                 },
             ],
             &[], // Push constants only
@@ -510,6 +515,7 @@ impl InternalRenderer {
                 write_mask: 0b10, // 10 for smoke
                 reference: 0b10,
             },
+            Some(&"Fill Stencil for Smoke"),
         );
 
         lumal::trace!();
@@ -520,11 +526,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "glossy.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("glossy.frag.spv").unwrap(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -547,6 +553,7 @@ impl InternalRenderer {
                 write_mask: 0b00, // 01 for glossy
                 reference: 0b01,
             },
+            Some(&"Glossy"),
         );
 
         lumal::trace!();
@@ -557,11 +564,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "smoke.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("smoke.frag.spv").unwrap(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -584,6 +591,7 @@ impl InternalRenderer {
                 write_mask: 0b00, // 10 for smoke
                 reference: 0b10,
             },
+            Some(&"Smoke"),
         );
 
         lumal::trace!();
@@ -594,11 +602,11 @@ impl InternalRenderer {
             &[
                 ShaderStage {
                     stage: vk::ShaderStageFlags::VERTEX,
-                    src: "fullscreenTriag.vert.spv".to_string(),
+                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv").unwrap(),
                 },
                 ShaderStage {
                     stage: vk::ShaderStageFlags::FRAGMENT,
-                    src: "tonemap.frag.spv".to_string(),
+                    spirv_code: shaders::get_shader("tonemap.frag.spv").unwrap(),
                 },
             ],
             &[], // Fullscreen pass, no attributes
@@ -613,6 +621,7 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            Some(&"Tonemap"),
         );
 
         // aint no way i port RmlUi to Rust
@@ -625,11 +634,11 @@ impl InternalRenderer {
         //     &[
         //         ShaderStage {
         //             stage: vk::ShaderStageFlags::VERTEX,
-        //             src: "overlay.vert.spv".to_string(),
+        //             src: "overlay.vert.spv",
         //         },
         //         ShaderStage {
         //             stage: vk::ShaderStageFlags::FRAGMENT,
-        //             src: "overlay.frag.spv".to_string(),
+        //             src: "overlay.frag.spv",
         //         },
         //     ],
         //     &[
@@ -666,54 +675,66 @@ impl InternalRenderer {
         lumal.create_compute_pipe(
             &mut pipes.radiance_pipe,
             None,
-            "radiance.comp.spv".to_string(),
+            shaders::get_shader("radiance.comp.spv").unwrap(),
             (std::mem::size_of::<i32>() * 2) as u32,
             vk::PipelineCreateFlags::DISPATCH_BASE,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Radiance"),
         );
 
         lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.update_grass_pipe,
             None,
-            "updateGrass.comp.spv".to_string(),
+            shaders::get_shader("updateGrass.comp.spv").unwrap(),
             (std::mem::size_of::<vec2>() * 2 + std::mem::size_of::<f32>()) as u32,
             vk::PipelineCreateFlags::empty(),
+            #[cfg(feature = "debug_validation_names")]
+            Some("Grass Updates"),
         );
 
         lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.update_water_pipe,
             None,
-            "updateWater.comp.spv".to_string(),
+            shaders::get_shader("updateWater.comp.spv").unwrap(),
             (std::mem::size_of::<f32>() + std::mem::size_of::<vec2>() * 2) as u32,
             vk::PipelineCreateFlags::empty(),
+            #[cfg(feature = "debug_validation_names")]
+            Some("Water Updates"),
         );
 
         lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin2d_pipe,
             None,
-            "perlin2.comp.spv".to_string(),
+            shaders::get_shader("perlin2.comp.spv").unwrap(),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
+            #[cfg(feature = "debug_validation_names")]
+            Some("Perlin 2D Noise"),
         );
 
         lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin3d_pipe,
             None,
-            "perlin3.comp.spv".to_string(),
+            shaders::get_shader("perlin3.comp.spv").unwrap(),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
+            #[cfg(feature = "debug_validation_names")]
+            Some("Perlin 3D Noise"),
         );
 
         lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.map_pipe,
             Some(pipes.map_push_layout),
-            "map.comp.spv".to_string(),
+            shaders::get_shader("map.comp.spv").unwrap(),
             (std::mem::size_of::<mat4>() + std::mem::size_of::<ivec4>()) as u32,
             vk::PipelineCreateFlags::empty(),
+            #[cfg(feature = "debug_validation_names")]
+            Some("Mapping Models Voxels"),
         );
     }
 
@@ -757,8 +778,9 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-    fn do_smth_all_descriptors<Fun>(
-        process: &Fun,
+    fn do_smth_all_descriptors<FunWithoutDebugNames>(
+        process: &FunWithoutDebugNames,
+
         lumal: &mut Renderer,
         buffers: &AllBuffers,
         iimages: &AllIndependentImages,
@@ -766,13 +788,14 @@ impl InternalRenderer {
         samplers: &AllSamplers,
         pipes: &mut AllPipes,
     ) where
-        Fun: for<'b> Fn(
+        FunWithoutDebugNames: for<'b> Fn(
             &'b mut Renderer,
             &'b mut vk::DescriptorSetLayout,
             &'b mut Ring<vk::DescriptorSet>,
             &'b [DescriptorInfo],
             vk::ShaderStageFlags,
             vk::DescriptorSetLayoutCreateFlags,
+            Option<&str>,
         ),
     {
         // We DO clone buffer, but its pointers anyways, so its fine
@@ -794,6 +817,10 @@ impl InternalRenderer {
             )],
             VERTEX,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Lightmap Blocks Descriptor Set Layout"),
         );
 
         // Defer descriptor setup for lightmapModelsPipe
@@ -812,6 +839,10 @@ impl InternalRenderer {
             )],
             VERTEX,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Lightmap Models Descriptor Set Layout"),
         );
 
         // Defer descriptor setup for radiancePipe
@@ -877,6 +908,10 @@ impl InternalRenderer {
             ],
             COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Radiance Descriptor Set Layout"),
         );
 
         // Defer descriptor setup for diffusePipe
@@ -942,6 +977,10 @@ impl InternalRenderer {
             ],
             FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Fill Stencil Glossy Descriptor Set Layout"),
         );
 
         process(
@@ -988,6 +1027,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Fill Stencil Smoke Descriptor Set Layout"),
         );
 
         process(
@@ -1005,6 +1048,10 @@ impl InternalRenderer {
             )],
             vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Tonemap Descriptor Set Layout"),
         );
 
         process(
@@ -1033,6 +1080,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Fill Stencil Glossy Descriptor Set Layout"),
         );
 
         process(
@@ -1050,6 +1101,10 @@ impl InternalRenderer {
             )],
             vk::ShaderStageFlags::VERTEX,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Fill Stencil Smoke Descriptor Set Layout"),
         );
 
         process(
@@ -1123,6 +1178,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Glossy Descriptor Set Layout"),
         );
 
         process(
@@ -1178,6 +1237,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Smoke Descriptor Set Layout"),
         );
 
         process(
@@ -1206,6 +1269,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Raygen Blocks Descriptor Set Layout"),
         );
 
         process(
@@ -1223,6 +1290,10 @@ impl InternalRenderer {
             )],
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Raygen Models Descriptor Set Layout"),
         );
 
         process(
@@ -1260,6 +1331,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::GEOMETRY,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Raygen Particles Descriptor Set Layout"),
         );
 
         process(
@@ -1288,6 +1363,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Update Grass Descriptor Set Layout"),
         );
 
         process(
@@ -1305,6 +1384,10 @@ impl InternalRenderer {
             )],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Update Water Descriptor Set Layout"),
         );
 
         process(
@@ -1333,6 +1416,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::VERTEX,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Raygen Water Descriptor Set Layout"),
         );
 
         process(
@@ -1350,6 +1437,10 @@ impl InternalRenderer {
             )],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Gen Perlin 2D Descriptor Set Layout"),
         );
 
         process(
@@ -1367,6 +1458,10 @@ impl InternalRenderer {
             )],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Gen Perlin 3D Descriptor Set Layout"),
         );
 
         process(
@@ -1395,6 +1490,10 @@ impl InternalRenderer {
             ],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
+            #[cfg(not(feature = "debug_validation_names"))]
+            None,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Map Descriptor Set Layout"),
         );
     }
 
@@ -1408,6 +1507,7 @@ impl InternalRenderer {
         descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
+        debug_name: Option<&str>,
     ) {
         lumal.anounce_descriptor_setup(
             dset_layout,
@@ -1415,6 +1515,8 @@ impl InternalRenderer {
             descriptions,
             default_stages,
             create_flags,
+            #[cfg(feature = "debug_validation_names")]
+            debug_name,
         );
     }
 
@@ -1427,6 +1529,7 @@ impl InternalRenderer {
         descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
+        debug_name: Option<&str>,
     ) {
         lumal.acutally_setup_descriptor(
             dset_layout,
@@ -1434,6 +1537,8 @@ impl InternalRenderer {
             descriptions,
             default_stages,
             create_flags,
+            #[cfg(feature = "debug_validation_names")]
+            debug_name,
         );
     }
 }
@@ -1448,6 +1553,8 @@ fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPi
         }],
         &mut pipes.overlay_pipe.set_layout,
         vk::DescriptorSetLayoutCreateFlags::empty(),
+        #[cfg(feature = "debug_validation_names")]
+        Some(&"Overlay Pipeline Set Layout"),
     );
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {
@@ -1456,6 +1563,8 @@ fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPi
         }],
         &mut pipes.map_push_layout,
         vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
+        #[cfg(feature = "debug_validation_names")]
+        Some(&"Map"),
     );
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {
@@ -1464,5 +1573,7 @@ fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPi
         }],
         &mut pipes.raygen_models_push_layout,
         vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
+        #[cfg(feature = "debug_validation_names")]
+        Some(&"Raygen Models"),
     );
 }

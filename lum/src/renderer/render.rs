@@ -116,7 +116,7 @@ impl PreInitRenderer {
     // are and will forever be missing. You cant make fast abstraction on top of everything.
     pub fn load_foliage(
         &mut self,
-        path_to_shader: &str,
+        spirv_shader_code: Vec<u8>,
         vertices_per_blade: u32,
         density: u32,
     ) -> MeshFoliage {
@@ -124,7 +124,7 @@ impl PreInitRenderer {
         let index = self.foliage_descriptions.len() as u32;
         // and then we push the one so it is created afterwards (defer into queue)
         self.foliage_descriptions.push(InternalMeshFoliageDesc {
-            vertex_shader_file: path_to_shader.to_string(),
+            spirv_code: spirv_shader_code,
             vertices: vertices_per_blade,
             density,
         });

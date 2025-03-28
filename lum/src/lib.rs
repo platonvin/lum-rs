@@ -6,6 +6,7 @@
 #![feature(custom_inner_attributes)]
 // #![feature(core_intrinsics)]
 #![feature(optimize_attribute)]
+#![feature(where_clause_attrs)]
 
 // This is a glue-file
 // files that start with "all_" are initializing / destroying resources (packed in structs)

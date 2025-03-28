@@ -1,6 +1,6 @@
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, VoxelVisibility};
 use internal_renderer::*;
-use lumal::{BufferDeletion, ImageDeletion};
+use lumal::{BufferDeletion, Image, ImageDeletion};
 // use rand::Rng;
 use vulkanalia::vk::{self, Handle};
 
@@ -250,7 +250,12 @@ impl super::InternalRenderer {
             )
         };
 
-        let voxels = self.create_rayrace_voxel_image(pvd_data_slice, size);
+        let voxels = self.create_rayrace_voxel_image(
+            pvd_data_slice,
+            size,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Mesh Voxels"),
+        );
 
         let triangles = self.make_contour_vertices(size, padded_voxel_data);
 
@@ -499,7 +504,12 @@ impl super::InternalRenderer {
     // creation
     #[cold]
     #[optimize(size)]
-    pub fn create_rayrace_voxel_image(&mut self, voxels: &[Voxel], size: uvec3) -> lumal::Image {
+    pub fn create_rayrace_voxel_image(
+        &mut self,
+        voxels: &[Voxel],
+        size: uvec3,
+        #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
+    ) -> Image {
         let buffer_count = size.x * size.y * size.z;
         let buffer_size = buffer_count * std::mem::size_of::<Voxel>() as u32;
         assert_eq!(voxels.len(), ((size.x) * (size.y) * (size.z)) as usize);
@@ -518,6 +528,8 @@ impl super::InternalRenderer {
                 uvec3_to_extent3d(size),
                 1,
                 vk::SampleCountFlags::_1,
+                #[cfg(feature = "debug_validation_names")]
+                Some("Rayrace Voxels"),
             )
             .unwrap();
 

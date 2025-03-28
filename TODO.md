@@ -91,3 +91,6 @@ sprite sheets:
 
 no float conversions for -0.5f in fragment
  - fixed point math?
+
+map shader to be not 4x4x4, but 64x1x1 and divide manually
+ - no hw mapping for local id to pixel

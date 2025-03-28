@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
     process::Command,
     time::SystemTime,
@@ -42,8 +42,8 @@ fn main() {
         return;
     }
 
-    let out_dir = "compiled";
-    fs::create_dir_all(out_dir).expect("Failed to create output directory");
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("compiled_shaders");
+    fs::create_dir_all(&out_dir).expect("Failed to create output directory");
 
     for entry in fs::read_dir("shaders").expect("Failed to read shaders directory") {
         let entry = entry.expect("Failed to read shader entry");
@@ -53,7 +53,7 @@ fn main() {
             continue;
         }
 
-        let mut out_path = Path::new(out_dir).join(path.file_name().unwrap());
+        let mut out_path = out_dir.join(path.file_name().unwrap());
         add_extension(&mut out_path, "spv");
 
         if !needs_recompile(&path, &out_path) {
@@ -84,4 +84,10 @@ fn main() {
 
         println!("Successfully compiled shader: {}", path.display());
     }
+
+    // inform Cargo about the compiled shaders directory so it can be included later
+    println!(
+        "cargo:rustc-env=COMPILED_SHADERS_PATH={}/",
+        out_dir.display()
+    );
 }

@@ -1,5 +1,5 @@
 use internal_renderer::{InternalRenderer, *};
-use lumal::{ring::Ring, LumalSettings, Renderer};
+use lumal::{ring::Ring, set_debug_names, LumalSettings, Renderer};
 use vulkanalia::vk::{self, DeviceV1_0};
 
 use crate::*;
@@ -25,6 +25,8 @@ impl InternalRenderer {
             uvec3_to_extent3d(lum_settings.world_size),
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("World"),
         ); // TODO: dynamic
         let lightmap = lumal.create_image_ring(
             lumal_settings.fif,
@@ -41,6 +43,8 @@ impl InternalRenderer {
             },
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Lightmap"),
         );
         let radiance_cache = lumal.create_image_ring(
             lumal_settings.fif,
@@ -56,6 +60,8 @@ impl InternalRenderer {
             uvec3_to_extent3d(lum_settings.world_size),
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Radiance Cache"),
         );
         let origin_block_palette = lumal.create_image_ring(
             lumal_settings.fif,
@@ -75,6 +81,8 @@ impl InternalRenderer {
             },
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Origin Block Palette"),
         );
         let material_palette = lumal.create_image_ring(
             lumal_settings.fif,
@@ -91,6 +99,8 @@ impl InternalRenderer {
             },
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Material Palette"),
         );
         let grass_state = lumal.create_image_ring(
             lumal_settings.fif,
@@ -107,6 +117,8 @@ impl InternalRenderer {
             },
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Grass State"),
         );
         let water_state = lumal.create_image_ring(
             lumal_settings.fif,
@@ -123,6 +135,8 @@ impl InternalRenderer {
             },
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Water State"),
         );
         let perlin_noise2d = lumal.create_image_ring(
             lumal_settings.fif,
@@ -139,6 +153,8 @@ impl InternalRenderer {
             },
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Perlin Noise 2D"),
         ); // does not matter than much
         let perlin_noise3d = lumal.create_image_ring(
             lumal_settings.fif,
@@ -155,6 +171,8 @@ impl InternalRenderer {
             },
             1,
             vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Perlin Noise 3D"),
         ); // does not matter than much
 
         AllIndependentImages {
@@ -201,6 +219,8 @@ impl InternalRenderer {
                 uvec3_to_extent3d(sextent),
                 1,
                 vk::SampleCountFlags::_1,
+                #[cfg(feature = "debug_validation_names")]
+                Some("Highres Frame"),
             )
             .unwrap();
 
@@ -220,6 +240,8 @@ impl InternalRenderer {
                 uvec3_to_extent3d(sextent),
                 1,
                 vk::SampleCountFlags::_1,
+                #[cfg(feature = "debug_validation_names")]
+                Some("Highres Depth Stencil"),
             )
             .unwrap();
 
@@ -240,6 +262,8 @@ impl InternalRenderer {
                 uvec3_to_extent3d(sextent),
                 1,
                 vk::SampleCountFlags::_1,
+                #[cfg(feature = "debug_validation_names")]
+                Some("Highres Material Norm"),
             )
             .unwrap();
 
@@ -268,6 +292,11 @@ impl InternalRenderer {
             };
             stencil_view_for_ds[i] =
                 unsafe { lumal.device.create_image_view(&view_info, None).unwrap() };
+            set_debug_names!(
+                lumal,
+                Some("Stencil View for DS"),
+                (&stencil_view_for_ds[i], "Image View")
+            );
         }
 
         let far_depth = lumal
@@ -287,6 +316,8 @@ impl InternalRenderer {
                 uvec3_to_extent3d(sextent),
                 1,
                 vk::SampleCountFlags::_1,
+                #[cfg(feature = "debug_validation_names")]
+                Some("Far Depth"),
             )
             .unwrap();
 
@@ -307,6 +338,8 @@ impl InternalRenderer {
                 uvec3_to_extent3d(sextent),
                 1,
                 vk::SampleCountFlags::_1,
+                #[cfg(feature = "debug_validation_names")]
+                Some("Near Depth"),
             )
             .unwrap();
 
