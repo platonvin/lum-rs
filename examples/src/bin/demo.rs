@@ -84,7 +84,7 @@ impl AppState {
             ..Settings::default()
         };
 
-        let mut pre_init_lum = Renderer::create().unwrap();
+        let mut pre_init_lum = Renderer::create();
         let grass = pre_init_lum.load_foliage(
             // this is compiled by lum. But you should compile such shaders yourself
             // "shaders" is sub-crate that embeds some shaders into binary for simplicity
@@ -95,7 +95,7 @@ impl AppState {
             100,
         );
 
-        let mut lum = pre_init_lum.init(&settings, &mut window).unwrap();
+        let mut lum = pre_init_lum.init(&settings, &mut window);
         let meshes = AllMeshes::new(&mut lum, grass);
 
         lum.load_block(1, "assets/dirt.vox");

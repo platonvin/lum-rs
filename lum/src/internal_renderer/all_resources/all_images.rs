@@ -176,17 +176,17 @@ impl InternalRenderer {
         ); // does not matter than much
 
         AllIndependentImages {
-            grass_state: grass_state.unwrap(),
-            water_state: water_state.unwrap(),
-            perlin_noise2d: perlin_noise2d.unwrap(),
-            perlin_noise3d: perlin_noise3d.unwrap(),
-            world: world.unwrap(),
-            radiance_cache: radiance_cache.unwrap(),
-            origin_block_palette: origin_block_palette.unwrap(),
-            lightmap: lightmap.unwrap(),
-            // distance_palette: distance_palette.unwrap(),
-            // bit_palette: bit_palette.unwrap(),
-            material_palette: material_palette.unwrap(),
+            grass_state: grass_state,
+            water_state: water_state,
+            perlin_noise2d: perlin_noise2d,
+            perlin_noise3d: perlin_noise3d,
+            world: world,
+            radiance_cache: radiance_cache,
+            origin_block_palette: origin_block_palette,
+            lightmap: lightmap,
+            // distance_palette: distance_palette,
+            // bit_palette: bit_palette,
+            material_palette: material_palette,
         }
     }
 
@@ -202,70 +202,64 @@ impl InternalRenderer {
             1,
         );
 
-        let highres_mat_norm = lumal
-            .create_image_ring(
-                lumal_settings.fif,
-                vk::ImageType::_2D,
-                MATNORM_FORMAT,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::TRANSFER_SRC
-                    | vk::ImageUsageFlags::TRANSFER_DST
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::COLOR_ATTACHMENT
-                    | vk::ImageUsageFlags::INPUT_ATTACHMENT,
-                vulkanalia_vma::MemoryUsage::AutoPreferDevice,
-                vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
-                vk::ImageAspectFlags::COLOR,
-                uvec3_to_extent3d(sextent),
-                1,
-                vk::SampleCountFlags::_1,
-                #[cfg(feature = "debug_validation_names")]
-                Some("Highres Frame"),
-            )
-            .unwrap();
+        let highres_mat_norm = lumal.create_image_ring(
+            lumal_settings.fif,
+            vk::ImageType::_2D,
+            MATNORM_FORMAT,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT
+                | vk::ImageUsageFlags::INPUT_ATTACHMENT,
+            vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+            vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
+            vk::ImageAspectFlags::COLOR,
+            uvec3_to_extent3d(sextent),
+            1,
+            vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Highres Frame"),
+        );
 
-        let highres_depth_stencil = lumal
-            .create_image_ring(
-                lumal_settings.fif,
-                vk::ImageType::_2D,
-                unsafe { CHOSEN_DEPTH_FORMAT },
-                vk::ImageUsageFlags::TRANSFER_SRC
-                    | vk::ImageUsageFlags::TRANSFER_DST
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
-                    | vk::ImageUsageFlags::INPUT_ATTACHMENT,
-                vulkanalia_vma::MemoryUsage::AutoPreferDevice,
-                vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
-                vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
-                uvec3_to_extent3d(sextent),
-                1,
-                vk::SampleCountFlags::_1,
-                #[cfg(feature = "debug_validation_names")]
-                Some("Highres Depth Stencil"),
-            )
-            .unwrap();
+        let highres_depth_stencil = lumal.create_image_ring(
+            lumal_settings.fif,
+            vk::ImageType::_2D,
+            unsafe { CHOSEN_DEPTH_FORMAT },
+            vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+                | vk::ImageUsageFlags::INPUT_ATTACHMENT,
+            vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+            vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
+            vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
+            uvec3_to_extent3d(sextent),
+            1,
+            vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Highres Depth Stencil"),
+        );
 
-        let highres_frame = lumal
-            .create_image_ring(
-                lumal_settings.fif,
-                vk::ImageType::_2D,
-                FRAME_FORMAT,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::TRANSFER_SRC
-                    | vk::ImageUsageFlags::TRANSFER_DST
-                    | vk::ImageUsageFlags::INPUT_ATTACHMENT
-                    | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-                vulkanalia_vma::MemoryUsage::AutoPreferDevice,
-                vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
-                vk::ImageAspectFlags::COLOR,
-                uvec3_to_extent3d(sextent),
-                1,
-                vk::SampleCountFlags::_1,
-                #[cfg(feature = "debug_validation_names")]
-                Some("Highres Material Norm"),
-            )
-            .unwrap();
+        let highres_frame = lumal.create_image_ring(
+            lumal_settings.fif,
+            vk::ImageType::_2D,
+            FRAME_FORMAT,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::INPUT_ATTACHMENT
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+            vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
+            vk::ImageAspectFlags::COLOR,
+            uvec3_to_extent3d(sextent),
+            1,
+            vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Highres Material Norm"),
+        );
 
         // Create stencil views for the depth-stencil images
         let mut stencil_view_for_ds = Ring::new(
@@ -299,49 +293,45 @@ impl InternalRenderer {
             );
         }
 
-        let far_depth = lumal
-            .create_image_ring(
-                lumal_settings.fif,
-                vk::ImageType::_2D,
-                SECONDARY_DEPTH_FORMAT,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::TRANSFER_SRC
-                    | vk::ImageUsageFlags::TRANSFER_DST
-                    | vk::ImageUsageFlags::INPUT_ATTACHMENT
-                    | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-                vulkanalia_vma::MemoryUsage::AutoPreferDevice,
-                vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
-                vk::ImageAspectFlags::COLOR,
-                uvec3_to_extent3d(sextent),
-                1,
-                vk::SampleCountFlags::_1,
-                #[cfg(feature = "debug_validation_names")]
-                Some("Far Depth"),
-            )
-            .unwrap();
+        let far_depth = lumal.create_image_ring(
+            lumal_settings.fif,
+            vk::ImageType::_2D,
+            SECONDARY_DEPTH_FORMAT,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::INPUT_ATTACHMENT
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+            vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
+            vk::ImageAspectFlags::COLOR,
+            uvec3_to_extent3d(sextent),
+            1,
+            vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Far Depth"),
+        );
 
-        let near_depth = lumal
-            .create_image_ring(
-                lumal_settings.fif,
-                vk::ImageType::_2D,
-                SECONDARY_DEPTH_FORMAT,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::TRANSFER_SRC
-                    | vk::ImageUsageFlags::TRANSFER_DST
-                    | vk::ImageUsageFlags::INPUT_ATTACHMENT
-                    | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-                vulkanalia_vma::MemoryUsage::AutoPreferDevice,
-                vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
-                vk::ImageAspectFlags::COLOR,
-                uvec3_to_extent3d(sextent),
-                1,
-                vk::SampleCountFlags::_1,
-                #[cfg(feature = "debug_validation_names")]
-                Some("Near Depth"),
-            )
-            .unwrap();
+        let near_depth = lumal.create_image_ring(
+            lumal_settings.fif,
+            vk::ImageType::_2D,
+            SECONDARY_DEPTH_FORMAT,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::INPUT_ATTACHMENT
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+            vulkanalia_vma::AllocationCreateFlags::DEDICATED_MEMORY,
+            vk::ImageAspectFlags::COLOR,
+            uvec3_to_extent3d(sextent),
+            1,
+            vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Near Depth"),
+        );
 
         // let mut swapchain_images_ring = Ring::new(
         //     lumal.vulkan_data.swapchain_images.len(),

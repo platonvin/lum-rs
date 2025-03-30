@@ -1,8 +1,10 @@
+use block_mesh::ilattice::glam::ivec2;
+use lumal::trace;
 use winit::window::Window;
 
 use crate::{
     containers::Arena,
-    types::{ivec3, quat, uvec3},
+    types::{ivec2, ivec3, quat, uvec3},
 };
 
 use super::{
@@ -83,6 +85,7 @@ pub struct Renderer {
     liquid_que: Vec<LiquidRenderRequest>,
     volumetric_que: Vec<VolumetricRenderRequest>,
     storage: RendererStorage,
+    radiance_shift: ivec3,
 }
 
 impl PreInitRenderer {
@@ -91,18 +94,19 @@ impl PreInitRenderer {
         self,
         settings: &super::internal_renderer::Settings,
         window: &mut Window,
-    ) -> anyhow::Result<Renderer> {
-        Ok(Renderer {
+    ) -> Renderer {
+        Renderer {
             renderer: unsafe {
                 InternalRenderer::create(settings, window, self.foliage_descriptions)
-            }?,
+            },
             block_que: vec![],
             model_que: vec![],
             foliage_que: vec![],
             liquid_que: vec![],
             volumetric_que: vec![],
             storage: Default::default(),
-        })
+            radiance_shift: ivec3::zero(),
+        }
     }
 
     // creates a CPU-side struct for foliage
@@ -135,8 +139,8 @@ impl PreInitRenderer {
 
 impl Renderer {
     // Creates partially-initialized Renderer (separate struct to utilize type system)
-    pub fn create() -> anyhow::Result<PreInitRenderer> {
-        Ok(PreInitRenderer {
+    pub fn create() -> PreInitRenderer {
+        PreInitRenderer {
             // renderer: unsafe { InternalRenderer::create(settings, window) }?,
             foliage_descriptions: vec![],
             // block_que: vec![],
@@ -144,15 +148,18 @@ impl Renderer {
             // foliage_que: vec![],
             // liquid_que: vec![],
             // volumetric_que: vec![],
-        })
+        }
     }
     pub fn destroy(self) {
         unsafe { self.renderer.destroy() };
     }
 
     pub fn load_model(&mut self, path: &str) -> MeshModel {
+        trace!();
         let model_mesh = self.renderer.load_mesh_from_file(path, true, true);
+        trace!();
         let index = self.storage.models.allocate(model_mesh).unwrap();
+        trace!();
         MeshModel(index)
     }
     pub fn unload_model(&mut self, model: MeshModel) {
@@ -402,6 +409,10 @@ impl Renderer {
         }
     }
 
+    pub fn shift_radiance(&mut self, shift: ivec3) {
+        self.radiance_shift = shift;
+    }
+
     // function that "optimizes" the frame
     // it could be implicit, but explicitnesss allows you to maybe do this work in parallel
     // such approach does not really play well with what i do (no multithreading in rendering), but anyways
@@ -442,7 +453,8 @@ impl Renderer {
         self.renderer.start_frame();
         flame::end("start_frame");
         flame::start("shift_radiance");
-        self.renderer.shift_radiance(Default::default());
+        self.renderer.shift_radiance(self.radiance_shift);
+        self.radiance_shift = ivec3::zero();
         flame::end("shift_radiance");
         flame::start("update_radiance");
         self.renderer.update_radiance();

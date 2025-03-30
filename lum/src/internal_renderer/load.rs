@@ -1,6 +1,6 @@
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, VoxelVisibility};
 use internal_renderer::*;
-use lumal::{BufferDeletion, Image, ImageDeletion};
+use lumal::{atrace, BufferDeletion, Image, ImageDeletion};
 // use rand::Rng;
 use vulkanalia::vk::{self, Handle};
 
@@ -166,18 +166,19 @@ impl super::InternalRenderer {
         make_vertices: bool,
         extrude_palette: bool,
     ) -> InternalMeshModel {
-        // let scene_data = std::fs::read(mesh_file).unwrap();
+        atrace!();
         let scene = ogt_vox::read_scene_from_file(mesh_file).unwrap();
-        // let scene = from_addr(scene);
         assert!(scene.models.len() == 1); // only one model per file supported for now
         let model = &scene.models[0];
         assert!(model.size_x > 0 && model.size_y > 0 && model.size_z > 0);
+        atrace!();
 
         if extrude_palette && !self.has_palette {
             println!("Extruding palette");
             self.extract_palette_from_scene(&scene);
             self.has_palette = true;
         }
+        atrace!();
 
         self.load_mesh_from_memory(model, true)
     }
@@ -514,24 +515,21 @@ impl super::InternalRenderer {
         let buffer_size = buffer_count * std::mem::size_of::<Voxel>() as u32;
         assert_eq!(voxels.len(), ((size.x) * (size.y) * (size.z)) as usize);
 
-        let mut voxel_image = self
-            .lumal
-            .create_image(
-                vk::ImageType::_3D,
-                vk::Format::R8_UINT,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::TRANSFER_DST
-                    | vk::ImageUsageFlags::SAMPLED,
-                vulkanalia_vma::MemoryUsage::AutoPreferDevice,
-                vulkanalia_vma::AllocationCreateFlags::empty(),
-                vk::ImageAspectFlags::COLOR,
-                uvec3_to_extent3d(size),
-                1,
-                vk::SampleCountFlags::_1,
-                #[cfg(feature = "debug_validation_names")]
-                Some("Rayrace Voxels"),
-            )
-            .unwrap();
+        let mut voxel_image = self.lumal.create_image(
+            vk::ImageType::_3D,
+            vk::Format::R8_UINT,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::SAMPLED,
+            vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+            vulkanalia_vma::AllocationCreateFlags::empty(),
+            vk::ImageAspectFlags::COLOR,
+            uvec3_to_extent3d(size),
+            1,
+            vk::SampleCountFlags::_1,
+            #[cfg(feature = "debug_validation_names")]
+            Some("Rayrace Voxels"),
+        );
 
         self.lumal.transition_image_layout_single_time(
             &voxel_image,

@@ -1,12 +1,14 @@
 use std::{collections::HashMap, ptr::copy_nonoverlapping};
 
+use lumal::trace;
+
 use crate::{
     assert_unreachable,
     types::{mat4, u8vec4, vec3},
 };
 
 // omg i should include binary instead i think
-static K_DEFAULT_VOX_PALETTE: [u32; 256 * 4] = [
+static K_DEFAULT_VOX_PALETTE: [u8; 256 * 4] = [
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xcc, 0xff, 0xff, 0xff, 0x99, 0xff, 0xff, 0xff, 0x66, 0xff,
     0xff, 0xff, 0x33, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xcc, 0xff, 0xff, 0xff, 0xcc, 0xcc, 0xff,
     0xff, 0xcc, 0x99, 0xff, 0xff, 0xcc, 0x66, 0xff, 0xff, 0xcc, 0x33, 0xff, 0xff, 0xcc, 0x00, 0xff,
@@ -428,13 +430,14 @@ pub struct VoxScene {
 }
 
 #[optimize(size)]
-pub fn read_scene_from_file(path: &str) -> anyhow::Result<VoxScene> {
+pub fn read_scene_from_file(path: &str) -> Result<VoxScene, std::io::Error> {
     let buffer = std::fs::read(path)?;
+    trace!();
     read_scene_from_memory(&buffer)
 }
 
 #[optimize(size)]
-fn read_scene_from_memory(buffer: &[u8]) -> Result<VoxScene, anyhow::Error> {
+fn read_scene_from_memory(buffer: &[u8]) -> Result<VoxScene, std::io::Error> {
     read_scene_from_memory_with_flags(buffer, 0)
 }
 
@@ -442,12 +445,14 @@ fn read_scene_from_memory(buffer: &[u8]) -> Result<VoxScene, anyhow::Error> {
 fn read_scene_from_memory_with_flags(
     buffer: &[u8],
     read_flags: u32,
-) -> Result<VoxScene, anyhow::Error> {
+) -> Result<VoxScene, std::io::Error> {
+    trace!();
     let mut fp = VoxFile {
         buffer: buffer.to_vec(),
         buffer_size: buffer.len() as u32,
         offset: 0,
     };
+    trace!();
 
     // parsing state/context
     let mut models = vec![];
@@ -466,6 +471,8 @@ fn read_scene_from_memory_with_flags(
     let mut size_z = 0;
     let mut index_map = [0u8; 256];
     let mut found_index_map_chunk = false;
+    trace!();
+    // dbg!(&fp.buffer);
 
     // push a sentinel character into these datastructures. This allows us to keep indexes
     // rather than pointers into data-structures that grow, and still allow an index of 0
@@ -473,22 +480,26 @@ fn read_scene_from_memory_with_flags(
     child_ids.push(u32::MAX);
 
     // copy the default palette into the scene. It may get overwritten by a palette chunk later
-    unsafe {
-        copy_nonoverlapping(
-            K_DEFAULT_VOX_PALETTE.as_ptr() as *const u8,
-            palette.color.as_mut_ptr() as *mut u8,
-            K_DEFAULT_VOX_PALETTE.len() * 4,
-        )
-    };
+    for (i, color) in K_DEFAULT_VOX_PALETTE.chunks(4).enumerate() {
+        palette.color[i].x = color[0];
+        palette.color[i].y = color[1];
+        palette.color[i].z = color[2];
+        palette.color[i].w = color[3];
+    }
+    trace!();
 
     // zero initialize materials (this sets valid defaults)
     materials.matl.fill(VoxMatl::default());
+    trace!();
     let file_header = fp.read::<u32>();
+    trace!();
     let file_version = fp.read::<u32>();
+    trace!();
 
     if (file_header != CHUNK_ID_VOX_) || (file_version != 150 && file_version != 200) {
-        return Err(anyhow::anyhow!("Invalid .vox file or i cant parse it yet"));
+        panic!("Invalid .vox file or i cant parse it yet");
     }
+    trace!();
 
     // Parse chunks until the end of the file/buffer
     while fp.bytes_remaining() >= size_of::<u32>() * 3 {

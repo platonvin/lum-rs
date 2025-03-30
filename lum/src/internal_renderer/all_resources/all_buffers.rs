@@ -67,13 +67,13 @@ impl InternalRenderer {
             true,
         );
         AllBuffers {
-            staging_world: staging_world.unwrap(),
-            light_uniform: light_uniform.unwrap(),
-            uniform: uniform.unwrap(),
-            ao_lut_uniform: ao_lut_uniform.unwrap(),
-            gpu_radiance_updates: gpu_radiance_updates.unwrap(),
-            staging_radiance_updates: staging_radiance_updates.unwrap(),
-            gpu_particles: gpu_particles.unwrap(),
+            staging_world: staging_world,
+            light_uniform: light_uniform,
+            uniform: uniform,
+            ao_lut_uniform: ao_lut_uniform,
+            gpu_radiance_updates: gpu_radiance_updates,
+            staging_radiance_updates: staging_radiance_updates,
+            gpu_particles: gpu_particles,
         }
     }
 

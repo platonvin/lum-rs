@@ -25,19 +25,11 @@
     ] }
     vulkanalia-vma = { version = "0.2.0" }
     winit = "0.30.8"
-    anyhow = "1"
+    # anyhow = "1"
     vek = "0.17.1"
     pub-fields = "0.1.1"
-    # dot vox is magicavoxel loader. It took less time to port 2kloc of C++ then understand how dot_vox works, lol
-    # dot_vox = "5.1.1"
     block-mesh = "0.2.0"
     flame = "0.2.2"
-    # rand was causing compilation errors
-    # rand = "0.9.0"
-    # multiversion = "0.8.0"
-
-[build-dependencies]
-    cc = "1.0"
 
 [lib]
     name = "lum"

@@ -7,7 +7,6 @@ pub mod load;
 pub mod ogt_vox;
 pub mod render;
 
-use anyhow::Result;
 use lumal::{ring::Ring, trace, RasterPipe};
 use render::{Camera, SunLight};
 use vulkanalia::vk::{self, DeviceV1_0, Extent2D};
@@ -229,12 +228,12 @@ impl InternalRenderer {
         lum_settings: &Settings,
         window: &Window,
         mut foliage_descriptions: Vec<InternalMeshFoliageDesc>,
-    ) -> Result<InternalRenderer> {
+    ) -> InternalRenderer {
         let mut lumal_settings = lumal::LumalSettings::create_default();
         if cfg!(debug_assertions) {
             lumal_settings.debug = true;
         }
-        let mut lumal = lumal::Renderer::create(&lumal_settings, window)?;
+        let mut lumal = lumal::Renderer::create(&lumal_settings, window);
 
         let lightmap_extent = vk::Extent2D {
             width: 1024,
@@ -341,7 +340,7 @@ impl InternalRenderer {
         lum.gen_perlin_2d();
         lum.gen_perlin_3d();
 
-        Ok(lum)
+        lum
     }
 
     // pub fn create_swapchain_dependent(&mut lumal) {

@@ -24,7 +24,7 @@ pub struct Camera {
     pub camera_transform: mat4,
     pub pixels_in_voxel: f32,
     pub origin_view_size: vec2,
-    pub view_size: vec2,
+    pub view_size: vec2, // in voxels
     pub camera_ray_dir_plane: vec3,
     pub horizline: vec3,
     pub vertiline: vec3,

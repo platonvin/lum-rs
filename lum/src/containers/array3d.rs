@@ -45,10 +45,13 @@ where
 
     /// Returns the index in the flat data array for given (x, y, z) coordinates.
     pub fn index_internal(&self, x: usize, y: usize, z: usize) -> usize {
-        debug_assert!(
-            x < self.x_size && y < self.y_size && z < self.z_size,
-            "Index out of bounds"
-        );
+        if core::cfg!(debug_assertions) {
+            {
+                if !(x < self.x_size && y < self.y_size && z < self.z_size) {
+                    panic!("Index out of bounds x: {} y: {} z: {}\n", x, y, z);
+                }
+            };
+        };
         // optimal for
         // for x in 0..x_size {
         //     for y in 0..y_size {

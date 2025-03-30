@@ -1,5 +1,6 @@
 pub mod render;
 
-pub use render::*;
-
 use crate::*;
+pub use lumal::atrace;
+pub use lumal::trace;
+pub use render::*;
