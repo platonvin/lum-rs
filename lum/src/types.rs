@@ -1,9 +1,8 @@
 #![allow(non_camel_case_types)]
 
-use std::string::String;
-
 pub type MatID = u8;
 
+use qvek::vek;
 use vulkanalia::vk;
 
 pub type uvec4 = vek::Vec4<u32>;
@@ -33,8 +32,6 @@ pub type vec2 = vek::Vec2<f32>;
 pub type dvec4 = vek::Vec4<f64>;
 pub type dvec3 = vek::Vec3<f64>;
 pub type dvec2 = vek::Vec2<f64>;
-
-// pub type i8vec4u = vek::Vec4<unchecked_integer::UncheckedInt<i8>>;
 
 pub type mat4 = vek::Mat4<f32>;
 // pub type dmat4 = vek::Mat4<f32>;

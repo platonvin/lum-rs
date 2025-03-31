@@ -1,6 +1,7 @@
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, VoxelVisibility};
 use internal_renderer::*;
 use lumal::{atrace, BufferDeletion, Image, ImageDeletion};
+use qvek::vek::Vec3;
 // use rand::Rng;
 use vulkanalia::vk::{self, Handle};
 
@@ -341,7 +342,7 @@ impl super::InternalRenderer {
     pub fn make_contour_vertices(
         &mut self,
         // real size. TODO: do i need this?
-        size: vek::Vec3<u32>,
+        size: Vec3<u32>,
         // 3d array with 1 padding
         padded_voxel_data: Array3D<VoxelForContour>,
     ) -> FaceBuffers {

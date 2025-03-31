@@ -1,6 +1,4 @@
-use std::{collections::HashMap, ptr::copy_nonoverlapping};
-
-use lumal::trace;
+use std::collections::HashMap;
 
 use crate::{
     assert_unreachable,
@@ -432,7 +430,6 @@ pub struct VoxScene {
 #[optimize(size)]
 pub fn read_scene_from_file(path: &str) -> Result<VoxScene, std::io::Error> {
     let buffer = std::fs::read(path)?;
-    trace!();
     read_scene_from_memory(&buffer)
 }
 
@@ -446,13 +443,11 @@ fn read_scene_from_memory_with_flags(
     buffer: &[u8],
     read_flags: u32,
 ) -> Result<VoxScene, std::io::Error> {
-    trace!();
     let mut fp = VoxFile {
         buffer: buffer.to_vec(),
         buffer_size: buffer.len() as u32,
         offset: 0,
     };
-    trace!();
 
     // parsing state/context
     let mut models = vec![];
@@ -471,8 +466,6 @@ fn read_scene_from_memory_with_flags(
     let mut size_z = 0;
     let mut index_map = [0u8; 256];
     let mut found_index_map_chunk = false;
-    trace!();
-    // dbg!(&fp.buffer);
 
     // push a sentinel character into these datastructures. This allows us to keep indexes
     // rather than pointers into data-structures that grow, and still allow an index of 0
@@ -486,20 +479,15 @@ fn read_scene_from_memory_with_flags(
         palette.color[i].z = color[2];
         palette.color[i].w = color[3];
     }
-    trace!();
 
     // zero initialize materials (this sets valid defaults)
     materials.matl.fill(VoxMatl::default());
-    trace!();
     let file_header = fp.read::<u32>();
-    trace!();
     let file_version = fp.read::<u32>();
-    trace!();
 
     if (file_header != CHUNK_ID_VOX_) || (file_version != 150 && file_version != 200) {
         panic!("Invalid .vox file or i cant parse it yet");
     }
-    trace!();
 
     // Parse chunks until the end of the file/buffer
     while fp.bytes_remaining() >= size_of::<u32>() * 3 {

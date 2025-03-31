@@ -26,7 +26,8 @@
     vulkanalia-vma = { version = "0.2.0" }
     winit = "0.30.8"
     # anyhow = "1"
-    vek = "0.17.1"
+    # qvek = {git = "https://github.com/platonvin/qvek.git", branch = "master"}
+    qvek = {path = "../../qvek"}
     pub-fields = "0.1.1"
     block-mesh = "0.2.0"
     flame = "0.2.2"

@@ -1,17 +1,17 @@
-use block_mesh::ilattice::glam::ivec2;
 use lumal::trace;
+use qvek::{to_i16vec3, to_ivec3, to_vec3, to_vec4};
 use winit::window::Window;
 
 use crate::{
     containers::Arena,
-    types::{ivec2, ivec3, quat, uvec3},
+    types::{ivec3, quat, uvec3},
 };
 
 use super::{
     containers::Array3D,
     internal_renderer::InternalRenderer,
     types::{
-        i16vec3, mat4, u8vec3, vec3, vec4, BlockId, InternalMeshFoliage, InternalMeshFoliageDesc,
+        i16vec3, mat4, u8vec3, vec3, BlockId, InternalMeshFoliage, InternalMeshFoliageDesc,
         InternalMeshLiquid, InternalMeshModel, InternalMeshVolumetric, MatId, MeshTransform,
     },
 };
@@ -212,8 +212,7 @@ impl Renderer {
     }
 
     pub fn unload_foliage(&mut self, foliage: MeshFoliage) {
-        // let foliage_mesh = self.storage.models.take(foliage.0).unwrap();
-        let _ = MeshFoliage;
+        let _ = foliage;
     }
 
     pub fn calculate_and_sort_by_cam_dist<Type>(rqueue: &mut [Type], camera_transform: mat4)
@@ -221,13 +220,7 @@ impl Renderer {
         Type: GetPos,
     {
         for rrequest in rqueue.iter_mut() {
-            let clip_coords = camera_transform
-                * vec4::new(
-                    rrequest.get_pos().x,
-                    rrequest.get_pos().y,
-                    rrequest.get_pos().z,
-                    1.0,
-                );
+            let clip_coords = camera_transform * to_vec4!(rrequest.get_pos(), 1.0);
             rrequest.set_cam_dist(-clip_coords.z);
         }
 
@@ -257,20 +250,19 @@ impl Renderer {
                     let y = yy as f32 * 16.0;
                     let z = zz as f32 * 16.0;
 
-                    // let new_pos = trans * vec4::new(pos.x + x, pos.y + y, pos.z + z, 1.0);
                     // let clip = new_pos / new_pos.w;
                     let new_pos = quat::identity() * pos;
-                    let corner = vec4::new(new_pos.x + x, new_pos.y + y, new_pos.z + z, 1.0);
+                    let corner = to_vec4!(new_pos + to_vec3!(x, y, z), 1.0);
                     let clip = self.renderer.camera.camera_transform * corner;
 
                     // Note: orth assumes w == 1.0
                     // Check if within NDC range
-                    if ((clip.x >= -1.0)
+                    if (clip.x >= -1.0)
                         && (clip.y >= -1.0)
                         && (clip.z >= -1.0)
                         && (clip.x <= 1.0)
                         && (clip.y <= 1.0)
-                        && (clip.z <= 1.0))
+                        && (clip.z <= 1.0)
                     {
                         // if any corner is in NDC range, block is at least partially visible
                         return true;
@@ -283,21 +275,16 @@ impl Renderer {
         false
     }
 
-    pub fn is_model_visible(&self, size: &uvec3, trans: &MeshTransform) -> bool {
-        let model_size = size;
-        let min_corner = vec3::new(0.0, 0.0, 0.0);
-        let max_corner = vec3::new(
-            model_size.x as f32,
-            model_size.y as f32,
-            model_size.z as f32,
-        );
+    pub fn is_model_visible(&self, model_size: &uvec3, trans: &MeshTransform) -> bool {
+        let min_corner = vec3::zero();
+        let max_corner = to_vec3!(*model_size);
 
         // Transform the corners
         let mut transformed_corners = [vec3::default(); 8];
         for x in 0..=1 {
             for y in 0..=1 {
                 for z in 0..=1 {
-                    let corner = vec3::new(x as f32, y as f32, z as f32) * max_corner + min_corner;
+                    let corner = to_vec3!(x, y, z) * max_corner + min_corner;
                     transformed_corners[x + y * 2 + z * 4] =
                         trans.rotation * corner + trans.translation;
                 }
@@ -305,8 +292,7 @@ impl Renderer {
         }
 
         for corner in transformed_corners {
-            let mut clip = self.renderer.camera.camera_transform
-                * vec4::new(corner.x, corner.y, corner.z, 1.0);
+            let mut clip = self.renderer.camera.camera_transform * to_vec4!(corner, 1.0);
 
             // Perspective divide (to convert from clip space to NDC)
             // NOTE: i have no idea if it actually helps. TODO:
@@ -317,12 +303,12 @@ impl Renderer {
             // Check if the point lies within the NDC range
             // i guess i can use GLM for simd but its not bottleneck for now
             // TODO: asm view to imrpove every fun
-            if ((clip.x >= -1.0)
+            if (clip.x >= -1.0)
                 && (clip.y >= -1.0)
                 && (clip.z >= -1.0)
                 && (clip.x <= 1.0)
                 && (clip.y <= 1.0)
-                && (clip.z <= 1.0))
+                && (clip.z <= 1.0)
             {
                 // if any corner is in NDC range, block is at least partially visible
                 return true;
@@ -344,7 +330,7 @@ impl Renderer {
                         continue;
                     }
 
-                    let block_pos = i16vec3::new(xx as i16, yy as i16, zz as i16) * 16;
+                    let block_pos = to_i16vec3!(xx, yy, zz) * 16;
 
                     self.draw_block(block, &block_pos);
                 }
@@ -352,8 +338,8 @@ impl Renderer {
         }
     }
 
-    pub fn draw_block(&mut self, block: i16, block_pos: &vek::Vec3<i16>) {
-        let fpos = vec3::new(block_pos.x as f32, block_pos.y as f32, block_pos.z as f32);
+    pub fn draw_block(&mut self, block: i16, block_pos: &i16vec3) {
+        let fpos = to_vec3!(*block_pos);
 
         if self.is_block_visible(fpos) {
             self.block_que.push(BlockRenderRequest {
@@ -491,7 +477,7 @@ impl Renderer {
         flame::end("lightmap_start_blocks");
         flame::start("lightmap_blocks");
         for brr in &self.block_que {
-            let ipos = ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
+            let ipos = to_ivec3!(brr.pos);
             self.renderer.lightmap_block(brr.block, ipos);
         }
         flame::end("lightmap_blocks");
@@ -515,7 +501,7 @@ impl Renderer {
         flame::end("raygen_start_blocks");
         flame::start("raygen_blocks");
         for brr in &self.block_que {
-            let ipos = ivec3::new(brr.pos.x as i32, brr.pos.y as i32, brr.pos.z as i32);
+            let ipos = to_ivec3!(brr.pos);
             self.renderer.raygen_block(brr.block, ipos);
         }
         flame::end("raygen_blocks");
@@ -614,11 +600,7 @@ pub trait GetPos {
 
 impl GetPos for ModelRenderRequest {
     fn get_pos(&self) -> vec3 {
-        vec3::new(
-            self.trans.translation.x,
-            self.trans.translation.y,
-            self.trans.translation.z,
-        )
+        self.trans.translation
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -632,7 +614,7 @@ impl GetPos for ModelRenderRequest {
 
 impl GetPos for BlockRenderRequest {
     fn get_pos(&self) -> vec3 {
-        vec3::new(self.pos.x as f32, self.pos.y as f32, self.pos.z as f32)
+        to_vec3!(self.pos)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -645,7 +627,7 @@ impl GetPos for BlockRenderRequest {
 }
 impl GetPos for FoliageRenderRequest {
     fn get_pos(&self) -> vec3 {
-        vec3::new(self.pos.x, self.pos.y, self.pos.z)
+        to_vec3!(self.pos)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -658,7 +640,7 @@ impl GetPos for FoliageRenderRequest {
 }
 impl GetPos for LiquidRenderRequest {
     fn get_pos(&self) -> vec3 {
-        vec3::new(self.pos.x, self.pos.y, self.pos.z)
+        to_vec3!(self.pos)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {
@@ -671,7 +653,7 @@ impl GetPos for LiquidRenderRequest {
 }
 impl GetPos for VolumetricRenderRequest {
     fn get_pos(&self) -> vec3 {
-        vec3::new(self.pos.x, self.pos.y, self.pos.z)
+        to_vec3!(self.pos)
     }
 
     fn set_cam_dist(&mut self, cam_dist: f32) {

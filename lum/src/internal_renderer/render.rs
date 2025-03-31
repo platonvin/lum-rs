@@ -4,7 +4,10 @@ use std::mem::transmute;
 use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
 // use multiversion::multiversion;
-use vek::{Clamp, FrustumPlanes, Vec4};
+use qvek::{
+    to_i8vec4,
+    vek::{Clamp, FrustumPlanes},
+};
 use vulkanalia::vk::{
     AccessFlags, DeviceV1_0, Handle, HasBuilder, ImageSubresourceLayers,
     KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags,
@@ -92,7 +95,7 @@ impl Camera {
 
 impl SunLight {
     pub fn update_light_transform(&mut self, world_size: uvec3) {
-        let horizon = vec3::new(1.0, 0.0, 0.0).normalized();
+        let _horizon = vec3::new(1.0, 0.0, 0.0).normalized();
         let up = vec3::new(0.0, 0.0, 1.0).normalized();
         let light_pos = vec3::new(
             f32::from((world_size.x * 16_u32) as i16),
@@ -207,8 +210,8 @@ impl InternalRenderer {
 
                         // do image copy on for non-zero-src blocks. Other things still done for every allocated block
                         // because zeroing is fast
-                        if (current_block != 0) {
-                            let mut static_block_copy = vk::ImageCopy {
+                        if current_block != 0 {
+                            let static_block_copy = vk::ImageCopy {
                                 src_subresource: ImageSubresourceLayers {
                                     aspect_mask: vk::ImageAspectFlags::COLOR,
                                     mip_level: 0,
@@ -279,7 +282,7 @@ impl InternalRenderer {
     }
 
     #[inline(always)]
-    fn function_i_had_to_write_to_be_able_to_use_goto(
+    fn _function_i_had_to_write_to_be_able_to_use_goto(
         world_size: &uvec3,
         current_world: &Array3D<BlockId>,
         visited: &mut BitArray3d<usize>,
@@ -399,13 +402,6 @@ impl InternalRenderer {
 
         // well, native size turned to be the fastest
         type TheType = isize;
-
-        let size = Vec4::<TheType>::new(
-            self.settings.world_size.x as TheType,
-            self.settings.world_size.y as TheType,
-            self.settings.world_size.z as TheType,
-            0,
-        );
         // only radiance updates with this offset should be processed
 
         let magic_number = 2;
@@ -487,7 +483,7 @@ impl InternalRenderer {
                 for xx in 0..self.settings.world_size.x {
                     if visited.get(xx as usize, yy as usize, zz as usize) {
                         assert_assume!(i < self.radiance_updates.len());
-                        self.radiance_updates[i] = i8vec4::new(xx as i8, yy as i8, zz as i8, 0);
+                        self.radiance_updates[i] = to_i8vec4!(xx, yy, zz, 0);
                         i += 1;
                     }
                 }
@@ -654,10 +650,9 @@ impl InternalRenderer {
             return; // then its pointless (zero-volume intersection). We can set it to zero os some pre-computed value in future, tho
         }
 
-        let process_axis = |shift: i32, world_size: i32| -> ivec2 {
+        let process_axis = |shift: i32, _world_size: i32| -> ivec2 {
             let self_src_offset;
             let self_dst_offset;
-            let extent = shift.abs();
             if shift >= 0 {
                 self_src_offset = shift;
             } else {
@@ -1071,11 +1066,10 @@ impl InternalRenderer {
         let rotate = mat4::from(trans.rotation);
         let shift = mat4::identity().translated_3d(trans.translation);
         let transform = shift * rotate;
-        let border_in_voxel = get_shift(shift * rotate, mesh.total_size);
 
-        let mut border_in_voxel = get_shift(transform, mesh.total_size);
+        let border_in_voxel = get_shift(transform, mesh.total_size);
 
-        let mut border = iAABB {
+        let border = iAABB {
             min: ivec3::new(
                 border_in_voxel.min.x.floor() as i32,
                 border_in_voxel.min.y.floor() as i32,
@@ -1136,7 +1130,7 @@ impl InternalRenderer {
     }
 
     pub fn end_compute(&mut self) {
-        let command_buffer = self.cmdbufs.compute_command_buffers.current();
+        let _command_buffer = self.cmdbufs.compute_command_buffers.current();
         // do nothing
     }
 
@@ -1311,7 +1305,7 @@ impl InternalRenderer {
     }
 
     fn is_face_visible(&self, normal: vec3, camera_dir: vec3) -> bool {
-        (normal.dot(camera_dir) < 0.0)
+        normal.dot(camera_dir) < 0.0
     }
 
     fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockId) {
@@ -1319,7 +1313,7 @@ impl InternalRenderer {
         debug_assert!(block_id > 0);
         let sum = normal.x + normal.y + normal.z;
         // u8 sign = (sum > 0) ? 0 : 1;
-        let neg_sign = match (sum > 0) {
+        let neg_sign = match sum > 0 {
             true => 0,
             false => 1,
         };
@@ -1549,7 +1543,7 @@ impl InternalRenderer {
         // let _ :i64 = 0x0_c001_babe_face; // why did i port this?
     }
 
-    fn lightmap_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockId) {
+    fn lightmap_block_face(&self, _normal: ivec3, buff: &IndexedVertices, _block_id: BlockId) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
         unsafe {
             self.lumal
@@ -1617,7 +1611,7 @@ impl InternalRenderer {
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
     }
 
-    fn lightmap_model_face(&mut self, normal: vec3, buff: &IndexedVertices) {
+    fn lightmap_model_face(&mut self, _normal: vec3, buff: &IndexedVertices) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         unsafe {
@@ -1926,7 +1920,7 @@ impl InternalRenderer {
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.raygen_water_pipe);
     }
 
-    pub fn raygen_map_water(&mut self, water: &InternalMeshLiquid, pos: &vec3) {
+    pub fn raygen_map_water(&mut self, _water: &InternalMeshLiquid, pos: &vec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         let quality_size = 32;
         #[repr(C)] // for push constants
@@ -2011,48 +2005,6 @@ impl InternalRenderer {
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
             AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
         );
-
-        let far = vk::ClearValue {
-            color: vk::ClearColorValue {
-                float32: [-10000.0, -10000.0, -10000.0, -10000.0],
-            },
-        };
-        let near = vk::ClearValue {
-            color: vk::ClearColorValue {
-                float32: [10000.0, 10000.0, 10000.0, 10000.0],
-            },
-        };
-        let clear_depth = vk::ClearValue {
-            depth_stencil: vk::ClearDepthStencilValue {
-                depth: 1.0,
-                stencil: Default::default(),
-            },
-        };
-
-        let clear_colors = [
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0],
-                },
-            },
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0],
-                },
-            },
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0],
-                },
-            },
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0],
-                },
-            },
-            far,
-            near,
-        ];
 
         self.lumal.cmd_begin_renderpass(
             command_buffer,
@@ -2146,7 +2098,7 @@ impl InternalRenderer {
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.fill_stencil_smoke_pipe);
     }
 
-    pub fn raygen_map_smoke(&mut self, smoke: &InternalMeshVolumetric, pos: &vec3) {
+    pub fn raygen_map_smoke(&mut self, _smoke: &InternalMeshVolumetric, pos: &vec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         #[repr(C)] // for push constants
