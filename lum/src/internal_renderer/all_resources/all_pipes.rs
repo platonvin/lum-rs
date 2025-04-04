@@ -1,10 +1,10 @@
 use std::mem::offset_of;
 
-use consts::*;
+// use consts::*;
 use internal_renderer::*;
+use lumal::vk;
 use lumal::{descriptors::*, ring::Ring, LumalSettings, Renderer};
 use vk::Sampler;
-use vulkanalia::vk::{self, DeviceV1_0, Handle};
 use RelativeDescriptorPos::*;
 
 use crate::*;
@@ -30,7 +30,6 @@ impl InternalRenderer {
         // this is a big TODO: - get rid of descriptor_push
         setup_all_separate_descriptor_layouts(lumal, pipes);
 
-        lumal::trace!();
         // anounce (count) all descriptors
         Self::do_smth_all_descriptors(
             &InternalRenderer::anounce_descriptor_setup_wrapper,
@@ -42,8 +41,6 @@ impl InternalRenderer {
             pipes,
         );
 
-        lumal::trace!();
-
         // do same for grass
         pipes.raygen_foliage_pipes.iter_mut().for_each(|foliage| {
             InternalRenderer::anounce_descriptor_setup_wrapper(
@@ -52,22 +49,22 @@ impl InternalRenderer {
                 &mut foliage.sets,
                 &[
                     DescriptorInfo::make_new(
-                        UNIFORM_BUFFER,
+                        vk::DescriptorType::UNIFORM_BUFFER,
                         Current,
-                        Some(buffers.uniform.clone()),
+                        Some(&buffers.uniform),
                         None,
                         vk::Sampler::null(),
-                        UNDEFINED,
-                        VERTEX | FRAGMENT,
+                        vk::ImageLayout::UNDEFINED,
+                        vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                     ),
                     DescriptorInfo::make_new(
-                        COMBINED_IMAGE_SAMPLER,
+                        vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                         First, // TODO grass state alwyas first
                         None,
-                        Some(iimages.grass_state.clone()),
+                        Some(&iimages.grass_state),
                         samplers.linear_sampler,
-                        GENERAL,
-                        VERTEX | FRAGMENT,
+                        vk::ImageLayout::GENERAL,
+                        vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                     ),
                 ],
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
@@ -77,11 +74,9 @@ impl InternalRenderer {
             );
         });
 
-        lumal::trace!();
         // (actually) allocate space that is enough for all descriptors
         lumal.flush_descriptor_setup();
 
-        lumal::trace!();
         // allocate each descriptor set
         Self::do_smth_all_descriptors(
             &InternalRenderer::acutally_setup_descriptor_wrapper,
@@ -92,7 +87,6 @@ impl InternalRenderer {
             samplers,
             pipes,
         );
-        lumal::trace!();
 
         // do same for grass
         pipes.raygen_foliage_pipes.iter_mut().for_each(|foliage| {
@@ -102,22 +96,22 @@ impl InternalRenderer {
                 &mut foliage.sets,
                 &[
                     DescriptorInfo::make_new(
-                        UNIFORM_BUFFER,
+                        vk::DescriptorType::UNIFORM_BUFFER,
                         Current,
-                        Some(buffers.uniform.clone()),
+                        Some(&buffers.uniform),
                         None,
                         vk::Sampler::null(),
-                        UNDEFINED,
-                        VERTEX | FRAGMENT,
+                        vk::ImageLayout::UNDEFINED,
+                        vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                     ),
                     DescriptorInfo::make_new(
-                        COMBINED_IMAGE_SAMPLER,
+                        vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                         First, // TODO grass state alwyas first
                         None,
-                        Some(iimages.grass_state.clone()),
+                        Some(&iimages.grass_state),
                         samplers.linear_sampler,
-                        GENERAL,
-                        VERTEX | FRAGMENT,
+                        vk::ImageLayout::GENERAL,
+                        vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                     ),
                 ],
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
@@ -126,8 +120,6 @@ impl InternalRenderer {
                 Some("Fill Stencil for Smoke Descriptor Set Layout"),
             );
         });
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.lightmap_blocks_pipe,
@@ -154,10 +146,8 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
-            Some(&"Lightmap Blocks"),
+            Some("Lightmap Blocks"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.lightmap_models_pipe,
@@ -184,10 +174,8 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
-            Some(&"Lightmap Models"),
+            Some("Lightmap Models"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_blocks_pipe,
@@ -218,10 +206,8 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
-            Some(&"Raygen Blocks"),
+            Some("Raygen Blocks"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_models_pipe,
@@ -252,10 +238,8 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
-            Some(&"Raygen Models"),
+            Some("Raygen Models"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_particles_pipe,
@@ -307,10 +291,8 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
-            Some(&"Raygen Particles"),
+            Some("Raygen Particles"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_water_pipe,
@@ -337,14 +319,12 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
-            Some(&"Raygen Water"),
+            Some("Raygen Water"),
         );
-
-        lumal::trace!();
 
         for (i, foliage) in pipes.raygen_foliage_pipes.iter_mut().enumerate() {
             let desc = &foliage_descriptions[i];
-            // let vs = desc.vertex_shader_file.as_str();
+            // let vs = desc.vk::ShaderStageFlags::vertex_shader_file.as_str();
             lumal.create_raster_pipe(
                 foliage,
                 None,
@@ -374,7 +354,7 @@ impl InternalRenderer {
                 vk::CompareOp::LESS,
                 vk::CullModeFlags::NONE,
                 vk::StencilOpState::default(),
-                Some(&"Raygen Foliage"),
+                Some("Raygen Foliage"),
             );
         }
 
@@ -405,10 +385,8 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
-            Some(&"Diffuse"),
+            Some("Diffuse"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.ao_pipe,
@@ -435,10 +413,8 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
-            Some(&"Ambient Occlusion"),
+            Some("Ambient Occlusion"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.fill_stencil_glossy_pipe,
@@ -473,10 +449,8 @@ impl InternalRenderer {
                 write_mask: 0b01, // 01 for reflection
                 reference: 0b01,
             },
-            Some(&"Fill Stencil+Glossy"),
+            Some("Fill Stencil+Glossy"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.fill_stencil_smoke_pipe,
@@ -515,10 +489,8 @@ impl InternalRenderer {
                 write_mask: 0b10, // 10 for smoke
                 reference: 0b10,
             },
-            Some(&"Fill Stencil for Smoke"),
+            Some("Fill Stencil for Smoke"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.glossy_pipe,
@@ -553,10 +525,8 @@ impl InternalRenderer {
                 write_mask: 0b00, // 01 for glossy
                 reference: 0b01,
             },
-            Some(&"Glossy"),
+            Some("Glossy"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.smoke_pipe,
@@ -591,10 +561,8 @@ impl InternalRenderer {
                 write_mask: 0b00, // 10 for smoke
                 reference: 0b10,
             },
-            Some(&"Smoke"),
+            Some("Smoke"),
         );
-
-        lumal::trace!();
 
         lumal.create_raster_pipe(
             &mut pipes.tonemap_pipe,
@@ -610,7 +578,7 @@ impl InternalRenderer {
                 },
             ],
             &[], // Fullscreen pass, no attributes
-            0,   // No vertex size
+            0,   // No vk::ShaderStageFlags::vertex size
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
             lumal.vulkan_data.swapchain_extent,
@@ -621,12 +589,10 @@ impl InternalRenderer {
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
-            Some(&"Tonemap"),
+            Some("Tonemap"),
         );
 
         // aint no way i port RmlUi to Rust
-
-        lumal::trace!();
 
         // lumal.create_raster_pipe(
         //     &mut pipes.overlay_pipe,
@@ -645,20 +611,20 @@ impl InternalRenderer {
         //         AttrFormOffs {
         //             binding: 0,
         //             format: vk::Format::R32G32_SFLOAT,
-        //             offset: offset_of!(RmlVertex, position),
+        //             offset: offset_of!(Rmlvk::ShaderStageFlags::Vertex, position),
         //         },
         //         AttrFormOffs {
         //             binding: 0,
         //             format: vk::Format::R8G8B8A8_UNORM,
-        //             offset: offset_of!(RmlVertex, colour),
+        //             offset: offset_of!(Rmlvk::ShaderStageFlags::Vertex, colour),
         //         },
         //         AttrFormOffs {
         //             binding: 0,
         //             format: vk::Format::R32G32_SFLOAT,
-        //             offset: offset_of!(RmlVertex, tex_coord),
+        //             offset: offset_of!(Rmlvk::ShaderStageFlags::Vertex, tex_coord),
         //         },
         //     ],
-        //     std::mem::size_of::<RmlVertex>() as u32,
+        //     std::mem::size_of::<Rmlvk::ShaderStageFlags::Vertex>() as u32,
         //     vk::VertexInputRate::VERTEX,
         //     vk::PrimitiveTopology::TRIANGLE_LIST,
         //     lumal.vulkan_data.swapchain_extent,
@@ -670,8 +636,7 @@ impl InternalRenderer {
         //     vk::StencilOpState::default(), // no stencil
         // );
 
-        lumal::trace!();
-        // Compute pipelines
+        // vk::ShaderStageFlags::Compute pipelines
         lumal.create_compute_pipe(
             &mut pipes.radiance_pipe,
             None,
@@ -682,7 +647,6 @@ impl InternalRenderer {
             Some("Radiance"),
         );
 
-        lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.update_grass_pipe,
             None,
@@ -693,7 +657,6 @@ impl InternalRenderer {
             Some("Grass Updates"),
         );
 
-        lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.update_water_pipe,
             None,
@@ -704,7 +667,6 @@ impl InternalRenderer {
             Some("Water Updates"),
         );
 
-        lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin2d_pipe,
             None,
@@ -715,7 +677,6 @@ impl InternalRenderer {
             Some("Perlin 2D Noise"),
         );
 
-        lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin3d_pipe,
             None,
@@ -726,7 +687,6 @@ impl InternalRenderer {
             Some("Perlin 3D Noise"),
         );
 
-        lumal::trace!();
         lumal.create_compute_pipe(
             &mut pipes.map_pipe,
             Some(pipes.map_push_layout),
@@ -807,15 +767,15 @@ impl InternalRenderer {
             &mut pipes.lightmap_blocks_pipe.set_layout,
             &mut pipes.lightmap_blocks_pipe.sets,
             &[DescriptorInfo::make_new(
-                UNIFORM_BUFFER,
+                vk::DescriptorType::UNIFORM_BUFFER,
                 Current,
-                Some(buffers.light_uniform.clone()),
+                Some(&buffers.light_uniform),
                 None,
                 vk::Sampler::null(),
-                GENERAL,
-                VERTEX,
+                vk::ImageLayout::GENERAL,
+                vk::ShaderStageFlags::VERTEX,
             )],
-            VERTEX,
+            vk::ShaderStageFlags::VERTEX,
             vk::DescriptorSetLayoutCreateFlags::empty(),
             #[cfg(not(feature = "debug_validation_names"))]
             None,
@@ -829,15 +789,15 @@ impl InternalRenderer {
             &mut pipes.lightmap_models_pipe.set_layout,
             &mut pipes.lightmap_models_pipe.sets,
             &[DescriptorInfo::make_new(
-                UNIFORM_BUFFER,
+                vk::DescriptorType::UNIFORM_BUFFER,
                 Current,
-                Some(buffers.light_uniform.clone()),
+                Some(&buffers.light_uniform),
                 None,
                 Sampler::null(),
-                GENERAL,
-                VERTEX,
+                vk::ImageLayout::GENERAL,
+                vk::ShaderStageFlags::VERTEX,
             )],
-            VERTEX,
+            vk::ShaderStageFlags::VERTEX,
             vk::DescriptorSetLayoutCreateFlags::empty(),
             #[cfg(not(feature = "debug_validation_names"))]
             None,
@@ -852,61 +812,61 @@ impl InternalRenderer {
             &mut pipes.radiance_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.world.clone()),
+                    Some(&iimages.world),
                     samplers.unnorm_nearest,
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     Current,
                     None,
-                    Some(iimages.origin_block_palette.clone()),
+                    Some(&iimages.origin_block_palette),
                     samplers.unnorm_nearest,
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     Current,
                     None,
-                    Some(iimages.material_palette.clone()),
+                    Some(&iimages.material_palette),
                     samplers.nearest_sampler,
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.radiance_cache.clone()),
+                    Some(&iimages.radiance_cache),
                     samplers.unnorm_linear,
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
                 DescriptorInfo::make_new(
-                    STORAGE_IMAGE,
+                    vk::DescriptorType::STORAGE_IMAGE,
                     First,
                     None,
-                    Some(iimages.radiance_cache.clone()),
+                    Some(&iimages.radiance_cache),
                     vk::Sampler::null(),
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
                 DescriptorInfo::make_new(
-                    STORAGE_BUFFER,
+                    vk::DescriptorType::STORAGE_BUFFER,
                     First,
-                    Some(buffers.gpu_radiance_updates.clone()),
+                    Some(&buffers.gpu_radiance_updates),
                     None,
                     vk::Sampler::null(),
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
             ],
-            COMPUTE,
+            vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
             #[cfg(not(feature = "debug_validation_names"))]
             None,
@@ -921,61 +881,61 @@ impl InternalRenderer {
             &mut pipes.diffuse_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.uniform.clone()),
+                    Some(&buffers.uniform),
                     None,
                     vk::Sampler::null(),
-                    GENERAL,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    INPUT_ATTACHMENT,
+                    vk::DescriptorType::INPUT_ATTACHMENT,
                     First,
                     None,
-                    Some(dimages.highres_mat_norm.clone()),
+                    Some(&dimages.highres_mat_norm),
                     vk::Sampler::null(),
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    INPUT_ATTACHMENT,
+                    vk::DescriptorType::INPUT_ATTACHMENT,
                     First,
                     None,
-                    Some(dimages.highres_depth_stencil.clone()),
+                    Some(&dimages.highres_depth_stencil),
                     vk::Sampler::null(),
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.material_palette.clone()),
+                    Some(&iimages.material_palette),
                     samplers.nearest_sampler,
-                    GENERAL,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     Current,
                     None,
-                    Some(iimages.radiance_cache.clone()),
+                    Some(&iimages.radiance_cache),
                     samplers.unnorm_linear,
-                    GENERAL,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.lightmap.clone()),
+                    Some(&iimages.lightmap),
                     samplers.shadow_sampler,
-                    GENERAL,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
             ],
-            FRAGMENT,
+            vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
             #[cfg(not(feature = "debug_validation_names"))]
             None,
@@ -989,40 +949,40 @@ impl InternalRenderer {
             &mut pipes.ao_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.uniform.clone()),
+                    Some(&buffers.uniform),
                     None,
                     vk::Sampler::null(),
-                    UNDEFINED,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.ao_lut_uniform.clone()),
+                    Some(&buffers.ao_lut_uniform),
                     None,
                     vk::Sampler::null(),
-                    UNDEFINED,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    INPUT_ATTACHMENT,
+                    vk::DescriptorType::INPUT_ATTACHMENT,
                     First,
                     None,
-                    Some(dimages.highres_mat_norm.clone()),
+                    Some(&dimages.highres_mat_norm),
                     vk::Sampler::null(),
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(dimages.highres_depth_stencil.clone()),
+                    Some(&dimages.highres_depth_stencil),
                     samplers.nearest_sampler,
-                    GENERAL,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
             ],
             vk::ShaderStageFlags::FRAGMENT,
@@ -1038,13 +998,13 @@ impl InternalRenderer {
             &mut pipes.tonemap_pipe.set_layout,
             &mut pipes.tonemap_pipe.sets,
             &[DescriptorInfo::make_new(
-                INPUT_ATTACHMENT,
+                vk::DescriptorType::INPUT_ATTACHMENT,
                 First,
                 None,
-                Some(dimages.highres_frame.clone()),
+                Some(&dimages.highres_frame),
                 vk::Sampler::null(),
-                GENERAL,
-                FRAGMENT,
+                vk::ImageLayout::GENERAL,
+                vk::ShaderStageFlags::FRAGMENT,
             )],
             vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
@@ -1060,22 +1020,22 @@ impl InternalRenderer {
             &mut pipes.fill_stencil_glossy_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    INPUT_ATTACHMENT,
+                    vk::DescriptorType::INPUT_ATTACHMENT,
                     First,
                     None,
-                    Some(dimages.highres_mat_norm.clone()),
+                    Some(&dimages.highres_mat_norm),
                     vk::Sampler::null(),
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     Current,
                     None,
-                    Some(iimages.material_palette.clone()),
+                    Some(&iimages.material_palette),
                     samplers.nearest_sampler,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
             ],
             vk::ShaderStageFlags::FRAGMENT,
@@ -1091,13 +1051,13 @@ impl InternalRenderer {
             &mut pipes.fill_stencil_smoke_pipe.set_layout,
             &mut pipes.fill_stencil_smoke_pipe.sets,
             &[DescriptorInfo::make_new(
-                UNIFORM_BUFFER,
+                vk::DescriptorType::UNIFORM_BUFFER,
                 Current,
-                Some(buffers.uniform.clone()),
+                Some(&buffers.uniform),
                 None,
                 vk::Sampler::null(),
-                UNDEFINED,
-                VERTEX,
+                vk::ImageLayout::UNDEFINED,
+                vk::ShaderStageFlags::VERTEX,
             )],
             vk::ShaderStageFlags::VERTEX,
             vk::DescriptorSetLayoutCreateFlags::empty(),
@@ -1113,67 +1073,67 @@ impl InternalRenderer {
             &mut pipes.glossy_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.uniform.clone()),
+                    Some(&buffers.uniform),
                     None,
                     vk::Sampler::null(),
-                    UNDEFINED,
-                    FRAGMENT,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(dimages.highres_mat_norm.clone()),
+                    Some(&dimages.highres_mat_norm),
                     samplers.nearest_sampler,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(dimages.highres_depth_stencil.clone()),
+                    Some(&dimages.highres_depth_stencil),
                     samplers.nearest_sampler,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.world.clone()),
+                    Some(&iimages.world),
                     samplers.unnorm_nearest,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     Current,
                     None,
-                    Some(iimages.origin_block_palette.clone()),
+                    Some(&iimages.origin_block_palette),
                     samplers.unnorm_nearest,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     Current,
                     None,
-                    Some(iimages.material_palette.clone()),
+                    Some(&iimages.material_palette),
                     samplers.nearest_sampler,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.radiance_cache.clone()),
+                    Some(&iimages.radiance_cache),
                     samplers.unnorm_linear,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
             ],
             vk::ShaderStageFlags::FRAGMENT,
@@ -1190,49 +1150,49 @@ impl InternalRenderer {
             &mut pipes.smoke_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.uniform.clone()),
+                    Some(&buffers.uniform),
                     None,
                     vk::Sampler::null(),
-                    UNDEFINED,
-                    FRAGMENT,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    INPUT_ATTACHMENT,
+                    vk::DescriptorType::INPUT_ATTACHMENT,
                     First,
                     None,
-                    Some(dimages.far_depth.clone()),
+                    Some(&dimages.far_depth),
                     vk::Sampler::null(),
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    INPUT_ATTACHMENT,
+                    vk::DescriptorType::INPUT_ATTACHMENT,
                     First,
                     None,
-                    Some(dimages.near_depth.clone()),
+                    Some(&dimages.near_depth),
                     vk::Sampler::null(),
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    STORAGE_IMAGE,
+                    vk::DescriptorType::STORAGE_IMAGE,
                     First,
                     None,
-                    Some(iimages.radiance_cache.clone()),
+                    Some(&iimages.radiance_cache),
                     vk::Sampler::null(),
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.perlin_noise3d.clone()),
+                    Some(&iimages.perlin_noise3d),
                     samplers.linear_sampler_tiled,
-                    GENERAL,
-                    FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::FRAGMENT,
                 ),
             ],
             vk::ShaderStageFlags::FRAGMENT,
@@ -1249,22 +1209,22 @@ impl InternalRenderer {
             &mut pipes.raygen_blocks_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.uniform.clone()),
+                    Some(&buffers.uniform),
                     None,
                     vk::Sampler::null(),
-                    UNDEFINED,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     Current,
                     None,
-                    Some(iimages.origin_block_palette.clone()),
+                    Some(&iimages.origin_block_palette),
                     samplers.unnorm_nearest,
-                    GENERAL,
-                    VERTEX | FRAGMENT,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 ),
             ],
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
@@ -1280,13 +1240,13 @@ impl InternalRenderer {
             &mut pipes.raygen_models_pipe.set_layout,
             &mut pipes.raygen_models_pipe.sets,
             &[DescriptorInfo::make_new(
-                UNIFORM_BUFFER,
+                vk::DescriptorType::UNIFORM_BUFFER,
                 Current,
-                Some(buffers.uniform.clone()),
+                Some(&buffers.uniform),
                 None,
                 vk::Sampler::null(),
-                UNDEFINED,
-                VERTEX | FRAGMENT,
+                vk::ImageLayout::UNDEFINED,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             )],
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             vk::DescriptorSetLayoutCreateFlags::empty(),
@@ -1302,31 +1262,37 @@ impl InternalRenderer {
             &mut pipes.raygen_particles_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.uniform.clone()),
+                    Some(&buffers.uniform),
                     None,
                     vk::Sampler::null(),
-                    UNDEFINED,
-                    VERTEX | FRAGMENT | GEOMETRY,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::GEOMETRY,
                 ),
                 DescriptorInfo::make_new(
-                    STORAGE_IMAGE,
+                    vk::DescriptorType::STORAGE_IMAGE,
                     First,
                     None,
-                    Some(iimages.world.clone()),
+                    Some(&iimages.world),
                     vk::Sampler::null(),
-                    GENERAL,
-                    VERTEX | FRAGMENT | GEOMETRY,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::GEOMETRY,
                 ),
                 DescriptorInfo::make_new(
-                    STORAGE_IMAGE,
+                    vk::DescriptorType::STORAGE_IMAGE,
                     Current,
                     None,
-                    Some(iimages.origin_block_palette.clone()),
+                    Some(&iimages.origin_block_palette),
                     vk::Sampler::null(),
-                    GENERAL,
-                    VERTEX | FRAGMENT | GEOMETRY,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::GEOMETRY,
                 ),
             ],
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::GEOMETRY,
@@ -1343,22 +1309,26 @@ impl InternalRenderer {
             &mut pipes.update_grass_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    STORAGE_IMAGE,
+                    vk::DescriptorType::STORAGE_IMAGE,
                     First,
                     None,
-                    Some(iimages.grass_state.clone()),
+                    Some(&iimages.grass_state),
                     vk::Sampler::null(),
-                    GENERAL,
-                    VERTEX | FRAGMENT | COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::COMPUTE,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.perlin_noise2d.clone()),
+                    Some(&iimages.perlin_noise2d),
                     samplers.linear_sampler_tiled,
-                    GENERAL,
-                    VERTEX | FRAGMENT | COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::COMPUTE,
                 ),
             ],
             vk::ShaderStageFlags::COMPUTE,
@@ -1374,13 +1344,15 @@ impl InternalRenderer {
             &mut pipes.update_water_pipe.set_layout,
             &mut pipes.update_water_pipe.sets,
             &[DescriptorInfo::make_new(
-                STORAGE_IMAGE,
+                vk::DescriptorType::STORAGE_IMAGE,
                 First,
                 None,
-                Some(iimages.water_state.clone()),
+                Some(&iimages.water_state),
                 vk::Sampler::null(),
-                GENERAL,
-                VERTEX | FRAGMENT | COMPUTE,
+                vk::ImageLayout::GENERAL,
+                vk::ShaderStageFlags::VERTEX
+                    | vk::ShaderStageFlags::FRAGMENT
+                    | vk::ShaderStageFlags::COMPUTE,
             )],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
@@ -1396,22 +1368,26 @@ impl InternalRenderer {
             &mut pipes.raygen_water_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    UNIFORM_BUFFER,
+                    vk::DescriptorType::UNIFORM_BUFFER,
                     Current,
-                    Some(buffers.uniform.clone()),
+                    Some(&buffers.uniform),
                     None,
                     vk::Sampler::null(),
-                    UNDEFINED,
-                    VERTEX | FRAGMENT | GEOMETRY,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::GEOMETRY,
                 ),
                 DescriptorInfo::make_new(
-                    COMBINED_IMAGE_SAMPLER,
+                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                     First,
                     None,
-                    Some(iimages.water_state.clone()),
+                    Some(&iimages.water_state),
                     samplers.linear_sampler_tiled,
-                    GENERAL,
-                    VERTEX | FRAGMENT | GEOMETRY,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::GEOMETRY,
                 ),
             ],
             vk::ShaderStageFlags::VERTEX,
@@ -1427,13 +1403,15 @@ impl InternalRenderer {
             &mut pipes.gen_perlin2d_pipe.set_layout,
             &mut pipes.gen_perlin2d_pipe.sets,
             &[DescriptorInfo::make_new(
-                STORAGE_IMAGE,
+                vk::DescriptorType::STORAGE_IMAGE,
                 First,
                 None,
-                Some(iimages.perlin_noise2d.clone()),
+                Some(&iimages.perlin_noise2d),
                 vk::Sampler::null(),
-                GENERAL,
-                VERTEX | FRAGMENT | COMPUTE,
+                vk::ImageLayout::GENERAL,
+                vk::ShaderStageFlags::VERTEX
+                    | vk::ShaderStageFlags::FRAGMENT
+                    | vk::ShaderStageFlags::COMPUTE,
             )],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
@@ -1448,13 +1426,15 @@ impl InternalRenderer {
             &mut pipes.gen_perlin3d_pipe.set_layout,
             &mut pipes.gen_perlin3d_pipe.sets,
             &[DescriptorInfo::make_new(
-                STORAGE_IMAGE,
+                vk::DescriptorType::STORAGE_IMAGE,
                 First,
                 None,
-                Some(iimages.perlin_noise3d.clone()),
+                Some(&iimages.perlin_noise3d),
                 vk::Sampler::null(),
-                GENERAL,
-                VERTEX | FRAGMENT | COMPUTE, // TODO: remove all unnecessary stages
+                vk::ImageLayout::GENERAL,
+                vk::ShaderStageFlags::VERTEX
+                    | vk::ShaderStageFlags::FRAGMENT
+                    | vk::ShaderStageFlags::COMPUTE, // TODO: remove all unnecessary stages
             )],
             vk::ShaderStageFlags::COMPUTE,
             vk::DescriptorSetLayoutCreateFlags::empty(),
@@ -1470,22 +1450,22 @@ impl InternalRenderer {
             &mut pipes.map_pipe.sets,
             &[
                 DescriptorInfo::make_new(
-                    STORAGE_IMAGE,
+                    vk::DescriptorType::STORAGE_IMAGE,
                     First,
                     None,
-                    Some(iimages.world.clone()),
+                    Some(&iimages.world),
                     vk::Sampler::null(),
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
                 DescriptorInfo::make_new(
-                    STORAGE_IMAGE,
+                    vk::DescriptorType::STORAGE_IMAGE,
                     Current,
                     None,
-                    Some(iimages.origin_block_palette.clone()),
+                    Some(&iimages.origin_block_palette),
                     vk::Sampler::null(),
-                    GENERAL,
-                    COMPUTE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ShaderStageFlags::COMPUTE,
                 ),
             ],
             vk::ShaderStageFlags::COMPUTE,
@@ -1507,7 +1487,7 @@ impl InternalRenderer {
         descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
-        debug_name: Option<&str>,
+        _debug_name: Option<&str>,
     ) {
         lumal.anounce_descriptor_setup(
             dset_layout,
@@ -1516,7 +1496,7 @@ impl InternalRenderer {
             default_stages,
             create_flags,
             #[cfg(feature = "debug_validation_names")]
-            debug_name,
+            _debug_name,
         );
     }
 
@@ -1529,7 +1509,7 @@ impl InternalRenderer {
         descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
-        debug_name: Option<&str>,
+        _debug_name: Option<&str>,
     ) {
         lumal.acutally_setup_descriptor(
             dset_layout,
@@ -1538,7 +1518,7 @@ impl InternalRenderer {
             default_stages,
             create_flags,
             #[cfg(feature = "debug_validation_names")]
-            debug_name,
+            _debug_name,
         );
     }
 }
@@ -1558,7 +1538,7 @@ fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPi
     );
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {
-            descriptor_type: STORAGE_IMAGE,
+            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
             stages: vk::ShaderStageFlags::COMPUTE,
         }],
         &mut pipes.map_push_layout,
@@ -1568,7 +1548,7 @@ fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPi
     );
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {
-            descriptor_type: COMBINED_IMAGE_SAMPLER,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
             stages: vk::ShaderStageFlags::FRAGMENT,
         }],
         &mut pipes.raygen_models_push_layout,

@@ -74,7 +74,7 @@ static K_DEFAULT_VOX_PALETTE: [u8; 256 * 4] = [
 ];
 
 const fn make_vox_chunk_id(c0: u8, c1: u8, c2: u8, c3: u8) -> u32 {
-    (c0 as u32) << 0 | (c1 as u32) << 8 | (c2 as u32) << 16 | (c3 as u32) << 24
+    (c0 as u32) | (c1 as u32) << 8 | (c2 as u32) << 16 | (c3 as u32) << 24
 }
 
 // Define the chunk IDs as constants
@@ -219,11 +219,11 @@ impl Default for VoxMatlArray {
 #[derive(Debug, Clone, Default)]
 struct VoxKeyframeModel {
     pub model_index: u32,
-    pub frame_index: u32,
+    pub _frame_index: u32,
 }
 #[derive(Debug, Clone, Default)]
 struct VoxKeyframeTransform {
-    pub frame_index: u32,
+    pub _frame_index: u32,
     pub transform: mat4,
 }
 
@@ -245,8 +245,8 @@ struct VoxSceneNodeTransform {
     pub child_node_id: u32,
     pub layer_id: u32,
     pub hidden: bool,
-    pub keyframes: Vec<VoxKeyframeTransform>,
-    pub loop_animation: bool,
+    pub _keyframes: Vec<VoxKeyframeTransform>,
+    pub _loop_animation: bool,
 }
 #[derive(Debug, Clone)]
 struct VoxSceneNodeGroup {
@@ -256,8 +256,8 @@ struct VoxSceneNodeGroup {
 #[derive(Debug, Clone)]
 struct VoxSceneNodeShape {
     pub model_id: u32,
-    pub keyframes: Vec<VoxKeyframeModel>,
-    pub loop_animation: bool,
+    pub _keyframes: Vec<VoxKeyframeModel>,
+    pub _loop_animation: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -371,7 +371,7 @@ fn parse_transform(rotation_string: &str, translation_string: &str) -> mat4 {
     let mut transform = mat4::identity();
 
     let packed_rotation_bits: u32 = rotation_string.parse().unwrap_or(0);
-    let row0_vec_index = (packed_rotation_bits >> 0) & 3;
+    let row0_vec_index = packed_rotation_bits & 3;
     let row1_vec_index = (packed_rotation_bits >> 2) & 3;
     let row2_vec_index = K_ROW2_INDEX[(1 << row0_vec_index) | (1 << row1_vec_index)];
 
@@ -379,7 +379,7 @@ fn parse_transform(rotation_string: &str, translation_string: &str) -> mat4 {
 
     let mut row0 = K_VECTORS[row0_vec_index as usize];
     let mut row1 = K_VECTORS[row1_vec_index as usize];
-    let mut row2 = K_VECTORS[row2_vec_index as usize];
+    let mut row2 = K_VECTORS[row2_vec_index];
 
     if packed_rotation_bits & (1 << 4) != 0 {
         row0 = -row0;
@@ -541,8 +541,8 @@ fn read_scene_from_memory_with_flags(
                     let voxels_to_read =
                         (fp.bytes_remaining() / 4).min(num_voxels_in_chunk as usize);
                     let packed_voxel_data = fp.current_data_ref();
-                    for i in 0..voxels_to_read as usize {
-                        let x = packed_voxel_data[i * 4 + 0] as usize;
+                    for i in 0..voxels_to_read {
+                        let x = packed_voxel_data[i * 4] as usize;
                         let y = packed_voxel_data[i * 4 + 1] as usize;
                         let z = packed_voxel_data[i * 4 + 2] as usize;
                         let color_index = packed_voxel_data[i * 4 + 3];
@@ -609,7 +609,7 @@ fn read_scene_from_memory_with_flags(
                     let transform = parse_transform(rotation_value, translation_value);
                     keyframes[i as usize] = VoxKeyframeTransform {
                         transform,
-                        frame_index,
+                        _frame_index: frame_index,
                     };
                 }
                 // setup the transform node.
@@ -623,8 +623,8 @@ fn read_scene_from_memory_with_flags(
                         layer_id,
                         transform: keyframes[0].transform,
                         hidden,
-                        keyframes,
-                        loop_animation,
+                        _keyframes: keyframes,
+                        _loop_animation: loop_animation,
                         name: node_name,
                     });
                 }
@@ -690,18 +690,18 @@ fn read_scene_from_memory_with_flags(
 
                     keyframes[i as usize] = VoxKeyframeModel {
                         model_index,
-                        frame_index,
+                        _frame_index: frame_index,
                     };
                 }
 
                 if node_id >= nodes.len().try_into().unwrap() {
                     nodes.resize((node_id + 1).try_into().unwrap(), VoxSceneNode::Invalid);
                 }
-                nodes[node_id as usize] = (VoxSceneNode::Shape(VoxSceneNodeShape {
+                nodes[node_id as usize] = VoxSceneNode::Shape(VoxSceneNodeShape {
                     model_id: keyframes[0].model_index,
-                    keyframes,
-                    loop_animation,
-                }));
+                    _keyframes: keyframes,
+                    _loop_animation: loop_animation,
+                });
             }
             CHUNK_ID_IMAP => {
                 assert_eq!(chunk_size, 256, "unexpected chunk size for IMAP chunk");
@@ -743,7 +743,7 @@ fn read_scene_from_memory_with_flags(
                 material_id &= 0xFF; // incoming material 256 is material 0
 
                 let dict = fp.read_dict();
-                let mut material = &mut materials.matl[material_id];
+                let material = &mut materials.matl[material_id];
 
                 if let Some(type_string) = dict.get("_type") {
                     material.type_ = match type_string.as_str() {
@@ -838,9 +838,9 @@ fn read_scene_from_memory_with_flags(
                 // bit(5) : Power
                 // bit(6) : Glow
                 // bit(7) : isTotalPower (*no value)
-                let property_bits = fp.read::<u32>();
+                let _property_bits = fp.read::<u32>();
 
-                let mut material = &mut materials.matl[material_id];
+                let material = &mut materials.matl[material_id];
                 let material_type = match material_type {
                     0 => MatlType::Diffuse,
                     1 => MatlType::Metal,
@@ -1023,7 +1023,7 @@ fn read_scene_from_memory_with_flags(
 
         for model in &mut models {
             let model = model.as_mut().unwrap();
-            let num_voxels = (model.size_x * model.size_y * model.size_z) as usize;
+            let _num_voxels = (model.size_x * model.size_y * model.size_z) as usize;
             for voxel in &mut model.voxel_data {
                 *voxel = index_map_inverse[*voxel as usize].wrapping_add(1);
             }
@@ -1114,7 +1114,7 @@ fn generate_instances_for_node(
             );
             stack.pop();
         }
-        VoxSceneNode::Group(node) => {
+        VoxSceneNode::Group(_node) => {
             let next_group_index = 0_u32;
             {
                 let last_transform_idx = *stack.last().unwrap();
@@ -1126,8 +1126,8 @@ fn generate_instances_for_node(
                     panic!("Expected a transform node before a group node")
                 };
 
-                let next_group_index = groups.len() as u32;
-                let mut group = VoxGroup {
+                let _next_group_index = groups.len() as u32;
+                let group = VoxGroup {
                     parent_group_index: group_index,
                     transform: last_transform.transform,
                     hidden: last_transform.hidden,
@@ -1189,13 +1189,13 @@ fn generate_instances_for_node(
                 let last_group = *stack
                     .get(stack.len().saturating_sub(2))
                     .expect("Expected group node before shape node");
-                let last_group = if let VoxSceneNode::Group(group) = &nodes[last_group as usize] {
+                let _last_group = if let VoxSceneNode::Group(group) = &nodes[last_group as usize] {
                     group
                 } else {
                     panic!("Expected a group node before shape node")
                 };
 
-                let mut new_instance = VoxInstance {
+                let new_instance = VoxInstance {
                     model_index: node.model_id,
                     transform: last_transform.transform,
                     layer_index: last_transform.layer_id,
@@ -1224,7 +1224,7 @@ fn generate_instances_for_node(
 }
 
 #[optimize(size)]
-fn sample_keyframe_transform(
+fn _sample_keyframe_transform(
     keyframes: &[VoxKeyframeTransform],
     loop_animation: bool,
     frame_index: u32,
@@ -1232,26 +1232,26 @@ fn sample_keyframe_transform(
     assert!(!keyframes.is_empty(), "At least one keyframe is required");
 
     let frame_index = if loop_animation {
-        compute_looped_frame_index(
-            keyframes.first().unwrap().frame_index,
-            keyframes.last().unwrap().frame_index,
+        _compute_looped_frame_index(
+            keyframes.first().unwrap()._frame_index,
+            keyframes.last().unwrap()._frame_index,
             frame_index,
         )
     } else {
         frame_index
     };
 
-    if frame_index <= keyframes.first().unwrap().frame_index {
+    if frame_index <= keyframes.first().unwrap()._frame_index {
         return keyframes.first().unwrap().transform;
     }
-    if frame_index >= keyframes.last().unwrap().frame_index {
+    if frame_index >= keyframes.last().unwrap()._frame_index {
         return keyframes.last().unwrap().transform;
     }
 
     for i in (0..keyframes.len() - 1).rev() {
-        if frame_index >= keyframes[i].frame_index {
-            let next_frame = keyframes[i + 1].frame_index;
-            let curr_frame = keyframes[i].frame_index;
+        if frame_index >= keyframes[i]._frame_index {
+            let next_frame = keyframes[i + 1]._frame_index;
+            let curr_frame = keyframes[i]._frame_index;
             let t = (frame_index - curr_frame) as f32 / (next_frame - curr_frame) as f32;
             let t_inv = 1.0 - t;
 
@@ -1274,7 +1274,7 @@ fn sample_keyframe_transform(
 }
 
 #[optimize(size)]
-fn compute_looped_frame_index(
+fn _compute_looped_frame_index(
     first_loop_frame: u32,
     last_loop_frame: u32,
     frame_index: u32,

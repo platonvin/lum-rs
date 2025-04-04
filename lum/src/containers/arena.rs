@@ -3,20 +3,22 @@ use std::collections::VecDeque;
 use crate::assert_unreachable;
 
 #[derive(Default)]
-pub struct Arena<T: Clone> {
+pub struct Arena<T> {
     storage: Vec<Option<T>>, // Stores elements, with `None` representing free slots
     // sorted deque of indices
     // front is smallest index (what we need to allocate to if we want memory coherence)
     free_indices: VecDeque<usize>, // Keeps track of available slots
 }
 
-impl<T: Clone> Arena<T> {
+impl<T> Arena<T> {
     /// Creates a new arena with a given initial size.
     pub fn new(initial_size: usize) -> Self {
         let free_indices = (0..initial_size).collect();
 
+        let storage = (0..initial_size).map(|_| None).collect();
+
         Self {
-            storage: vec![None; initial_size],
+            storage,
             free_indices,
         }
     }

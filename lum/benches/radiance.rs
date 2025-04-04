@@ -10,12 +10,9 @@ use lum::{
     for_zyx,
     types::{i8vec4, uvec3},
 };
+use qvek::i8vec4;
 
-use std::{
-    cell::UnsafeCell,
-    simd::cmp::SimdPartialOrd,
-    sync::Arc,
-};
+use std::{cell::UnsafeCell, simd::cmp::SimdPartialOrd, sync::Arc};
 use std::{simd::i32x32, sync::Mutex};
 
 type BlockId = i16;
@@ -93,9 +90,7 @@ fn update_radiance_original(world: &mut World, settings: &Settings) {
                 }
 
                 if sum > 0 {
-                    world.radiance_updates.push(i8vec4::new(
-                        x as i8, y as i8, z as i8, 0, // padding
-                    ));
+                    world.radiance_updates.push(i8vec4!(x, y, z, 0));
                     set[(x as usize, y as usize, z as usize)] = true;
                 }
             }
@@ -180,7 +175,7 @@ fn update_radiance_unrolled(world: &mut World, settings: &Settings) {
         check_neighbor!(-1, -1, -1);
 
         if found {
-            world.radiance_updates.push(i8vec4::new(x, y, z, 0));
+            world.radiance_updates.push(i8vec4!(x, y, z, 0));
         }
     });
 }

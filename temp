@@ -1,0 +1,70 @@
+[32mexamples\src\bin\demo.rs:86: Fun: demo::AppState::new[0m
+[32mexamples\src\bin\demo.rs:100: Fun: demo::AppState::new[0m
+[32mlum\src\internal_renderer\mod.rs:237: Fun: lum::internal_renderer::InternalRenderer::create[0m
+Starting app.
+[32mC:\prog\lumal-rs\src\lib.rs:371: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:374: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:383: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1079: Fun: lumal::pick_physical_device[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1081: Fun: lumal::pick_physical_device[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1113: Fun: lumal::check_physical_device[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1115: Fun: lumal::check_physical_device[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1135: Fun: lumal::check_physical_device_extensions[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1141: Fun: lumal::check_physical_device_extensions[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1117: Fun: lumal::check_physical_device[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1119: Fun: lumal::check_physical_device[0m
+[32mC:\prog\lumal-rs\src\lib.rs:1091: Fun: lumal::pick_physical_device[0m
+Selected physical device (`NVIDIA GeForce GTX 1660 SUPER`).
+[32mC:\prog\lumal-rs\src\lib.rs:385: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:387: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:398: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:401: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:408: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:410: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:412: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:414: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:416: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:418: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:420: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:422: Fun: lumal::Renderer::create[0m
+[32mC:\prog\lumal-rs\src\lib.rs:424: Fun: lumal::Renderer::create[0m
+[32mlum\src\internal_renderer\mod.rs:239: Fun: lum::internal_renderer::InternalRenderer::create[0m
+[32mlum\src\internal_renderer\mod.rs:245: Fun: lum::internal_renderer::InternalRenderer::create[0m
+creating rpass: lightmap
+creating rpass: gbuffer
+creating rpass: shade
+created all passes
+[32mexamples\src\bin\demo.rs:102: Fun: demo::AppState::new[0m
+[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+Extruding palette
+[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
+[32mexamples\src\bin\demo.rs:104: Fun: demo::AppState::new[0m
+[32mexamples\src\bin\demo.rs:120: Fun: demo::AppState::new[0m
+[32mexamples\src\bin\demo.rs:124: Fun: demo::AppState::new[0m
+Resumed
+Shutting down renderer
+started destroying independent images
+destroyed independent images
+started destroying buffers
+destroyed buffers
+started destroying swapchain dependent images
+destroyed swapchain dependent images
+[32mlum\src\internal_renderer\mod.rs:419: Fun: lum::internal_renderer::InternalRenderer::destroy[0m
+[32mlum\src\internal_renderer\mod.rs:421: Fun: lum::internal_renderer::InternalRenderer::destroy[0m
+[32mlum\src\internal_renderer\mod.rs:424: Fun: lum::internal_renderer::InternalRenderer::destroy[0m

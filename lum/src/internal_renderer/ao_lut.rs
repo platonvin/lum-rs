@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 
 use internal_renderer::InternalRenderer;
+use qvek::vec2;
 
 use crate::{types::*, *};
 
@@ -25,7 +26,7 @@ impl InternalRenderer {
 
     pub fn generate_lut<const SAMPLE_COUNT: usize>(
         max_radius: f32,
-        frame_size: vec2,
+        _frame_size: vec2,
         horizline_scaled: vec3,
         vertiline_scaled: vec3,
     ) -> [AoLut; SAMPLE_COUNT] {
@@ -37,8 +38,7 @@ impl InternalRenderer {
             let angle = (i as f32 + 1.0) * (6.9 * PI) / SAMPLE_COUNT as f32;
             let normalized_radius = (i as f32 + 1.0) * norm_radius_step;
             let radius = normalized_radius.sqrt() * max_radius;
-
-            let screen_shift = vec2::new(angle.sin(), angle.cos()) * radius;
+            let screen_shift = vec2!(angle.sin(), angle.cos()) * radius;
             let clip_shift = screen_shift * 2.0;
             let world_shift = Self::get_world_shift_from_clip_shift(
                 clip_shift,

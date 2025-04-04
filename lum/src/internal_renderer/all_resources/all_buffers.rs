@@ -1,16 +1,15 @@
 use std::mem;
 
-use internal_renderer::*;
-use lumal::{LumalSettings, Renderer};
-use vulkanalia::vk::{self};
-
 use crate::*;
+use internal_renderer::*;
+use lumal::vk;
+use lumal::{LumalSettings, Renderer};
 
 impl InternalRenderer {
     #[cold]
     #[optimize(size)]
     pub fn create_all_buffers(
-        lumal: &Renderer,
+        lumal: &mut Renderer,
         lum_settings: &Settings,
         lumal_settings: &LumalSettings,
     ) -> AllBuffers {
@@ -67,19 +66,19 @@ impl InternalRenderer {
             true,
         );
         AllBuffers {
-            staging_world: staging_world,
-            light_uniform: light_uniform,
-            uniform: uniform,
-            ao_lut_uniform: ao_lut_uniform,
-            gpu_radiance_updates: gpu_radiance_updates,
-            staging_radiance_updates: staging_radiance_updates,
-            gpu_particles: gpu_particles,
+            staging_world,
+            light_uniform,
+            uniform,
+            ao_lut_uniform,
+            gpu_radiance_updates,
+            staging_radiance_updates,
+            gpu_particles,
         }
     }
 
     #[cold]
     #[optimize(size)]
-    pub fn destroy_all_buffers(lumal: &Renderer, buffers: AllBuffers) {
+    pub fn destroy_all_buffers(lumal: &mut Renderer, buffers: AllBuffers) {
         println!("started destroying buffers");
         lumal.destroy_buffer_ring(buffers.staging_world);
         lumal.destroy_buffer_ring(buffers.light_uniform);

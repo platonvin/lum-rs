@@ -1,15 +1,10 @@
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, VoxelVisibility};
 use internal_renderer::*;
-use lumal::{atrace, BufferDeletion, Image, ImageDeletion};
-use qvek::vek::Vec3;
+use lumal::{atrace, vk::MappedMemoryRange, BufferDeletion, Image, ImageDeletion};
+use qvek::{vec3, vek::Vec3};
 // use rand::Rng;
-use vulkanalia::vk::{self, Handle};
-
 use crate::{types::*, *};
-
-fn from_addr<'b, T>(address: *const T) -> &'b T {
-    unsafe { &*address }
-}
+use lumal::vk;
 
 impl super::InternalRenderer {
     // Palette on CPU side is (should) be represented as a POD array
@@ -53,18 +48,22 @@ impl super::InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 block_palette_prepared.data.as_ptr(),
-                staging_buffer.mapped.unwrap() as *mut Voxel,
+                staging_buffer.allocation.mapped_ptr().unwrap().as_ptr() as *mut Voxel,
                 buffer_count,
             );
         };
 
         unsafe {
+            debug_assert!(staging_buffer.allocation.mapped_ptr().is_some());
             self.lumal
-                .allocator
-                .as_ref()
-                .unwrap()
-                .flush_allocation(staging_buffer.allocation, 0, buffer_size as u64)
-                .unwrap()
+                .device
+                .flush_mapped_memory_ranges(&[MappedMemoryRange {
+                    memory: staging_buffer.allocation.memory(),
+                    offset: 0,
+                    size: buffer_size as u64,
+                    ..Default::default()
+                }])
+                .unwrap();
         };
 
         for block_palette in self.independent_images.origin_block_palette.iter() {
@@ -104,7 +103,7 @@ impl super::InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.material_palette.as_ptr(),
-                staging_buffer.mapped.unwrap() as *mut Material,
+                staging_buffer.allocation.mapped_ptr().unwrap().as_ptr() as *mut Material,
                 buffer_count,
             );
         }
@@ -128,11 +127,7 @@ impl super::InternalRenderer {
     #[optimize(size)]
     pub fn extract_palette_from_scene(&mut self, scene: &ogt_vox::VoxScene) {
         for i in 0..scene.materials.matl.len() {
-            self.material_palette[i].albedo = vec3::new(
-                scene.palette.color[i].x as f32 / 255.0,
-                scene.palette.color[i].y as f32 / 255.0,
-                scene.palette.color[i].z as f32 / 255.0,
-            );
+            self.material_palette[i].albedo = vec3!(scene.palette.color[i].xyz()) / 255.0;
             self.material_palette[i].transparency = scene.palette.color[i].w as f32 / 255.0;
             self.material_palette[i].emmitness = 0.0;
             self.material_palette[i].roughness = 0.0;
@@ -164,7 +159,7 @@ impl super::InternalRenderer {
     pub fn load_mesh_from_file(
         &mut self,
         mesh_file: &str,
-        make_vertices: bool,
+        _make_vertices: bool,
         extrude_palette: bool,
     ) -> InternalMeshModel {
         atrace!();
@@ -189,7 +184,7 @@ impl super::InternalRenderer {
     pub fn load_meshes_from_file(
         &mut self,
         meshes_file: &str,
-        make_vertices: bool,
+        _make_vertices: bool,
         extrude_palette: bool,
     ) -> Vec<InternalMeshModel> {
         let scene = ogt_vox::read_scene_from_file(meshes_file).unwrap();
@@ -203,8 +198,7 @@ impl super::InternalRenderer {
         scene
             .models
             .iter()
-            .enumerate()
-            .map(|(i, model)| {
+            .map(|model| {
                 assert!(model.size_x > 0 && model.size_y > 0 && model.size_z > 0);
 
                 self.load_mesh_from_memory(model, true)
@@ -217,7 +211,7 @@ impl super::InternalRenderer {
     pub fn load_mesh_from_memory(
         &mut self,
         model: &ogt_vox::VoxModel,
-        make_vertices: bool,
+        _make_vertices: bool,
     ) -> InternalMeshModel {
         let size = uvec3 {
             x: model.size_x,
@@ -290,11 +284,9 @@ impl super::InternalRenderer {
     #[cold]
     #[optimize(size)]
     pub fn load_block_from_file(&mut self, block: BlockId, path: &str) {
-        // let scene_data = std::fs::read(path).unwrap();
-        let scene = ogt_vox::read_scene_from_file(path).unwrap(); // TODO: handle error
-                                                                  // let scene = from_addr(scene);
-                                                                  // assert!(scene.num_models == 1); // only one model per file supported for now
-                                                                  // blocks are always 16x16x16
+        let scene = ogt_vox::read_scene_from_file(path).unwrap();
+        assert!(scene.models.len() == 1); // only one model per file supported for now
+                                          // blocks are always 16x16x16
         let model = &scene.models[0];
         assert!(model.size_x == 16 && model.size_y == 16 && model.size_z == 16);
         self.load_block_from_memory(block, model);
@@ -348,12 +340,12 @@ impl super::InternalRenderer {
     ) -> FaceBuffers {
         let mut buffer = GreedyQuadsBuffer::new(padded_voxel_data.data.len());
 
-        lumal::trace!();
+        // lumal::trace!();
         // TODO: issue on block_mesh bad readme example
         let chunk_shape =
             block_mesh::ndshape::RuntimeShape::<u32, 3>::new([size.x + 2, size.y + 2, size.z + 2]);
 
-        lumal::trace!();
+        // lumal::trace!();
         let faces = block_mesh::RIGHT_HANDED_Y_UP_CONFIG.faces;
         greedy_quads(
             padded_voxel_data.data.as_slice(),
@@ -363,7 +355,7 @@ impl super::InternalRenderer {
             &faces,
             &mut buffer,
         );
-        lumal::trace!();
+        // lumal::trace!();
 
         assert!(buffer.quads.num_quads() > 0);
 
@@ -376,7 +368,7 @@ impl super::InternalRenderer {
         let mut positions = Vec::with_capacity(num_vertices);
         let mut normals = Vec::with_capacity(num_vertices);
 
-        lumal::trace!();
+        // lumal::trace!();
         // problem with block_mesh is that even tho it is voxel, values are still in
         // floats so for now we repack & convert them
         // TODO: fork, fix and optimize
@@ -387,7 +379,7 @@ impl super::InternalRenderer {
                 normals.extend_from_slice(&face.quad_mesh_normals());
             }
         }
-        lumal::trace!();
+        // lumal::trace!();
 
         assert!(positions.len() == normals.len());
         // positions only!
@@ -495,7 +487,10 @@ impl super::InternalRenderer {
         });
 
         self.lumal.image_deletion_queue.push(ImageDeletion {
-            image: mesh.voxels,
+            image: mesh.voxels.image,
+            view: mesh.voxels.view,
+            allocation: mesh.voxels.allocation,
+            mip_views: mesh.voxels.mip_views,
             lifetime: FRAMES_IN_FLIGHT as i32,
         });
     }
@@ -516,18 +511,18 @@ impl super::InternalRenderer {
         let buffer_size = buffer_count * std::mem::size_of::<Voxel>() as u32;
         assert_eq!(voxels.len(), ((size.x) * (size.y) * (size.z)) as usize);
 
-        let mut voxel_image = self.lumal.create_image(
-            vk::ImageType::_3D,
+        let voxel_image = self.lumal.create_image(
+            vk::ImageType::TYPE_3D,
             vk::Format::R8_UINT,
             vk::ImageUsageFlags::STORAGE
                 | vk::ImageUsageFlags::TRANSFER_DST
                 | vk::ImageUsageFlags::SAMPLED,
-            vulkanalia_vma::MemoryUsage::AutoPreferDevice,
-            vulkanalia_vma::AllocationCreateFlags::empty(),
+            // vulkanalia_vma::MemoryUsage::AutoPreferDevice,
+            // vulkanalia_vma::AllocationCreateFlags::empty(),
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(size),
             1,
-            vk::SampleCountFlags::_1,
+            vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Rayrace Voxels"),
         );
@@ -547,7 +542,7 @@ impl super::InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 voxels.as_ptr(),
-                staging_buffer.mapped.unwrap() as *mut Voxel,
+                staging_buffer.allocation.mapped_ptr().unwrap().as_ptr() as *mut Voxel,
                 buffer_count.try_into().unwrap(),
             );
         };

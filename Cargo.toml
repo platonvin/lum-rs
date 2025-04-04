@@ -87,16 +87,12 @@ cargo-features = ["profile-rustflags"]
         opt-level = "s"
     [profile.native.package.windows-targets]
         opt-level = "s"
-    [profile.native.package.vulkanalia-sys]
-        opt-level = "z"
     [profile.native.package.tracing-core]
         opt-level = "s"
     [profile.native.package.libloading]
         opt-level = "s"
     [profile.native.package.ahash]
         opt-level = "z"
-    [profile.native.package.num-traits]
-        opt-level = "s"
     [profile.native.package.cfg-if]
         opt-level = "z"
     [profile.native.package.rustc_version]
@@ -145,27 +141,15 @@ cargo-features = ["profile-rustflags"]
         opt-level = "z"
     [profile.native.package.approx]
         opt-level = "z"
-    [profile.native.package.num-complex]
-        opt-level = "z"
     [profile.native.package.ndcopy]
-        opt-level = "z"
-    [profile.native.package.num-bigint]
-        opt-level = "z"
-    [profile.native.package.num-iter]
         opt-level = "z"
     [profile.native.package.thread-id]
         opt-level = "z"
-    [profile.native.package.vulkanalia-vma]
-        opt-level = 3
     [profile.native.package.lazy_static]
         opt-level = "z"
     [profile.native.package.log]
         opt-level = "z"
-    [profile.native.package.num-rational]
-        opt-level = "z"
     [profile.native.package.ilattice]
-        opt-level = "z"
-    [profile.native.package.num]
         opt-level = "z"
     [profile.native.package.block-mesh]
         opt-level = "s"
@@ -175,8 +159,6 @@ cargo-features = ["profile-rustflags"]
         opt-level = "z"
     [profile.native.package.flame]
         opt-level = "z"
-    [profile.native.package.vulkanalia]
-        opt-level = 3
 
 [profile.bench]
     inherits = "release"

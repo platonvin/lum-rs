@@ -7,9 +7,10 @@ pub mod load;
 pub mod ogt_vox;
 pub mod render;
 
+use crate::internal_renderer::vk::Extent2D;
+use lumal::vk;
 use lumal::{ring::Ring, trace, RasterPipe};
 use render::{Camera, SunLight};
-use vulkanalia::vk::{self, DeviceV1_0, Extent2D};
 use winit::window::Window;
 
 use crate::{containers::Array3D, types::*};
@@ -227,23 +228,26 @@ impl InternalRenderer {
     pub unsafe fn create(
         lum_settings: &Settings,
         window: &Window,
-        mut foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+        foliage_descriptions: Vec<InternalMeshFoliageDesc>,
     ) -> InternalRenderer {
         let mut lumal_settings = lumal::LumalSettings::create_default();
         if cfg!(debug_assertions) {
             lumal_settings.debug = true;
         }
+        lumal::atrace!();
         let mut lumal = lumal::Renderer::create(&lumal_settings, window);
+        lumal::atrace!();
 
         let lightmap_extent = vk::Extent2D {
             width: 1024,
             height: 1024,
         };
+        lumal::atrace!();
 
         CHOSEN_DEPTH_FORMAT = lumal
             .find_supported_format(
                 &[DEPTH_FORMAT_PREFERED, DEPTH_FORMAT_SPARE],
-                vk::ImageType::_2D,
+                vk::ImageType::TYPE_2D,
                 vk::ImageTiling::OPTIMAL,
                 vk::ImageUsageFlags::TRANSFER_SRC
                     | vk::ImageUsageFlags::TRANSFER_DST
@@ -254,10 +258,12 @@ impl InternalRenderer {
             .unwrap();
 
         // section where most important (not init-related) vulkan resources are created. Some of them will be recreated on window resize
-        let mut independent_images =
-            InternalRenderer::create_independent_images(&lumal, lum_settings, &lumal_settings);
-        let buffers = InternalRenderer::create_all_buffers(&lumal, lum_settings, &lumal_settings);
-        let samplers = InternalRenderer::create_all_samplers(&lumal, lum_settings, &lumal_settings);
+        let independent_images =
+            InternalRenderer::create_independent_images(&mut lumal, lum_settings, &lumal_settings);
+        let buffers =
+            InternalRenderer::create_all_buffers(&mut lumal, lum_settings, &lumal_settings);
+        let samplers =
+            InternalRenderer::create_all_samplers(&mut lumal, lum_settings, &lumal_settings);
         let command_buffers =
             InternalRenderer::create_all_command_buffers(&lumal, lum_settings, &lumal_settings);
 
@@ -328,10 +334,9 @@ impl InternalRenderer {
             block_copies_queue: vec![],
             block_clear_queue: vec![],
             foliage_descriptions,
-            block_palette_meshes: vec![
-                Default::default();
-                lum_settings.static_block_palette_size as usize
-            ],
+            block_palette_meshes: (0..lum_settings.static_block_palette_size)
+                .map(|_| InternalMeshBlock::default())
+                .collect(),
         };
 
         trace!();
@@ -369,7 +374,15 @@ impl InternalRenderer {
         self.lumal.recreate_swapchain(window);
         lumal::atrace!();
 
-        let settings_copy = self.lumal.settings.clone();
+        unsafe {
+            self.lumal
+                .device
+                .destroy_descriptor_pool(self.lumal.vulkan_data.descriptor_pool, None);
+            self.lumal.vulkan_data.descriptor_pool = vk::DescriptorPool::null();
+        };
+        self.lumal.vulkan_data.descriptor_pool = unsafe { self.lumal.create_descriptor_pool() };
+
+        let settings_copy = self.lumal.settings;
         let (dimages, pipes, rpasses) = create_dependent(
             &mut self.lumal,
             &self.settings,
@@ -392,18 +405,23 @@ impl InternalRenderer {
         let mut lumal = self.lumal;
 
         // TODO: there is something im missing in winit that should make this unnecessary. How did i do it in C++?
-        lumal.device.device_wait_idle().unwrap();
-        Self::destroy_independent_images(&lumal, &mut self.independent_images);
-        Self::destroy_all_buffers(&lumal, self.buffers);
+        {
+            lumal.device.device_wait_idle().unwrap();
+            Self::destroy_independent_images(&mut lumal, self.independent_images);
+            Self::destroy_all_buffers(&mut lumal, self.buffers);
 
-        lumal.process_deletion_queues_untill_all_done();
+            lumal.process_deletion_queues_untill_all_done();
 
-        Self::destroy_dependent(&mut lumal, self.dependent_images, self.pipes, self.rpasses);
+            Self::destroy_dependent(&mut lumal, self.dependent_images, self.pipes, self.rpasses);
 
-        Self::destroy_all_samplers(&mut lumal, &mut self.samplers);
-        Self::destroy_all_command_buffers(&mut lumal, &self.cmdbufs);
+            Self::destroy_all_samplers(&mut lumal, &mut self.samplers);
+            Self::destroy_all_command_buffers(&mut lumal, &self.cmdbufs);
+            lumal::atrace!();
+        }
+        lumal::atrace!();
 
         lumal.destroy();
+        lumal::atrace!();
     }
 
     unsafe fn destroy_dependent(
@@ -412,7 +430,7 @@ impl InternalRenderer {
         pipes: AllPipes,
         rpasses: AllRenderPasses,
     ) {
-        Self::destroy_dependent_images(&*lumal, dependent_images);
+        Self::destroy_dependent_images(lumal, dependent_images);
         Self::destroy_all_pipes(lumal, pipes);
         Self::destroy_all_rpasses(lumal, rpasses);
     }
@@ -428,7 +446,7 @@ fn create_dependent(
     samplers: &AllSamplers,
 ) -> (AllSwapchainDependentImages, AllPipes, AllRenderPasses) {
     let mut dependent_images =
-        InternalRenderer::create_dependent_images(&*lumal, lum_settings, &lumal_settings);
+        InternalRenderer::create_dependent_images(lumal, lum_settings, lumal_settings);
     let mut pipes: AllPipes = AllPipes::default();
     pipes
         .raygen_foliage_pipes
@@ -437,7 +455,7 @@ fn create_dependent(
     let renderpasses: AllRenderPasses = InternalRenderer::create_all_rpasses(
         lumal,
         lum_settings,
-        &lumal_settings,
+        lumal_settings,
         independent_images,
         &mut dependent_images,
         &mut pipes,
@@ -448,9 +466,9 @@ fn create_dependent(
         InternalRenderer::create_all_pipes(
             lumal,
             lum_settings,
-            &lumal_settings,
+            lumal_settings,
             buffers,
-            &*independent_images,
+            independent_images,
             &dependent_images,
             samplers,
             &mut pipes,

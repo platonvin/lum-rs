@@ -1,6 +1,6 @@
 use internal_renderer::*;
+use lumal::vk;
 use lumal::{descriptors::*, LumalSettings, Renderer};
-use vulkanalia::vk::{self, Handle};
 
 use crate::*;
 

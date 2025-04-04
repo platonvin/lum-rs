@@ -2,9 +2,10 @@
 
 pub type MatID = u8;
 
+use lumal::vk;
 use qvek::vek;
-use vulkanalia::vk;
 
+// my glsl brain dictaited me to do this
 pub type uvec4 = vek::Vec4<u32>;
 pub type u16vec4 = vek::Vec4<u16>;
 pub type u8vec4 = vek::Vec4<u8>;
@@ -34,8 +35,9 @@ pub type dvec3 = vek::Vec3<f64>;
 pub type dvec2 = vek::Vec2<f64>;
 
 pub type mat4 = vek::Mat4<f32>;
-// pub type dmat4 = vek::Mat4<f32>;
+pub type dmat4 = vek::Mat4<f64>;
 pub type quat = vek::quaternion::Quaternion<f32>;
+pub type dquat = vek::quaternion::Quaternion<f64>;
 
 #[allow(non_camel_case_types)]
 pub type BlockId = i16;
@@ -114,7 +116,7 @@ pub struct IndexedVertices {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct FaceBuffers {
     // zPz means zero-Positive-zero
     // zzN means zero-zero-Negative
@@ -158,7 +160,7 @@ pub struct FaceBuffersShared {
 
 // handle (reference) to a mesh.
 // You can clone it but still need to unload one time
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct InternalMeshModel {
     pub triangles: FaceBuffers,
     // when model has multiple sprites in a spritesheet, `voxels` contains all of them, stacked along `Y`
@@ -175,7 +177,7 @@ pub struct InternalMeshModel {
 
 // handle (reference) to a block triangles.
 // You can clone it but still need to unload one time
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct InternalMeshBlock {
     pub triangles: FaceBuffers,
 }

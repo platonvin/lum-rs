@@ -6,10 +6,10 @@ use crate::*;
 impl InternalRenderer {
     #[cold]
     #[optimize(size)]
-        pub fn create_all_command_buffers(
+    pub fn create_all_command_buffers(
         lumal: &Renderer,
-        lum_settings: &Settings,
-        lumal_settings: &LumalSettings,
+        _lum_settings: &Settings,
+        _lumal_settings: &LumalSettings,
     ) -> AllCommandBuffers {
         let compute_command_buffers = lumal.create_command_buffer();
         let lightmap_command_buffers = lumal.create_command_buffer();
@@ -26,7 +26,7 @@ impl InternalRenderer {
 
     #[cold]
     #[optimize(size)]
-        pub fn destroy_all_command_buffers(lumal: &Renderer, command_buffers: &AllCommandBuffers) {
+    pub fn destroy_all_command_buffers(lumal: &Renderer, command_buffers: &AllCommandBuffers) {
         lumal.destroy_command_buffer(&command_buffers.compute_command_buffers);
         lumal.destroy_command_buffer(&command_buffers.lightmap_command_buffers);
         lumal.destroy_command_buffer(&command_buffers.graphics_command_buffers);

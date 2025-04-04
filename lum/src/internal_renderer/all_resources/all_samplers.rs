@@ -1,6 +1,6 @@
 use internal_renderer::*;
+use lumal::vk;
 use lumal::{LumalSettings, Renderer};
-use vulkanalia::vk::{self};
 
 use crate::*;
 
@@ -9,15 +9,13 @@ impl InternalRenderer {
     #[optimize(size)]
     pub fn create_all_samplers(
         lumal: &Renderer,
-        lum_settings: &Settings,
-        lumal_settings: &LumalSettings,
+        _lum_settings: &Settings,
+        _lumal_settings: &LumalSettings,
     ) -> AllSamplers {
         let create_sampler =
             |info: vk::SamplerCreateInfo| -> vk::Sampler { lumal.create_sampler(&info) };
 
         let base_sampler_info = vk::SamplerCreateInfo {
-            s_type: vk::StructureType::SAMPLER_CREATE_INFO,
-            next: std::ptr::null(),
             flags: vk::SamplerCreateFlags::empty(),
             mag_filter: vk::Filter::NEAREST,
             min_filter: vk::Filter::NEAREST,
@@ -34,7 +32,7 @@ impl InternalRenderer {
             max_lod: 0.0,
             border_color: vk::BorderColor::FLOAT_OPAQUE_BLACK,
             unnormalized_coordinates: vk::FALSE,
-            // ..Default::default()
+            ..Default::default()
         };
 
         // Nearest Sampler

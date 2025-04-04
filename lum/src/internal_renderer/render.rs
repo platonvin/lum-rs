@@ -1,16 +1,13 @@
-use crate::{assert_assume, consts::*, containers::BitArray3d, internal_renderer::*};
+use crate::{assert_assume, containers::BitArray3d, internal_renderer::*};
 use std::mem::transmute;
 
 use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
 // use multiversion::multiversion;
+use lumal::vk;
 use qvek::{
-    to_i8vec4,
+    i16vec3, i16vec4, i8vec4, ivec3, ivec4, uvec2, uvec3, vec3, vec4,
     vek::{Clamp, FrustumPlanes},
-};
-use vulkanalia::vk::{
-    AccessFlags, DeviceV1_0, Handle, HasBuilder, ImageSubresourceLayers,
-    KhrPushDescriptorExtension, PipelineStageFlags, ShaderStageFlags,
 };
 
 use crate::types::*;
@@ -34,14 +31,14 @@ pub struct Camera {
 }
 impl Default for Camera {
     fn default() -> Self {
-        let origin_view_size = vec2::new(1920.0, 1080.0);
+        let origin_view_size = qvek::vec2!(1920, 1080);
         let pixels_in_voxel = 5.0;
-        let camera_dir = vec3::new(0.61, 1.0, -0.8).normalized();
-        let camera_ray_dir_plane = vec3::new(camera_dir.x, camera_dir.y, 0.0).normalized();
-        let horizline = camera_ray_dir_plane.cross(vec3::new(0.0, 0.0, 1.0)).normalized();
+        let camera_dir = vec3!(0.61, 1.0, -0.8).normalized();
+        let camera_ray_dir_plane = vec3!(camera_dir.xy(), 0).normalized();
+        let horizline = camera_ray_dir_plane.cross(vec3!(0, 0, 1)).normalized();
 
         Self {
-            camera_pos: vec3::new(60.0, 0.0, 194.0),
+            camera_pos: vec3!(60, 0, 194),
             camera_dir,
             camera_transform: mat4::identity(),
             pixels_in_voxel,
@@ -63,14 +60,14 @@ impl Default for SunLight {
     fn default() -> Self {
         Self {
             light_transform: Default::default(),
-            light_dir: vec3::new(0.5, 0.5, -0.9).normalized(),
+            light_dir: vec3!(0.5, 0.5, -0.9).normalized(),
         }
     }
 }
 
 impl Camera {
     fn update_camera(&mut self) {
-        let up = vec3::new(0.0, 0.0, 1.0); // Up vector
+        let up = vec3!(0, 0, 1); // Up vector
         self.view_size = self.origin_view_size / self.pixels_in_voxel;
         // RIGHT HANDED MATH EVERYWHERE
         let view = mat4::look_at_rh(self.camera_pos, self.camera_pos + self.camera_dir, up);
@@ -84,10 +81,9 @@ impl Camera {
         }); // => *(2000.0/2) for decoding
             // dbg!(&projection);
         self.camera_transform = projection * view;
-        self.camera_ray_dir_plane =
-            vec3::new(self.camera_dir.x, self.camera_dir.y, 0.0).normalized();
+        self.camera_ray_dir_plane = vec3!(self.camera_dir.xy(), 0).normalized();
 
-        self.horizline = self.camera_ray_dir_plane.cross(vec3::new(0.0, 0.0, 1.0)).normalized();
+        self.horizline = self.camera_ray_dir_plane.cross(vec3!(0, 0, 1)).normalized();
 
         self.vertiline = self.camera_dir.cross(self.horizline).normalized();
     }
@@ -95,14 +91,9 @@ impl Camera {
 
 impl SunLight {
     pub fn update_light_transform(&mut self, world_size: uvec3) {
-        let _horizon = vec3::new(1.0, 0.0, 0.0).normalized();
-        let up = vec3::new(0.0, 0.0, 1.0).normalized();
-        let light_pos = vec3::new(
-            f32::from((world_size.x * 16_u32) as i16),
-            f32::from((world_size.y * 16_u32) as i16),
-            0.0,
-        ) / 2.0
-            - (1.0 * 16.0 * self.light_dir);
+        let _horizon = vec3!(1, 0, 0).normalized();
+        let up = vec3!(0, 0, 1).normalized();
+        let light_pos = vec3!(world_size.xy() * 16, 0) / 2.0 - (1.0 * 16.0 * self.light_dir);
 
         let view = mat4::look_at_rh(light_pos, light_pos + self.light_dir, up);
         let voxel_in_pixels = 5.0;
@@ -156,7 +147,7 @@ impl InternalRenderer {
         let x = n % BLOCK_PALETTE_SIZE_X as usize;
         let y = n / BLOCK_PALETTE_SIZE_X as usize;
         debug_assert!(y <= BLOCK_PALETTE_SIZE_Y as usize);
-        uvec2::new(x as u32, y as u32)
+        uvec2!(x, y)
     }
 
     // allocates temp block in palette for every block that intersects with every mesh blockified
@@ -166,36 +157,20 @@ impl InternalRenderer {
         let border_in_voxel = get_shift(shift * rotate, mesh.total_size);
 
         let mut border = iAABB {
-            min: ivec3::new(
-                (border_in_voxel.min.x as i32 - 1) / 16,
-                (border_in_voxel.min.y as i32 - 1) / 16,
-                (border_in_voxel.min.z as i32 - 1) / 16,
-            ),
-            max: ivec3::new(
-                (border_in_voxel.max.x as i32 + 1) / 16,
-                (border_in_voxel.max.y as i32 + 1) / 16,
-                (border_in_voxel.max.z as i32 + 1) / 16,
-            ),
+            min: ivec3!(border_in_voxel.min - 1.0) / 16,
+            max: ivec3!(border_in_voxel.max + 1.0) / 16,
         };
 
         // clamp to world size so no out of bounds
         border.min = ivec3::clamped(
             border.min,
             ivec3::zero(),
-            ivec3::new(
-                self.settings.world_size.x as i32 - 1,
-                self.settings.world_size.y as i32 - 1,
-                self.settings.world_size.z as i32 - 1,
-            ),
+            ivec3!(self.settings.world_size - 1),
         );
         border.max = ivec3::clamped(
             border.max,
             ivec3::zero(),
-            ivec3::new(
-                self.settings.world_size.x as i32 - 1,
-                self.settings.world_size.y as i32 - 1,
-                self.settings.world_size.z as i32 - 1,
-            ),
+            ivec3!(self.settings.world_size - 1),
         );
 
         for zz in border.min.z..=border.max.z {
@@ -212,7 +187,7 @@ impl InternalRenderer {
                         // because zeroing is fast
                         if current_block != 0 {
                             let static_block_copy = vk::ImageCopy {
-                                src_subresource: ImageSubresourceLayers {
+                                src_subresource: vk::ImageSubresourceLayers {
                                     aspect_mask: vk::ImageAspectFlags::COLOR,
                                     mip_level: 0,
                                     base_array_layer: 0,
@@ -223,7 +198,7 @@ impl InternalRenderer {
                                     y: src_block.y as i32 * 16,
                                     z: 0,
                                 },
-                                dst_subresource: ImageSubresourceLayers {
+                                dst_subresource: vk::ImageSubresourceLayers {
                                     aspect_mask: vk::ImageAspectFlags::COLOR,
                                     mip_level: 0,
                                     base_array_layer: 0,
@@ -263,20 +238,20 @@ impl InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.current_world.data.as_ptr(),
-                self.buffers.staging_world.current().mapped.unwrap() as *mut BlockId,
+                self.buffers.staging_world.current().allocation.mapped_ptr().unwrap().as_ptr()
+                    as *mut BlockId,
                 count_to_copy, // converts to size automatically
             )
         };
         unsafe {
             self.lumal
-                .allocator
-                .as_ref()
-                .unwrap()
-                .flush_allocation(
-                    self.buffers.staging_world.current().allocation,
-                    0,
-                    size_to_copy as u64,
-                )
+                .device
+                .flush_mapped_memory_ranges(&[vk::MappedMemoryRange {
+                    memory: self.buffers.staging_world.current().allocation.memory(),
+                    offset: 0,
+                    size: size_to_copy as u64,
+                    ..Default::default()
+                }])
                 .unwrap();
         };
     }
@@ -483,7 +458,7 @@ impl InternalRenderer {
                 for xx in 0..self.settings.world_size.x {
                     if visited.get(xx as usize, yy as usize, zz as usize) {
                         assert_assume!(i < self.radiance_updates.len());
-                        self.radiance_updates[i] = to_i8vec4!(xx, yy, zz, 0);
+                        self.radiance_updates[i] = i8vec4!(xx, yy, zz, 0);
                         i += 1;
                     }
                 }
@@ -524,7 +499,13 @@ impl InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.radiance_updates.as_ptr(),
-                self.buffers.staging_radiance_updates.first().mapped.unwrap() as *mut i8vec4,
+                self.buffers
+                    .staging_radiance_updates
+                    .first()
+                    .allocation
+                    .mapped_ptr()
+                    .unwrap()
+                    .as_ptr() as *mut i8vec4,
                 count_to_copy, // converts to size automatically
             )
         };
@@ -535,16 +516,16 @@ impl InternalRenderer {
             self.buffers.staging_radiance_updates.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.gpu_radiance_updates.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         let copy = vk::BufferCopy {
@@ -577,8 +558,8 @@ impl InternalRenderer {
             self.buffers.gpu_radiance_updates.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         // binds descriptor sets and pipeline itself
@@ -600,7 +581,7 @@ impl InternalRenderer {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.radiance_pipe.line_layout,
-                ShaderStageFlags::COMPUTE,
+                vk::ShaderStageFlags::COMPUTE,
                 0,
                 push_constant.as_u8_slice(),
             );
@@ -625,15 +606,15 @@ impl InternalRenderer {
             self.independent_images.radiance_cache.first(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            GENERAL,
-            GENERAL, // Most of images are in GENERAL because:
-                     // 1. Highly optimized GPU code uses images in multiple ways, which restricts to GENERAL only
-                     // 2. When it does not, gained perfomance is negligible compared to the (my) work required to manage layouts
-                     // 3. Most popular GPU's dont give a fuck about layouts (NVIDIA)
-                     // 4. Even AMD did not gain any perfomance in my tests (at some point, i did whole thing with correct layouts and barriers and it was the same perfomance)
-                     // 5. anyways, there is still reason to do it, but only when all other optimizations are done
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL, // Most of images are in GENERAL because:
+                                      // 1. Highly optimized GPU code uses images in multiple ways, which restricts to GENERAL only
+                                      // 2. When it does not, gained perfomance is negligible compared to the (my) work required to manage layouts
+                                      // 3. Most popular GPU's dont give a fuck about layouts (NVIDIA)
+                                      // 4. Even AMD did not gain any perfomance in my tests (at some point, i did whole thing with correct layouts and barriers and it was the same perfomance)
+                                      // 5. anyways, there is still reason to do it, but only when all other optimizations are done
         );
     }
 
@@ -668,51 +649,52 @@ impl InternalRenderer {
             ivec2::new(self_src_offset, self_dst_offset)
         };
 
-        let self_src_offset = ivec3::new(
+        let self_src_offset = ivec3!(
             process_axis(cam_shift.x, self.settings.world_size.x as i32).x,
             process_axis(cam_shift.y, self.settings.world_size.y as i32).x,
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).x,
+            process_axis(cam_shift.z, self.settings.world_size.z as i32).x
         );
-        let self_dst_offset = ivec3::new(
+        let self_dst_offset = ivec3!(
             process_axis(cam_shift.x, self.settings.world_size.x as i32).y,
             process_axis(cam_shift.y, self.settings.world_size.y as i32).y,
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).y,
+            process_axis(cam_shift.z, self.settings.world_size.z as i32).y
         );
 
-        let intersection_size = uvec3::new(
-            self.settings.world_size.x - cam_shift.x.unsigned_abs(),
-            self.settings.world_size.y - cam_shift.y.unsigned_abs(),
-            self.settings.world_size.z - cam_shift.z.unsigned_abs(),
-        );
+        let intersection_size = self.settings.world_size
+            - uvec3!(
+                cam_shift.x.unsigned_abs(),
+                cam_shift.y.unsigned_abs(),
+                cam_shift.z.unsigned_abs()
+            );
 
         let mut copy_region = vk::ImageCopy {
-            src_subresource: vk::ImageSubresourceLayers::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_array_layer(0)
-                .layer_count(1)
-                .mip_level(0)
-                .build(),
-            dst_subresource: vk::ImageSubresourceLayers::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_array_layer(0)
-                .layer_count(1)
-                .mip_level(0)
-                .build(),
-            extent: vk::Extent3D::builder()
-                .width(intersection_size.x)
-                .height(intersection_size.y)
-                .depth(intersection_size.z)
-                .build(),
-            src_offset: vk::Offset3D::builder()
-                .x(self_src_offset.x) // we want 0,0,0 to end up in shift
-                .y(self_src_offset.y)
-                .z(self_src_offset.z)
-                .build(),
-            dst_offset: vk::Offset3D::builder()
-                .x(0) // no reason to copy anywhere else - DST IS TEMP STORAGE
-                .y(0)
-                .z(0)
-                .build(),
+            src_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_array_layer: 0,
+                layer_count: 1,
+                mip_level: 0,
+            },
+            dst_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_array_layer: 0,
+                layer_count: 1,
+                mip_level: 0,
+            },
+            extent: vk::Extent3D {
+                width: intersection_size.x,
+                height: intersection_size.y,
+                depth: intersection_size.z,
+            },
+            src_offset: vk::Offset3D {
+                x: self_src_offset.x,
+                y: self_src_offset.y,
+                z: self_src_offset.z,
+            },
+            dst_offset: vk::Offset3D {
+                x: 0, // no reason to copy anywhere else - DST IS TEMP STORAGE
+                y: 0,
+                z: 0,
+            },
         };
 
         self.lumal.image_memory_barrier(
@@ -720,8 +702,8 @@ impl InternalRenderer {
             self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::TRANSFER, // well sometimes i feel like i should pick better barriers
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -730,8 +712,8 @@ impl InternalRenderer {
             self.independent_images.radiance_cache.previous(),
             vk::PipelineStageFlags::TRANSFER, // well sometimes i feel like i should pick better barriers
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -753,8 +735,8 @@ impl InternalRenderer {
             self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -763,28 +745,28 @@ impl InternalRenderer {
             self.independent_images.radiance_cache.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
 
         // copy back (setting up region)
-        copy_region.extent = vk::Extent3D::builder()
-            .width(intersection_size.x)
-            .height(intersection_size.y)
-            .depth(intersection_size.z)
-            .build();
-        copy_region.src_offset = vk::Offset3D::builder()
-            .x(0) // we want 0,0,0 to end up in shift
-            .y(0)
-            .z(0)
-            .build();
-        copy_region.dst_offset = vk::Offset3D::builder()
-            .x(self_dst_offset.x) // well, this is how to tell it to end up in (shift)
-            .y(self_dst_offset.y)
-            .z(self_dst_offset.z)
-            .build();
+        copy_region.extent = vk::Extent3D {
+            width: intersection_size.x,
+            height: intersection_size.y,
+            depth: intersection_size.z,
+        };
+        copy_region.src_offset = vk::Offset3D {
+            x: 0, // we want 0,0,0 to end up in shift
+            y: 0,
+            z: 0,
+        };
+        copy_region.dst_offset = vk::Offset3D {
+            x: self_dst_offset.x, // well, this is how to tell it to end up in (shift)
+            y: self_dst_offset.y,
+            z: self_dst_offset.z,
+        };
         // actually copy back
         unsafe {
             self.lumal.device.cmd_copy_image(
@@ -802,8 +784,8 @@ impl InternalRenderer {
             self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -812,8 +794,8 @@ impl InternalRenderer {
             self.independent_images.radiance_cache.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -823,13 +805,13 @@ impl InternalRenderer {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         let clear_color = vk::ClearColorValue::default();
-        let clear_range = vk::ImageSubresourceRange::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .base_mip_level(0)
-            .level_count(1)
-            .base_array_layer(0)
-            .layer_count(1)
-            .build();
+        let clear_range = vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
 
         // Transition images for copying (lol no transition atm)
         self.lumal.image_memory_barrier(
@@ -837,8 +819,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -847,8 +829,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -870,8 +852,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -880,8 +862,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -889,27 +871,25 @@ impl InternalRenderer {
         // TODO: multi-raw copy
         debug_assert!(self.static_block_palette_size < BLOCK_PALETTE_SIZE_X);
         let static_block_palette_copy = vk::ImageCopy {
-            src_subresource: vk::ImageSubresourceLayers::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_array_layer(0)
-                .layer_count(1)
-                .mip_level(0)
-                .build(),
-            dst_subresource: vk::ImageSubresourceLayers::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_array_layer(0)
-                .layer_count(1)
-                .mip_level(0)
-                .build(),
-            extent: vk::Extent3D::builder()
-                // TODO: multi-raw copy
-                .width(16 * self.static_block_palette_size)
-                // .height(16 * self.static_block_palette_size)
-                .height(16)
-                .depth(16)
-                .build(),
-            src_offset: vk::Offset3D::builder().x(0).y(0).z(0).build(),
-            dst_offset: vk::Offset3D::builder().x(0).y(0).z(0).build(),
+            src_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_array_layer: 0,
+                layer_count: 1,
+                mip_level: 0,
+            },
+            dst_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_array_layer: 0,
+                layer_count: 1,
+                mip_level: 0,
+            },
+            extent: vk::Extent3D {
+                width: 16 * self.static_block_palette_size,
+                height: 16,
+                depth: 16,
+            },
+            src_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+            dst_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
         };
 
         // copy static blocks back (to zeroed). So clean version of palette now
@@ -930,8 +910,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -940,8 +920,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -969,8 +949,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -979,25 +959,30 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.current(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
 
         // copy the entire world buffer to the world image (there is no direct way so intermediate copy (buffer) is needed)
-        let copy_region = vk::BufferImageCopy::builder()
-            .image_extent(vk::Extent3D {
-                width: self.settings.world_size.x,
-                height: self.settings.world_size.y,
-                depth: self.settings.world_size.z,
-            })
-            .image_subresource(vk::ImageSubresourceLayers {
+        let copy_region = vk::BufferImageCopy {
+            buffer_offset: 0,
+            buffer_row_length: 0,
+            buffer_image_height: 0,
+            image_subresource: vk::ImageSubresourceLayers {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 mip_level: 0,
                 base_array_layer: 0,
                 layer_count: 1,
-            });
+            },
+            image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+            image_extent: vk::Extent3D {
+                width: self.settings.world_size.x,
+                height: self.settings.world_size.y,
+                depth: self.settings.world_size.z,
+            },
+        };
 
         // sync
         self.lumal.image_memory_barrier(
@@ -1005,8 +990,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::TRANSFER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -1027,8 +1012,8 @@ impl InternalRenderer {
             self.independent_images.origin_block_palette.previous(),
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -1042,19 +1027,24 @@ impl InternalRenderer {
 
     pub fn map_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
-        let model_voxels_info = vk::DescriptorImageInfo::builder()
-            .image_view(mesh.voxels.view)
-            .image_layout(vk::ImageLayout::GENERAL);
+        let model_voxels_info = vk::DescriptorImageInfo {
+            image_view: mesh.voxels.view,
+            image_layout: vk::ImageLayout::GENERAL,
+            sampler: vk::Sampler::null(),
+        };
         let binding = [model_voxels_info];
-        let model_voxels_write = vk::WriteDescriptorSet::builder()
-            .dst_set(vk::DescriptorSet::null())
-            .dst_binding(0)
-            .dst_array_element(0)
-            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-            .image_info(&binding);
+        let model_voxels_write = vk::WriteDescriptorSet {
+            dst_set: vk::DescriptorSet::null(),
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+            descriptor_count: 1,
+            p_image_info: &binding as *const _,
+            ..Default::default()
+        };
 
         unsafe {
-            self.lumal.device.cmd_push_descriptor_set_khr(
+            self.lumal.push_descriptors_loader.cmd_push_descriptor_set(
                 *command_buffer,
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipes.map_pipe.line_layout,
@@ -1070,16 +1060,8 @@ impl InternalRenderer {
         let border_in_voxel = get_shift(transform, mesh.total_size);
 
         let border = iAABB {
-            min: ivec3::new(
-                border_in_voxel.min.x.floor() as i32,
-                border_in_voxel.min.y.floor() as i32,
-                border_in_voxel.min.z.floor() as i32,
-            ),
-            max: ivec3::new(
-                border_in_voxel.max.x.ceil() as i32,
-                border_in_voxel.max.y.ceil() as i32,
-                border_in_voxel.max.z.ceil() as i32,
-            ),
+            min: ivec3!(border_in_voxel.min.floor()),
+            max: ivec3!(border_in_voxel.max.ceil()),
         };
 
         let map_area = border.max - border.min;
@@ -1091,14 +1073,14 @@ impl InternalRenderer {
         }
         let push_constant = PushConstant {
             trans: transform.inverted(),
-            shift: ivec4::new(border.min.x, border.min.y, border.min.z, 0),
+            shift: ivec4!(border.min, 0),
         };
 
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.map_pipe.line_layout,
-                ShaderStageFlags::COMPUTE,
+                vk::ShaderStageFlags::COMPUTE,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1122,8 +1104,8 @@ impl InternalRenderer {
             self.independent_images.world.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::FRAGMENT_SHADER,
-            AccessFlags::SHADER_WRITE,
-            AccessFlags::SHADER_READ,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::SHADER_READ,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -1150,10 +1132,10 @@ impl InternalRenderer {
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.light_uniform.current(),
-            PipelineStageFlags::ALL_COMMANDS,
-            PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         unsafe {
@@ -1169,10 +1151,10 @@ impl InternalRenderer {
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.light_uniform.current(),
-            PipelineStageFlags::ALL_COMMANDS,
-            PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         self.lumal.cmd_begin_renderpass(
@@ -1222,40 +1204,15 @@ impl InternalRenderer {
 
         let buffer_patch = BufferPatch {
             trans_w2s: self.camera.camera_transform,
-            campos: vec4::new(
-                self.camera.camera_pos.x,
-                self.camera.camera_pos.y,
-                self.camera.camera_pos.z,
-                0.0,
-            ),
-            camdir: vec4::new(
-                self.camera.camera_dir.x,
-                self.camera.camera_dir.y,
-                self.camera.camera_dir.z,
-                0.0,
-            ),
-            horizline_scaled: vec4::new(
-                horizline_scaled.x,
-                horizline_scaled.y,
-                horizline_scaled.z,
-                0.0,
-            ),
-            vertiline_scaled: vec4::new(
-                vertiline_scaled.x,
-                vertiline_scaled.y,
-                vertiline_scaled.z,
-                0.0,
-            ),
-            global_light_dir: vec4::new(
-                self.light.light_dir.x,
-                self.light.light_dir.y,
-                self.light.light_dir.z,
-                0.0,
-            ),
+            campos: vec4!(self.camera.camera_pos, 0),
+            camdir: vec4!(self.camera.camera_dir, 0),
+            horizline_scaled: vec4!(horizline_scaled, 0),
+            vertiline_scaled: vec4!(vertiline_scaled, 0),
+            global_light_dir: vec4!(self.light.light_dir, 0),
             lightmap_proj: self.light.light_transform,
-            size: vec2::new(
-                self.lumal.vulkan_data.swapchain_extent.width as f32,
-                self.lumal.vulkan_data.swapchain_extent.height as f32,
+            size: qvek::vec2!(
+                self.lumal.vulkan_data.swapchain_extent.width,
+                self.lumal.vulkan_data.swapchain_extent.height
             ),
             timeseed: self.lumal.frame,
         };
@@ -1265,10 +1222,10 @@ impl InternalRenderer {
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.uniform.current(),
-            PipelineStageFlags::ALL_COMMANDS,
-            PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         unsafe {
@@ -1284,10 +1241,10 @@ impl InternalRenderer {
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.uniform.current(),
-            PipelineStageFlags::ALL_COMMANDS,
-            PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         self.lumal.cmd_begin_renderpass(
@@ -1342,7 +1299,7 @@ impl InternalRenderer {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_blocks_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 8,
                 push_constant.as_u8_slice(),
             )
@@ -1384,14 +1341,14 @@ impl InternalRenderer {
 
         let push_constant = PushConstant {
             block: block_id,
-            shift: i16vec3::new(shift.x as i16, shift.y as i16, shift.z as i16),
+            shift: i16vec3!(shift),
         };
 
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_blocks_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1401,7 +1358,7 @@ impl InternalRenderer {
         macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
             ($__normal:expr, $__face:ident) => {
                 let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
-                let inorm = ivec3::new($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
+                let inorm = ivec3!($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
                 if self.is_face_visible(fnorm, self.camera.camera_dir) {
                     self.raygen_block_face(inorm, &block_mesh.triangles.$__face, block_id);
                 }
@@ -1435,14 +1392,14 @@ impl InternalRenderer {
             inorm: vec4,
         }
         let push_constant = PushConstant {
-            inorm: vec4::new(normal.x, normal.y, normal.z, 0.0),
+            inorm: vec4!(normal, 0),
         };
 
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_models_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 32, // TODO sizeof of merged struct
                 push_constant.as_u8_slice(),
             )
@@ -1485,38 +1442,37 @@ impl InternalRenderer {
         }
         let push_constant = PushConstant {
             rot: model_trans.rotation,
-            shift: vec4::new(
-                model_trans.translation.x,
-                model_trans.translation.y,
-                model_trans.translation.z,
-                0.0,
-            ),
+            shift: vec4!(model_trans.translation, 0),
             // fnormal: vec4::new(normal.x, normal.y, normal.z, 0.0),
         };
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_models_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )
         }
 
-        let model_voxels_info = vk::DescriptorImageInfo::builder()
-            .image_view(model_mesh.voxels.view)
-            .image_layout(vk::ImageLayout::GENERAL)
-            .sampler(self.samplers.unnorm_nearest);
+        let model_voxels_info = vk::DescriptorImageInfo {
+            image_view: model_mesh.voxels.view,
+            image_layout: vk::ImageLayout::GENERAL,
+            sampler: self.samplers.unnorm_nearest,
+        };
         let binding = [model_voxels_info];
-        let model_voxels_write = vk::WriteDescriptorSet::builder()
-            .dst_set(vk::DescriptorSet::null())
-            .dst_binding(0)
-            .dst_array_element(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(&binding);
+        let model_voxels_write = vk::WriteDescriptorSet {
+            dst_set: vk::DescriptorSet::null(),
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+            p_image_info: &binding as *const _,
+            ..Default::default()
+        };
 
         unsafe {
-            self.lumal.device.cmd_push_descriptor_set_khr(
+            self.lumal.push_descriptors_loader.cmd_push_descriptor_set(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipes.raygen_models_pipe.line_layout,
@@ -1581,13 +1537,13 @@ impl InternalRenderer {
             shift: i16vec4,
         }
         let push_constant = PushConstant {
-            shift: i16vec4::new(shift.x as i16, shift.y as i16, shift.z as i16, 0),
+            shift: i16vec4!(shift, 0),
         };
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.lightmap_blocks_pipe.line_layout,
-                ShaderStageFlags::VERTEX,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1595,8 +1551,8 @@ impl InternalRenderer {
 
         macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
             ($__normal:expr, $__face:ident) => {
-                let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
-                let inorm = ivec3::new($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
+                let fnorm = vec3!($__normal);
+                let inorm = ivec3!($__normal);
                 if self.is_face_visible(fnorm, self.camera.camera_dir) {
                     self.lightmap_block_face(inorm, &block_mesh.triangles.$__face, block_id);
                 }
@@ -1651,19 +1607,14 @@ impl InternalRenderer {
         }
         let push_constant = PushConstant {
             rot: model_trans.rotation,
-            shift: vec4::new(
-                model_trans.translation.x,
-                model_trans.translation.y,
-                model_trans.translation.z,
-                0.0,
-            ),
+            shift: vec4!(model_trans.translation, 0),
             // fnormal: vec4::new(normal.x, normal.y, normal.z, 0.0),
         };
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.lightmap_models_pipe.line_layout,
-                ShaderStageFlags::VERTEX,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1671,7 +1622,7 @@ impl InternalRenderer {
 
         macro_rules! CHECK_AND_LIGHTMAP_MODEL_FACE {
             ($__normal:expr, $__face:ident) => {
-                let fnorm = vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
+                let fnorm = vec3!($__normal);
                 if self.is_face_visible(model_trans.rotation * fnorm, self.camera.camera_dir) {
                     self.lightmap_model_face(fnorm, &model_mesh.triangles.$__face);
                 }
@@ -1708,7 +1659,8 @@ impl InternalRenderer {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.particles.as_ptr(),
-                self.buffers.gpu_particles.current().mapped.unwrap() as *mut Particle,
+                self.buffers.gpu_particles.current().allocation.mapped_ptr().unwrap().as_ptr()
+                    as *mut Particle,
                 capped_particle_count, // converts to size automatically
             )
         }
@@ -1716,14 +1668,13 @@ impl InternalRenderer {
         let size_to_flush = capped_particle_count * size_of::<Particle>();
         unsafe {
             self.lumal
-                .allocator
-                .as_ref()
-                .unwrap()
-                .flush_allocation(
-                    self.buffers.gpu_particles.current().allocation,
-                    0,
-                    size_to_flush as u64,
-                )
+                .device
+                .flush_mapped_memory_ranges(&[vk::MappedMemoryRange {
+                    memory: self.buffers.gpu_particles.current().allocation.memory(),
+                    offset: 0,
+                    size: size_to_flush as u64,
+                    ..Default::default()
+                }])
                 .unwrap();
         }
     }
@@ -1757,10 +1708,6 @@ impl InternalRenderer {
         unsafe {
             self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
-        // self.lumal.bind_raster_pipe(
-        //     &command_buffer,
-        //     &self.pipes.raygen_grass_pipes[0],
-        // );
     }
 
     pub fn updade_grass(&mut self, wind_direction: vec2) {
@@ -1784,7 +1731,7 @@ impl InternalRenderer {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.update_grass_pipe.line_layout,
-                ShaderStageFlags::COMPUTE,
+                vk::ShaderStageFlags::COMPUTE,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1795,8 +1742,8 @@ impl InternalRenderer {
             self.independent_images.grass_state.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
-            AccessFlags::SHADER_WRITE,
-            AccessFlags::SHADER_WRITE | AccessFlags::SHADER_READ,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::SHADER_READ,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -1805,8 +1752,8 @@ impl InternalRenderer {
             self.lumal.device.cmd_dispatch(
                 //2x8 2x8 1x1
                 *command_buffer,
-                (self.settings.world_size.x * 2 + 7) / 8,
-                (self.settings.world_size.y * 2 + 7) / 8,
+                (self.settings.world_size.x * 2).div_ceil(8),
+                (self.settings.world_size.y * 2).div_ceil(8),
                 1,
             );
         }
@@ -1831,7 +1778,7 @@ impl InternalRenderer {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.update_water_pipe.line_layout,
-                ShaderStageFlags::COMPUTE,
+                vk::ShaderStageFlags::COMPUTE,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1842,8 +1789,8 @@ impl InternalRenderer {
             self.independent_images.water_state.current(),
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
-            AccessFlags::SHADER_WRITE,
-            AccessFlags::SHADER_WRITE | AccessFlags::SHADER_READ,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::SHADER_READ,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::GENERAL,
         );
@@ -1881,7 +1828,7 @@ impl InternalRenderer {
             yf: i32,
         }
         let push_constant = PushConstant {
-            shift: vec4::new(pos.x, pos.y, pos.z, 0.0),
+            shift: vec4!(*pos, 0),
             _size: size as i32,
             _time: self.lumal.frame,
             xf: x_flip as i32, // TODO: compress
@@ -1892,7 +1839,7 @@ impl InternalRenderer {
             self.lumal.device.cmd_push_constants(
                 *command_buffers,
                 pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1932,7 +1879,7 @@ impl InternalRenderer {
         }
 
         let push_constant = PushConstant {
-            shift: vec4::new(pos.x, pos.y, pos.z, 0.0),
+            shift: vec4!(*pos, 0),
             _size: quality_size as i32,
             _time: self.lumal.frame,
         };
@@ -1940,7 +1887,7 @@ impl InternalRenderer {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_water_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1977,10 +1924,10 @@ impl InternalRenderer {
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.ao_lut_uniform.current(),
-            PipelineStageFlags::ALL_COMMANDS,
-            PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         unsafe {
@@ -2000,10 +1947,10 @@ impl InternalRenderer {
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.ao_lut_uniform.current(),
-            PipelineStageFlags::ALL_COMMANDS,
-            PipelineStageFlags::ALL_COMMANDS,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-            AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
 
         self.lumal.cmd_begin_renderpass(
@@ -2025,27 +1972,18 @@ impl InternalRenderer {
             v2: vec4,
             lp: mat4,
         }
+        // kinda rnd source
         let transmuted_frame = unsafe { transmute::<i32, f32>(self.lumal.frame) };
         let push_constant = PushConstant {
-            v1: vec4::new(
-                self.camera.camera_pos.x,
-                self.camera.camera_pos.y,
-                self.camera.camera_pos.z,
-                transmuted_frame, // kinda rnd source afair
-            ),
-            v2: vec4::new(
-                self.camera.camera_dir.x,
-                self.camera.camera_dir.y,
-                self.camera.camera_dir.z,
-                0.0,
-            ),
+            v1: vec4!(self.camera.camera_pos, transmuted_frame),
+            v2: vec4!(self.camera.camera_dir, 0),
             lp: self.light.light_transform,
         };
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.diffuse_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -2107,14 +2045,14 @@ impl InternalRenderer {
             center_size: vec4,
         }
         let push_constant = PushConstant {
-            center_size: vec4::new(pos.x * 16.0, pos.y * 16.0, pos.z * 16.0, 32.0),
+            center_size: vec4!(pos * 16.0, 32),
         };
 
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.fill_stencil_smoke_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -2157,25 +2095,15 @@ impl InternalRenderer {
             v2: vec4,
         }
         let push_constant = PushConstant {
-            v1: vec4::new(
-                self.camera.camera_pos.x,
-                self.camera.camera_pos.y,
-                self.camera.camera_pos.z,
-                0.0,
-            ),
-            v2: vec4::new(
-                self.camera.camera_dir.x,
-                self.camera.camera_dir.y,
-                self.camera.camera_dir.z,
-                0.0,
-            ),
+            v1: vec4!(self.camera.camera_pos, 0),
+            v2: vec4!(self.camera.camera_dir, 0),
         };
 
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.glossy_pipe.line_layout,
-                ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 push_constant.as_u8_slice(),
             )

@@ -28,7 +28,7 @@ where
             .checked_mul(y_size)
             .and_then(|xy| xy.checked_mul(z_size))
             .expect("BitArray3d dimensions cause overflow");
-        let total_chunks = (total_bits + Self::BITS - 1) / Self::BITS;
+        let total_chunks = total_bits.div_ceil(Self::BITS);
 
         BitArray3d {
             x_size,
@@ -43,7 +43,7 @@ where
             .checked_mul(y_size)
             .and_then(|xy| xy.checked_mul(z_size))
             .expect("BitArray3d dimensions cause overflow");
-        let total_chunks = (total_bits + Self::BITS - 1) / Self::BITS;
+        let total_chunks = total_bits.div_ceil(Self::BITS);
 
         BitArray3d {
             x_size,

@@ -1,5 +1,5 @@
 use internal_renderer::FRAMES_IN_FLIGHT;
-use vulkanalia::vk::{AccessFlags, DeviceV1_0, ImageLayout, PipelineBindPoint, PipelineStageFlags};
+use lumal::vk;
 
 use crate::*;
 
@@ -9,7 +9,7 @@ impl super::InternalRenderer {
     pub fn gen_perlin_2d(&mut self) {
         let lumal = &mut self.lumal;
 
-        let mut cmb = lumal.begin_single_time_command_buffer();
+        let cmb = lumal.begin_single_time_command_buffer();
 
         let pipe = &self.pipes.gen_perlin2d_pipe;
 
@@ -23,7 +23,7 @@ impl super::InternalRenderer {
             unsafe {
                 lumal.device.cmd_bind_descriptor_sets(
                     cmb,
-                    PipelineBindPoint::COMPUTE,
+                    vk::PipelineBindPoint::COMPUTE,
                     pipe.line_layout,
                     0,
                     &[pipe.sets[frame_i]],
@@ -33,12 +33,12 @@ impl super::InternalRenderer {
                 lumal.image_memory_barrier(
                     &cmb,
                     self.independent_images.perlin_noise2d.current(),
-                    PipelineStageFlags::ALL_COMMANDS,
-                    PipelineStageFlags::ALL_COMMANDS,
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE, // im lazy so all memory read|write's wait for all read|write's
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE, // using proper barriers increases performance, but not much
-                    ImageLayout::UNDEFINED, // => transfer it from UNDEFED to GENERAL
-                    ImageLayout::GENERAL, // if this was SHADER_READ_ONLY it would mean that we transfer from UNDEFINED to SHADER_READ_ONLY
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE, // im lazy so all memory read|write's wait for all read|write's
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE, // using proper barriers increases performance, but not much
+                    vk::ImageLayout::UNDEFINED, // => transfer it from UNDEFED to GENERAL
+                    vk::ImageLayout::GENERAL, // if this was SHADER_READ_ONLY it would mean that we transfer from UNDEFINED to SHADER_READ_ONLY
                 );
 
                 lumal.device.cmd_dispatch(
@@ -51,12 +51,12 @@ impl super::InternalRenderer {
                 lumal.image_memory_barrier(
                     &cmb,
                     self.independent_images.perlin_noise2d.current(),
-                    PipelineStageFlags::ALL_COMMANDS,
-                    PipelineStageFlags::ALL_COMMANDS,
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-                    ImageLayout::GENERAL, // from GENERAL to GENERAL which means no layout transfer, just the {execution} barrier
-                    ImageLayout::GENERAL,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+                    vk::ImageLayout::GENERAL, // from GENERAL to GENERAL which means no layout transfer, just the {execution} barrier
+                    vk::ImageLayout::GENERAL,
                 );
 
                 self.independent_images.perlin_noise2d.move_next();
@@ -85,7 +85,7 @@ impl super::InternalRenderer {
             unsafe {
                 lumal.device.cmd_bind_descriptor_sets(
                     cmb,
-                    PipelineBindPoint::COMPUTE,
+                    vk::PipelineBindPoint::COMPUTE,
                     pipe.line_layout,
                     0,
                     &[pipe.sets[frame_i]],
@@ -95,12 +95,12 @@ impl super::InternalRenderer {
                 lumal.image_memory_barrier(
                     &cmb,
                     self.independent_images.perlin_noise3d.current(),
-                    PipelineStageFlags::ALL_COMMANDS,
-                    PipelineStageFlags::ALL_COMMANDS,
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE, // im lazy so all memory read|write's wait for all read|write's
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE, // using proper barriers increases performance, but not much
-                    ImageLayout::UNDEFINED, // => transfer it from UNDEFED to GENERAL
-                    ImageLayout::GENERAL, // if this was SHADER_READ_ONLY it would mean that we transfer from UNDEFINED to SHADER_READ_ONLY
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE, // im lazy so all memory read|write's wait for all read|write's
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE, // using proper barriers increases performance, but not much
+                    vk::ImageLayout::UNDEFINED, // => transfer it from UNDEFED to GENERAL
+                    vk::ImageLayout::GENERAL, // if this was SHADER_READ_ONLY it would mean that we transfer from UNDEFINED to SHADER_READ_ONLY
                 );
 
                 lumal.device.cmd_dispatch(
@@ -113,12 +113,12 @@ impl super::InternalRenderer {
                 lumal.image_memory_barrier(
                     &cmb,
                     self.independent_images.perlin_noise3d.current(),
-                    PipelineStageFlags::ALL_COMMANDS,
-                    PipelineStageFlags::ALL_COMMANDS,
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-                    AccessFlags::MEMORY_READ | AccessFlags::MEMORY_WRITE,
-                    ImageLayout::GENERAL,
-                    ImageLayout::GENERAL,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+                    vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+                    vk::ImageLayout::GENERAL,
+                    vk::ImageLayout::GENERAL,
                 );
 
                 self.independent_images.perlin_noise3d.move_next();

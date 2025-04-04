@@ -1,10 +1,5 @@
-// #![allow(dead_code)]
-// #![allow(unused_variables)]
-// #![allow(unused_mut)]
-// #![allow(unused_parens)]
 #![feature(stmt_expr_attributes)]
 #![feature(custom_inner_attributes)]
-// #![feature(core_intrinsics)]
 #![feature(optimize_attribute)]
 #![feature(where_clause_attrs)]
 
@@ -13,7 +8,7 @@
 // internal_renderer is where all the gpu commands are submitted
 // renderer is a wrapper around internal_renderer that is more stable and easier to use
 
-pub mod consts;
+// pub mod consts;
 pub mod containers;
 pub mod internal_renderer;
 pub mod renderer;
