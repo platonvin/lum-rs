@@ -1,9 +1,20 @@
-use crate::*;
-use internal_renderer::{InternalRenderer, *};
+use crate::{
+    internal_renderer::{
+        render_vk::{
+            AllIndependentImages, AllSwapchainDependentImages, InternalRendererVulkan,
+            BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, CHOSEN_DEPTH_FORMAT, FRAME_FORMAT,
+            LIGHTMAPS_FORMAT, MATNORM_FORMAT, RADIANCE_FORMAT, SECONDARY_DEPTH_FORMAT,
+        },
+        Settings,
+    },
+    types::{uvec3, uvec3_to_extent3d},
+    *,
+};
+// use internal_renderer::{InternalRendererVulkan, *};
 use lumal::vk;
 use lumal::{ring::Ring, set_debug_names, LumalSettings, Renderer};
 
-impl InternalRenderer {
+impl InternalRendererVulkan {
     #[cold]
     #[optimize(size)]
     pub fn create_independent_images(

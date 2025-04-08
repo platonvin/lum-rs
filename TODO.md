@@ -96,3 +96,12 @@ map shader to be not 4x4x4, but 64x1x1 and divide manually
  - no hw mapping for local id to pixel
 
 destroying pool is faster, however, speed of allocating descriptors is not important for my usecase. Or is it?
+
+rewrite block_mesh, it has too many dependencies
+
+IMPORTANT: compiling to wasm:
+  - use wasm-bindgen
+  - feature for gl wasm-compatible backend
+  - move it to lumal
+  - vulkan as first class support since it is more explicit
+    - this means that translating vulkan to gl should be "no-op" in most cases and less work in other

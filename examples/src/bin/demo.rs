@@ -8,7 +8,9 @@ use std::{
 };
 
 use lum::{
-    internal_renderer::Settings,
+    internal_renderer::{
+        load_interface::LoadInterface, render_interface::LumRendererAPI, Settings,
+    },
     renderer::{MeshFoliage, MeshLiquid, MeshModel, MeshVolumetric, Renderer},
     types::{u8vec3, uvec3, vec3, BlockId, MeshTransform},
 };
@@ -78,15 +80,13 @@ struct AppState {
     about_to_close: bool,
 }
 impl AppState {
-    fn new(mut window: Window) -> Self {
+    fn new(mut window: Window, event_loop: &EventLoop<()>) -> Self {
         let settings = Settings {
             static_block_palette_size: 15,
             ..Settings::default()
         };
-        lum::renderer::atrace!();
 
         let mut pre_init_lum = Renderer::create();
-        // lum::renderer::atrace!();
         let grass = pre_init_lum.load_foliage(
             // this is compiled by lum. But you should compile such shaders yourself
             // "shaders" is sub-crate that embeds some shaders into binary for simplicity
@@ -97,11 +97,8 @@ impl AppState {
             100,
         );
 
-        lum::renderer::atrace!();
-        let mut lum = pre_init_lum.init(&settings, &mut window);
-        lum::renderer::atrace!();
+        let mut lum = pre_init_lum.init(&settings, &mut window, &event_loop);
         let meshes = AllMeshes::new(&mut lum, grass);
-        lum::renderer::atrace!();
 
         lum.load_block(1, "assets/dirt.vox");
         lum.load_block(2, "assets/grass.vox");
@@ -117,11 +114,9 @@ impl AppState {
         lum.load_block(12, "assets/bark.vox");
         lum.load_block(13, "assets/wood.vox");
         lum.load_block(14, "assets/planks.vox");
-        lum::renderer::atrace!();
 
         lum.renderer.update_block_palette_to_gpu();
         lum.renderer.update_material_palette_to_gpu();
-        lum::renderer::atrace!();
 
         Self {
             window,
@@ -150,7 +145,6 @@ impl AppState {
         self.lum.unload_block(13);
         self.lum.unload_block(14);
         self.lum.destroy();
-        lum::renderer::atrace!();
     }
 
     pub fn load_scene(&mut self, vox_file: &str) -> io::Result<()> {
@@ -305,7 +299,7 @@ fn main() {
         ;
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();
-    let mut state = AppState::new(window);
+    let mut state = AppState::new(window, &event_loop);
     state.load_scene("assets/scene").unwrap();
     let result = event_loop.run_app(&mut state);
     state.destroy();

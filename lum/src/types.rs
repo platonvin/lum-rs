@@ -2,6 +2,7 @@
 
 pub type MatID = u8;
 
+use block_mesh::VoxelVisibility;
 use lumal::vk;
 use qvek::vek;
 
@@ -47,10 +48,39 @@ pub type MatId = u8;
 // TODO: enum with empty / non-empty using NonZeroU8
 pub type Voxel = u8;
 
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct VoxelForContour(pub Voxel);
+
+impl block_mesh::Voxel for VoxelForContour {
+    #[cold]
+    #[optimize(size)]
+    fn get_visibility(&self) -> VoxelVisibility {
+        if self.0 == 0 {
+            VoxelVisibility::Empty
+        } else {
+            VoxelVisibility::Opaque
+        } // never transluent
+    }
+}
+
+impl block_mesh::MergeVoxel for VoxelForContour {
+    type MergeValue = Self;
+
+    #[cold]
+    #[optimize(size)]
+    fn merge_value(&self) -> Self::MergeValue {
+        // we only care about contour, thus if not emtpy, merging is allowed
+        match self.0 {
+            0 => VoxelForContour(0),
+            _ => VoxelForContour(1),
+        }
+    }
+}
+
 // CPU side structure with actual voxel data but only gpu mesh handler
-pub struct BlockWithMesh {
+pub struct BlockWithMesh<BufferType, ImageType> {
     pub voxels: [[[Voxel; 16]; 16]; 16],
-    pub mesh: InternalMeshModel,
+    pub mesh: InternalMeshModel<BufferType, ImageType>,
 }
 
 #[repr(C)]
@@ -117,7 +147,7 @@ pub struct IndexedVertices {
 
 #[allow(non_snake_case)]
 #[derive(Debug, Default)]
-pub struct FaceBuffers {
+pub struct FaceBuffers<BufferType> {
     // zPz means zero-Positive-zero
     // zzN means zero-zero-Negative
     pub Pzz: IndexedVertices,
@@ -126,8 +156,8 @@ pub struct FaceBuffers {
     pub zNz: IndexedVertices,
     pub zzP: IndexedVertices,
     pub zzN: IndexedVertices,
-    pub vertexes: lumal::Buffer,
-    pub indices: lumal::Buffer,
+    pub vertexes: BufferType,
+    pub indices: BufferType,
 }
 
 #[allow(non_snake_case)]
@@ -161,10 +191,10 @@ pub struct FaceBuffersShared {
 // handle (reference) to a mesh.
 // You can clone it but still need to unload one time
 #[derive(Debug, Default)]
-pub struct InternalMeshModel {
-    pub triangles: FaceBuffers,
+pub struct InternalMeshModel<BufferType, ImageType> {
+    pub triangles: FaceBuffers<BufferType>,
     // when model has multiple sprites in a spritesheet, `voxels` contains all of them, stacked along `Y`
-    pub voxels: lumal::Image,
+    pub voxels: ImageType,
     // size of voxels. So if only one sprite, equal to its size, but when multiple - equal to sum of sizes
     pub total_size: uvec3, // integer because in voxels
 
@@ -178,8 +208,8 @@ pub struct InternalMeshModel {
 // handle (reference) to a block triangles.
 // You can clone it but still need to unload one time
 #[derive(Debug, Default)]
-pub struct InternalMeshBlock {
-    pub triangles: FaceBuffers,
+pub struct InternalMeshBlock<BufferType> {
+    pub triangles: FaceBuffers<BufferType>,
 }
 
 // not accessed directly by user, instead indexed
@@ -234,9 +264,9 @@ pub struct MeshTransform {
 pub type BlockVoxels = [[[Voxel; 16]; 16]; 16];
 
 #[derive(Debug)]
-pub struct Block {
+pub struct Block<BufferType, ImageType> {
     pub voxels: BlockVoxels,
-    pub mesh: InternalMeshModel,
+    pub mesh: InternalMeshModel<BufferType, ImageType>,
 }
 
 // Conversion function from UVec3 to vk::Extent3D

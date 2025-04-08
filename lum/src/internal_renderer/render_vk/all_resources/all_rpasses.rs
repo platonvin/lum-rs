@@ -1,10 +1,15 @@
-use internal_renderer::*;
-use lumal::vk;
-use lumal::{descriptors::*, LumalSettings, Renderer};
+use crate::internal_renderer::{
+    render_vk::{
+        AllIndependentImages, AllPipes, AllRenderPasses, AllSwapchainDependentImages,
+        InternalRendererVulkan,
+    },
+    Settings,
+};
+// use internal_renderer::{InternalRendererVulkan, *};
+use lumal::{descriptors::*, vk};
+use lumal::{LumalSettings, Renderer};
 
-use crate::*;
-
-impl InternalRenderer {
+impl InternalRendererVulkan {
     #[cold]
     #[optimize(size)]
     pub fn create_all_rpasses(

@@ -1,9 +1,8 @@
-use internal_renderer::FRAMES_IN_FLIGHT;
 use lumal::vk;
 
-use crate::*;
+use crate::{internal_renderer::render_vk::FRAMES_IN_FLIGHT, *};
 
-impl super::InternalRenderer {
+impl super::InternalRendererVulkan {
     #[cold]
     #[optimize(size)]
     pub fn gen_perlin_2d(&mut self) {

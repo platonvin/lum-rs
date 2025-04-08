@@ -1,0 +1,141 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    // no atrace needed LOL
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'lum'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=lum"
+                ],
+                "filter": {
+                    "name": "lum",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'arrays'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=arrays",
+                    "--package=lum"
+                ],
+                "filter": {
+                    "name": "arrays",
+                    "kind": "bench"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'radiance'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=radiance",
+                    "--package=lum"
+                ],
+                "filter": {
+                    "name": "radiance",
+                    "kind": "bench"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'threads'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=threads",
+                    "--package=lum"
+                ],
+                "filter": {
+                    "name": "threads",
+                    "kind": "bench"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'shaders'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=shaders"
+                ],
+                "filter": {
+                    "name": "shaders",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'demo'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=demo",
+                    "--package=examples"
+                ],
+                "filter": {
+                    "name": "demo",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'demo'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=demo",
+                    "--package=examples"
+                ],
+                "filter": {
+                    "name": "demo",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

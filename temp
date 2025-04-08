@@ -1,70 +1,247 @@
-[32mexamples\src\bin\demo.rs:86: Fun: demo::AppState::new[0m
-[32mexamples\src\bin\demo.rs:100: Fun: demo::AppState::new[0m
-[32mlum\src\internal_renderer\mod.rs:237: Fun: lum::internal_renderer::InternalRenderer::create[0m
-Starting app.
-[32mC:\prog\lumal-rs\src\lib.rs:371: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:374: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:383: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1079: Fun: lumal::pick_physical_device[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1081: Fun: lumal::pick_physical_device[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1113: Fun: lumal::check_physical_device[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1115: Fun: lumal::check_physical_device[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1135: Fun: lumal::check_physical_device_extensions[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1141: Fun: lumal::check_physical_device_extensions[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1117: Fun: lumal::check_physical_device[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1119: Fun: lumal::check_physical_device[0m
-[32mC:\prog\lumal-rs\src\lib.rs:1091: Fun: lumal::pick_physical_device[0m
-Selected physical device (`NVIDIA GeForce GTX 1660 SUPER`).
-[32mC:\prog\lumal-rs\src\lib.rs:385: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:387: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:398: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:401: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:408: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:410: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:412: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:414: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:416: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:418: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:420: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:422: Fun: lumal::Renderer::create[0m
-[32mC:\prog\lumal-rs\src\lib.rs:424: Fun: lumal::Renderer::create[0m
-[32mlum\src\internal_renderer\mod.rs:239: Fun: lum::internal_renderer::InternalRenderer::create[0m
-[32mlum\src\internal_renderer\mod.rs:245: Fun: lum::internal_renderer::InternalRenderer::create[0m
-creating rpass: lightmap
-creating rpass: gbuffer
-creating rpass: shade
-created all passes
-[32mexamples\src\bin\demo.rs:102: Fun: demo::AppState::new[0m
-[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-Extruding palette
-[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:165: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:170: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mlum\src\internal_renderer\load.rs:177: Fun: lum::internal_renderer::load::<impl lum::internal_renderer::InternalRenderer>::load_mesh_from_file[0m
-[32mexamples\src\bin\demo.rs:104: Fun: demo::AppState::new[0m
-[32mexamples\src\bin\demo.rs:120: Fun: demo::AppState::new[0m
-[32mexamples\src\bin\demo.rs:124: Fun: demo::AppState::new[0m
-Resumed
-Shutting down renderer
-started destroying independent images
-destroyed independent images
-started destroying buffers
-destroyed buffers
-started destroying swapchain dependent images
-destroyed swapchain dependent images
-[32mlum\src\internal_renderer\mod.rs:419: Fun: lum::internal_renderer::InternalRenderer::destroy[0m
-[32mlum\src\internal_renderer\mod.rs:421: Fun: lum::internal_renderer::InternalRenderer::destroy[0m
-[32mlum\src\internal_renderer\mod.rs:424: Fun: lum::internal_renderer::InternalRenderer::destroy[0m
+I have some problems initializing OpenGL in my Rust app. I use winit and glow (and maybe glutin, idk if its needed). My current code is:
+impl InternalRendererGL {
+    pub unsafe fn create(
+        lum_settings: &Settings,
+        window: &winit::window::Window,
+        foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+    ) -> InternalRendererGL {
+        // Just fucking loading gl context took more time due to shitty docs then loading Vulkan. BASED
+        let raw_window_handle: raw_window_handle::RawWindowHandle =
+            window.window_handle().ok().unwrap().as_raw();
+        let raw_disaply_handle: raw_window_handle::RawDisplayHandle =
+            window.display_handle().ok().unwrap().as_raw();
+
+        let preference = glutin::display::DisplayApiPreference::Wgl(Some(raw_window_handle));
+        let display = glutin::display::Display::new(raw_disaply_handle, preference).unwrap();
+
+        let context = unsafe {
+            glow::Context::from_loader_function(|symbol| {
+                // Convert the &str to a CString (which adds a null terminator)
+                let c_string = std::ffi::CString::new(symbol).expect("Failed to create CString");
+                // Borrow the CString as a &CStr
+                let c_str = c_string.as_c_str();
+                display.get_proc_address(c_str)
+            })
+        };
+... rest of initialization that does not matter at all for my problem
+}
+
+but glow::Context::from_loader_function crashes with
+Reading GL_VERSION failed. Make sure there is a valid GL context currently active.
+
+this probably means that my code is not correct at all. Sadly documentation for glow, glutin and winit is not good at all. I want you to help me figure out how to initialize OpenGL given my code (above) and a bunch of examples from these crates:
+
+https://github.com/rust-windowing/glutin/blob/master/glutin_examples/src/lib.rs:
+
+use gl::types::GLfloat;
+use raw_window_handle::HasWindowHandle;
+use winit::application::ApplicationHandler;
+use winit::event::{KeyEvent, WindowEvent};
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{Key, NamedKey};
+use winit::window::{Window, WindowAttributes};
+
+use glutin::config::{Config, ConfigTemplateBuilder, GetGlConfig};
+use glutin::context::{
+    ContextApi, ContextAttributesBuilder, NotCurrentContext, PossiblyCurrentContext, Version,
+};
+use glutin::display::GetGlDisplay;
+use glutin::prelude::*;
+use glutin::surface::{Surface, SwapInterval, WindowSurface};
+
+use glutin_winit::{DisplayBuilder, GlWindow};
+
+pub fn main(event_loop: winit::event_loop::EventLoop<()>) -> Result<(), Box<dyn Error>> {
+    // The template will match only the configurations supporting rendering
+    // to windows.
+    //
+    // XXX We force transparency only on macOS, given that EGL on X11 doesn't
+    // have it, but we still want to show window. The macOS situation is like
+    // that, because we can query only one config at a time on it, but all
+    // normal platforms will return multiple configs, so we can find the config
+    // with transparency ourselves inside the `reduce`.
+    let template =
+        ConfigTemplateBuilder::new().with_alpha_size(8).with_transparency(cfg!(cgl_backend));
+
+    let display_builder = DisplayBuilder::new().with_window_attributes(Some(window_attributes()));
+
+    let mut app = App::new(template, display_builder);
+    event_loop.run_app(&mut app)?;
+
+    app.exit_state
+}
+
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let (window, gl_config) = match &self.gl_display {
+            // We just created the event loop, so initialize the display, pick the config, and
+            // create the context.
+            GlDisplayCreationState::Builder(display_builder) => {
+                let (window, gl_config) = match display_builder.clone().build(
+                    event_loop,
+                    self.template.clone(),
+                    gl_config_picker,
+                ) {
+                    Ok((window, gl_config)) => (window.unwrap(), gl_config),
+                    Err(err) => {
+                        self.exit_state = Err(err);
+                        event_loop.exit();
+                        return;
+                    },
+                };
+
+                println!("Picked a config with {} samples", gl_config.num_samples());
+
+                // Mark the display as initialized to not recreate it on resume, since the
+                // display is valid until we explicitly destroy it.
+                self.gl_display = GlDisplayCreationState::Init;
+
+                // Create gl context.
+                self.gl_context =
+                    Some(create_gl_context(&window, &gl_config).treat_as_possibly_current());
+
+                (window, gl_config)
+            },
+            GlDisplayCreationState::Init => {
+                println!("Recreating window in `resumed`");
+                // Pick the config which we already use for the context.
+                let gl_config = self.gl_context.as_ref().unwrap().config();
+                match glutin_winit::finalize_window(event_loop, window_attributes(), &gl_config) {
+                    Ok(window) => (window, gl_config),
+                    Err(err) => {
+                        self.exit_state = Err(err.into());
+                        event_loop.exit();
+                        return;
+                    },
+                }
+            },
+        };
+
+        let attrs = window
+            .build_surface_attributes(Default::default())
+            .expect("Failed to build surface attributes");
+        let gl_surface =
+            unsafe { gl_config.display().create_window_surface(&gl_config, &attrs).unwrap() };
+
+        // The context needs to be current for the Renderer to set up shaders and
+        // buffers. It also performs function loading, which needs a current context on
+        // WGL.
+        let gl_context = self.gl_context.as_ref().unwrap();
+        gl_context.make_current(&gl_surface).unwrap();
+
+        self.renderer.get_or_insert_with(|| Renderer::new(&gl_config.display()));
+
+        // Try setting vsync.
+        if let Err(res) = gl_surface
+            .set_swap_interval(gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+        {
+            eprintln!("Error setting vsync: {res:?}");
+        }
+
+        assert!(self.state.replace(AppState { gl_surface, window }).is_none());
+    }
+    ... the rest of the code that does not matter i guess
+}
+
+https://github.com/grovesNL/glow/blob/main/examples/hello/src/main.rs:
+
+use glow::*;
+
+fn main() {
+    unsafe {
+        // Create a context from a WebGL2 context on wasm32 targets
+        #[cfg(target_arch = "wasm32")]
+        let (gl, shader_version) = {
+            use wasm_bindgen::JsCast;
+            let canvas = web_sys::window()
+                .unwrap()
+                .document()
+                .unwrap()
+                .get_element_by_id("canvas")
+                .unwrap()
+                .dyn_into::<web_sys::HtmlCanvasElement>()
+                .unwrap();
+            let webgl2_context = canvas
+                .get_context("webgl2")
+                .unwrap()
+                .unwrap()
+                .dyn_into::<web_sys::WebGl2RenderingContext>()
+                .unwrap();
+            let gl = glow::Context::from_webgl2_context(webgl2_context);
+            (gl, "#version 300 es")
+        };
+
+        // Create a context from a glutin window on non-wasm32 targets
+        #[cfg(feature = "glutin_winit")]
+        let (gl, gl_surface, gl_context, shader_version, _window, event_loop) = {
+            use glutin::{
+                config::{ConfigTemplateBuilder, GlConfig},
+                context::{ContextApi, ContextAttributesBuilder, NotCurrentGlContext},
+                display::{GetGlDisplay, GlDisplay},
+                surface::{GlSurface, SwapInterval},
+            };
+            use glutin_winit::{DisplayBuilder, GlWindow};
+            use raw_window_handle::HasRawWindowHandle;
+            use std::num::NonZeroU32;
+
+            let event_loop = winit::event_loop::EventLoopBuilder::new().build().unwrap();
+            let window_builder = winit::window::WindowBuilder::new()
+                .with_title("Hello triangle!")
+                .with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0));
+
+            let template = ConfigTemplateBuilder::new();
+
+            let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
+
+            let (window, gl_config) = display_builder
+                .build(&event_loop, template, |configs| {
+                    configs
+                        .reduce(|accum, config| {
+                            if config.num_samples() > accum.num_samples() {
+                                config
+                            } else {
+                                accum
+                            }
+                        })
+                        .unwrap()
+                })
+                .unwrap();
+
+            let raw_window_handle = window.as_ref().map(|window| window.raw_window_handle());
+
+            let gl_display = gl_config.display();
+            let context_attributes = ContextAttributesBuilder::new()
+                .with_context_api(ContextApi::OpenGl(Some(glutin::context::Version {
+                    major: 4,
+                    minor: 1,
+                })))
+                .build(raw_window_handle);
+
+            let not_current_gl_context = gl_display
+                .create_context(&gl_config, &context_attributes)
+                .unwrap();
+
+            let window = window.unwrap();
+
+            let attrs = window.build_surface_attributes(Default::default());
+            let gl_surface = gl_display
+                .create_window_surface(&gl_config, &attrs)
+                .unwrap();
+
+            let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
+
+            let gl = glow::Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s));
+
+            gl_surface
+                .set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+                .unwrap();
+
+            (
+                gl,
+                gl_surface,
+                gl_context,
+                "#version 410",
+                window,
+                event_loop,
+            )
+        };

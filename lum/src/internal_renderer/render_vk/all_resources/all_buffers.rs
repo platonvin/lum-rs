@@ -1,11 +1,17 @@
 use std::mem;
 
-use crate::*;
-use internal_renderer::*;
+use crate::{
+    internal_renderer::{
+        render_vk::{AllBuffers, InternalRendererVulkan},
+        Settings,
+    },
+    types::{i8vec4, ivec4, mat4, AoLut, BlockId, Particle},
+};
+// use internal_renderer::{InternalRendererVulkan, *};
 use lumal::vk;
-use lumal::{LumalSettings, Renderer};
+use lumal::{ring::Ring, set_debug_names, LumalSettings, Renderer};
 
-impl InternalRenderer {
+impl InternalRendererVulkan {
     #[cold]
     #[optimize(size)]
     pub fn create_all_buffers(

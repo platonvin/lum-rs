@@ -27,9 +27,7 @@ impl Default for Multiprocessor {
 impl Multiprocessor {
     pub fn new() -> Self {
         // let num_threads = std::thread::available_parallelism().unwrap().get() - 1;
-        let num_threads = std::thread::available_parallelism()
-            .map(|n| n.get() - 1)
-            .unwrap_or(1); // Ensure at least one thread
+        let num_threads = std::thread::available_parallelism().map(|n| n.get() - 1).unwrap_or(1); // Ensure at least one thread
         let threads_active = Arc::new(AtomicI32::new(0));
         let should_stop = Arc::new(AtomicBool::new(false));
         let current_task: Arc<Mutex<Option<Box<dyn Fn(usize) + Send>>>> =
@@ -90,8 +88,7 @@ impl Multiprocessor {
         }
 
         // store how many threads will be working on the thing
-        self.threads_active
-            .store(dispatch_size as i32, Ordering::Relaxed);
+        self.threads_active.store(dispatch_size as i32, Ordering::Relaxed);
 
         // set N threads to do work for workgroup_size of N
         for i in 0..dispatch_size {

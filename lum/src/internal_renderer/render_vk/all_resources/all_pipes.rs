@@ -1,18 +1,29 @@
 use std::mem::offset_of;
 
-// use consts::*;
-use internal_renderer::*;
-use lumal::vk;
-use lumal::{descriptors::*, ring::Ring, LumalSettings, Renderer};
-use vk::Sampler;
-use RelativeDescriptorPos::*;
-
-use crate::*;
-
+use crate::{
+    internal_renderer::{
+        render_vk::{
+            AllBuffers, AllCommandBuffers, AllIndependentImages, AllPipes, AllSamplers,
+            AllSwapchainDependentImages, InternalRendererVulkan, BLOCK_PALETTE_SIZE_X,
+            BLOCK_PALETTE_SIZE_Y, CHOSEN_DEPTH_FORMAT, FRAME_FORMAT, LIGHTMAPS_FORMAT,
+            MATNORM_FORMAT, RADIANCE_FORMAT, SECONDARY_DEPTH_FORMAT,
+        },
+        Settings,
+    },
+    types::*,
+    *,
+};
+// use internal_renderer::{InternalRendererVulkan, *};
+use lumal::{
+    descriptors::RelativeDescriptorPos::{Current, First},
+    vk::Sampler,
+};
+use lumal::{descriptors::*, vk};
+use lumal::{ring::Ring, set_debug_names, LumalSettings, Renderer};
 // This file could be just a data
 // it is setting up all the descriptors/layouts for pipes and pipes themeselves
 
-impl InternalRenderer {
+impl InternalRendererVulkan {
     #[cold]
     #[optimize(size)]
     pub unsafe fn create_all_pipes(
@@ -32,7 +43,7 @@ impl InternalRenderer {
 
         // anounce (count) all descriptors
         Self::do_smth_all_descriptors(
-            &InternalRenderer::anounce_descriptor_setup_wrapper,
+            &InternalRendererVulkan::anounce_descriptor_setup_wrapper,
             lumal,
             buffers,
             iimages,
@@ -43,7 +54,7 @@ impl InternalRenderer {
 
         // do same for grass
         pipes.raygen_foliage_pipes.iter_mut().for_each(|foliage| {
-            InternalRenderer::anounce_descriptor_setup_wrapper(
+            InternalRendererVulkan::anounce_descriptor_setup_wrapper(
                 lumal,
                 &mut foliage.set_layout,
                 &mut foliage.sets,
@@ -79,7 +90,7 @@ impl InternalRenderer {
 
         // allocate each descriptor set
         Self::do_smth_all_descriptors(
-            &InternalRenderer::acutally_setup_descriptor_wrapper,
+            &InternalRendererVulkan::acutally_setup_descriptor_wrapper,
             lumal,
             buffers,
             iimages,
@@ -90,7 +101,7 @@ impl InternalRenderer {
 
         // do same for grass
         pipes.raygen_foliage_pipes.iter_mut().for_each(|foliage| {
-            InternalRenderer::acutally_setup_descriptor_wrapper(
+            InternalRendererVulkan::acutally_setup_descriptor_wrapper(
                 lumal,
                 &mut foliage.set_layout,
                 &mut foliage.sets,

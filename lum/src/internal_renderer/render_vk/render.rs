@@ -1,4 +1,11 @@
-use crate::{assert_assume, containers::BitArray3d, internal_renderer::*};
+use crate::{
+    assert_assume,
+    containers::BitArray3d,
+    internal_renderer::{
+        render_vk::{BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y},
+        *,
+    },
+};
 use std::mem::transmute;
 
 use aabb::{get_shift, iAABB};
@@ -9,133 +16,34 @@ use qvek::{
     i16vec3, i16vec4, i8vec4, ivec3, ivec4, uvec2, uvec3, vec3, vec4,
     vek::{Clamp, FrustumPlanes},
 };
+use winit::window::Window;
 
 use crate::types::*;
 
-use super::{aabb, InternalRenderer};
+use super::InternalRendererVulkan;
 
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
-
-#[derive(Debug, Clone, Copy)]
-pub struct Camera {
-    pub camera_pos: vec3,
-    pub camera_dir: vec3,
-    pub camera_transform: mat4,
-    pub pixels_in_voxel: f32,
-    pub origin_view_size: vec2,
-    pub view_size: vec2, // in voxels
-    pub camera_ray_dir_plane: vec3,
-    pub horizline: vec3,
-    pub vertiline: vec3,
-}
-impl Default for Camera {
-    fn default() -> Self {
-        let origin_view_size = qvek::vec2!(1920, 1080);
-        let pixels_in_voxel = 5.0;
-        let camera_dir = vec3!(0.61, 1.0, -0.8).normalized();
-        let camera_ray_dir_plane = vec3!(camera_dir.xy(), 0).normalized();
-        let horizline = camera_ray_dir_plane.cross(vec3!(0, 0, 1)).normalized();
-
-        Self {
-            camera_pos: vec3!(60, 0, 194),
-            camera_dir,
-            camera_transform: mat4::identity(),
-            pixels_in_voxel,
-            origin_view_size,
-            view_size: origin_view_size / pixels_in_voxel,
-            camera_ray_dir_plane,
-            horizline,
-            vertiline: horizline.cross(camera_dir).normalized(),
-        }
+impl render_interface::LumRendererAPI for InternalRendererVulkan {
+    fn new(
+        lum_settings: &Settings,
+        window: &Window,
+        // event_loop: &winit::event_loop::EventLoop<()>,
+        foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+    ) -> Self {
+        unsafe { InternalRendererVulkan::create(lum_settings, window, foliage_descriptions) }
     }
-}
 
-#[derive(Debug, Clone, Copy)]
-pub struct SunLight {
-    light_transform: mat4,
-    light_dir: vec3,
-}
-impl Default for SunLight {
-    fn default() -> Self {
-        Self {
-            light_transform: Default::default(),
-            light_dir: vec3!(0.5, 0.5, -0.9).normalized(),
-        }
-    }
-}
-
-impl Camera {
     fn update_camera(&mut self) {
-        let up = vec3!(0, 0, 1); // Up vector
-        self.view_size = self.origin_view_size / self.pixels_in_voxel;
-        // RIGHT HANDED MATH EVERYWHERE
-        let view = mat4::look_at_rh(self.camera_pos, self.camera_pos + self.camera_dir, up);
-        let projection = mat4::orthographic_rh_no(FrustumPlanes {
-            left: -self.view_size.x / 2.0,
-            right: self.view_size.x / 2.0,
-            bottom: self.view_size.y / 2.0,
-            top: -self.view_size.y / 2.0,
-            near: -0.0,
-            far: 2000.0,
-        }); // => *(2000.0/2) for decoding
-            // dbg!(&projection);
-        self.camera_transform = projection * view;
-        self.camera_ray_dir_plane = vec3!(self.camera_dir.xy(), 0).normalized();
-
-        self.horizline = self.camera_ray_dir_plane.cross(vec3!(0, 0, 1)).normalized();
-
-        self.vertiline = self.camera_dir.cross(self.horizline).normalized();
-    }
-}
-
-impl SunLight {
-    pub fn update_light_transform(&mut self, world_size: uvec3) {
-        let _horizon = vec3!(1, 0, 0).normalized();
-        let up = vec3!(0, 0, 1).normalized();
-        let light_pos = vec3!(world_size.xy() * 16, 0) / 2.0 - (1.0 * 16.0 * self.light_dir);
-
-        let view = mat4::look_at_rh(light_pos, light_pos + self.light_dir, up);
-        let voxel_in_pixels = 5.0;
-        let view_width_in_voxels = 3000.0 / voxel_in_pixels;
-        let view_height_in_voxels = 3000.0 / voxel_in_pixels;
-        let projection = mat4::orthographic_rh_no(FrustumPlanes {
-            left: -view_width_in_voxels / 2.0,
-            right: view_width_in_voxels / 2.0,
-            bottom: view_height_in_voxels / 2.0,
-            top: -view_height_in_voxels / 2.0,
-            near: -512.0,
-            far: 1024.0,
-        });
-        self.light_transform = projection * view;
-    }
-}
-
-impl InternalRenderer {
-    pub fn update_camera(&mut self) {
         self.camera.update_camera();
     }
 
-    pub fn update_light_transform(&mut self) {
+    fn update_light_transform(&mut self) {
         self.light.update_light_transform(self.settings.world_size);
         // let horizon =
     }
 
-    // starts the stage where you can "request drawing" things
-    // under the hood it prepares Vulkan for recording draw calls
-    pub fn start_frame(&mut self) {
-        self.update_camera();
-        self.update_light_transform();
-
-        self.lumal.start_frame(&[
-            *self.cmdbufs.compute_command_buffers.current(),
-            *self.cmdbufs.graphics_command_buffers.current(),
-            *self.cmdbufs.copy_command_buffers.current(),
-            *self.cmdbufs.lightmap_command_buffers.current(),
-        ]);
-    }
-
-    pub fn start_blockify(&mut self) {
+    fn start_blockify(&mut self) {
         self.block_copies_queue.clear();
         self.palette_counter = self.static_block_palette_size as usize;
 
@@ -143,7 +51,7 @@ impl InternalRenderer {
         self.current_world.copy_data_from(&self.origin_world);
     }
 
-    pub fn index_block_xy(&self, n: usize) -> uvec2 {
+    fn index_block_xy(&self, n: usize) -> uvec2 {
         let x = n % BLOCK_PALETTE_SIZE_X as usize;
         let y = n / BLOCK_PALETTE_SIZE_X as usize;
         debug_assert!(y <= BLOCK_PALETTE_SIZE_Y as usize);
@@ -151,7 +59,11 @@ impl InternalRenderer {
     }
 
     // allocates temp block in palette for every block that intersects with every mesh blockified
-    pub fn blockify_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
+    fn blockify_mesh(
+        &mut self,
+        mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        trans: &MeshTransform,
+    ) {
         let rotate = mat4::from(trans.rotation);
         let shift = mat4::identity().translated_3d(trans.translation);
         let border_in_voxel = get_shift(shift * rotate, mesh.total_size);
@@ -230,7 +142,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn end_blockify(&mut self) {
+    fn end_blockify(&mut self) {
         let count_to_copy = self.current_world.dimensions().0
             * self.current_world.dimensions().1
             * self.current_world.dimensions().2;
@@ -256,106 +168,11 @@ impl InternalRenderer {
         };
     }
 
-    #[inline(always)]
-    fn _function_i_had_to_write_to_be_able_to_use_goto(
-        world_size: &uvec3,
-        current_world: &Array3D<BlockId>,
-        visited: &mut BitArray3d<usize>,
-        zz: isize,
-        yy: isize,
-        xx: isize,
-    ) -> bool {
-        type TheType = isize;
-
-        macro_rules! check_neighbor {
-            ($total:expr, $dx:expr, $dy:expr, $dz:expr) => {
-                let dx = $dx;
-                let dy = $dy;
-                let dz = $dz;
-                let x = (xx as TheType + dx).max(0).min(world_size.x as TheType - 1);
-                let y = (yy as TheType + dy).max(0).min(world_size.y as TheType - 1);
-                let z = (zz as TheType + dz).max(0).min(world_size.z as TheType - 1);
-                let block = current_world.get(x as usize, y as usize, z as usize);
-
-                assert_assume!((block > 0) == (block != 0));
-
-                // so, the idea is to make less checks, and also .set() only once
-                $total += block;
-                // if block > 0 {
-                //     // visited.set(xx as usize, yy as usize, zz as usize, true);
-                //     return true;
-                // }
-            };
-        }
-        let mut total = 0;
-        check_neighbor!(total, 0, 0, 0);
-        if total > 0 {
-            return true;
-        }
-        check_neighbor!(total, 1, 0, 0);
-        check_neighbor!(total, -1, 0, 0);
-        if total > 0 {
-            return true;
-        }
-        check_neighbor!(total, 0, -1, 0);
-        check_neighbor!(total, 1, -1, 0);
-        check_neighbor!(total, -1, -1, 0);
-        if total > 0 {
-            return true;
-        }
-        check_neighbor!(total, 0, 1, 0);
-        check_neighbor!(total, 1, 1, 0);
-        check_neighbor!(total, -1, 1, 0);
-        if total > 0 {
-            return true;
-        }
-        check_neighbor!(total, 0, 0, 1);
-        check_neighbor!(total, 1, 0, 1);
-        check_neighbor!(total, -1, 0, 1);
-        check_neighbor!(total, 0, 1, 1);
-        if total > 0 {
-            return true;
-        }
-        check_neighbor!(total, 1, 1, 1);
-        check_neighbor!(total, -1, 1, 1);
-        check_neighbor!(total, 0, -1, 1);
-        check_neighbor!(total, 1, -1, 1);
-        check_neighbor!(total, -1, -1, 1);
-        if total > 0 {
-            return true;
-        }
-        check_neighbor!(total, 0, 0, -1);
-        check_neighbor!(total, 1, 0, -1);
-        check_neighbor!(total, -1, 0, -1);
-        check_neighbor!(total, 0, 1, -1);
-        if total > 0 {
-            return true;
-        }
-        check_neighbor!(total, 1, 1, -1);
-        check_neighbor!(total, -1, 1, -1);
-        check_neighbor!(total, 0, -1, -1);
-        check_neighbor!(total, 1, -1, -1);
-        check_neighbor!(total, -1, -1, -1);
-        // Manual unrolling with spatial coherence (same z)
-        // TODO: is there a way to script stuff like this?
-        // self:
-        // Layer 0
-        // Layer +1
-
-        // Layer -1
-        if total > 0 {
-            visited.set(xx as usize, yy as usize, zz as usize, true);
-            // continue;
-        }
-
-        false
-    }
-
     // i love the fact that none of these does anything
     #[optimize(speed)]
     // Note: this is the last function that can be called before Vulkan interraction
     // which means that you HAVE to wait at most after it
-    pub fn find_radiance_to_update(&mut self) {
+    fn find_radiance_to_update(&mut self) {
         // separation for multiverse
         // let self = &mut *__self;
         flame::start("prepare");
@@ -481,14 +298,28 @@ impl InternalRenderer {
     }
 
     #[optimize(speed)]
-    pub fn update_radiance(&mut self) {
+    fn update_radiance(&mut self) {
         // separation for multiverse
         Self::_update_radiance(self);
     }
 
+    // starts the stage where you can "request drawing" things
+    // under the hood it prepares Vulkan for recording draw calls
+    fn start_frame(&mut self) {
+        self.update_camera();
+        self.update_light_transform();
+
+        self.lumal.start_frame(&[
+            *self.cmdbufs.compute_command_buffers.current(),
+            *self.cmdbufs.graphics_command_buffers.current(),
+            *self.cmdbufs.copy_command_buffers.current(),
+            *self.cmdbufs.lightmap_command_buffers.current(),
+        ]);
+    }
+
     // #[multiversion(targets("x86_64+avx2"))]
     #[optimize(speed)]
-    fn _update_radiance(self: &mut InternalRenderer) {
+    fn _update_radiance(self: &mut InternalRendererVulkan) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         flame::start("copy radiance updates");
@@ -619,7 +450,7 @@ impl InternalRenderer {
     }
 
     // when shift is zero, no work is done (so dont cache this)
-    pub fn shift_radiance(&mut self, radiance_shift: ivec3) {
+    fn shift_radiance(&mut self, radiance_shift: ivec3) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         let cam_shift = radiance_shift + 0;
@@ -801,7 +632,7 @@ impl InternalRenderer {
         );
     }
 
-    pub fn exec_copies(&mut self) {
+    fn exec_copies(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         let clear_color = vk::ClearColorValue::default();
@@ -1019,13 +850,17 @@ impl InternalRenderer {
         );
     }
 
-    pub fn start_map(&mut self) {
+    fn start_map(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
         self.lumal.bind_compute_pipe(command_buffer, &self.pipes.map_pipe);
     }
 
-    pub fn map_mesh(&mut self, mesh: &InternalMeshModel, trans: &MeshTransform) {
+    fn map_mesh(
+        &mut self,
+        mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        trans: &MeshTransform,
+    ) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
         let model_voxels_info = vk::DescriptorImageInfo {
             image_view: mesh.voxels.view,
@@ -1097,7 +932,7 @@ impl InternalRenderer {
         };
     }
 
-    pub fn end_map(&mut self) {
+    fn end_map(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
         self.lumal.image_memory_barrier(
             command_buffer,
@@ -1111,12 +946,12 @@ impl InternalRenderer {
         );
     }
 
-    pub fn end_compute(&mut self) {
+    fn end_compute(&mut self) {
         let _command_buffer = self.cmdbufs.compute_command_buffers.current();
         // do nothing
     }
 
-    pub fn start_lightmap(&mut self) {
+    fn start_lightmap(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         #[repr(C)] // for push constants
@@ -1164,25 +999,25 @@ impl InternalRenderer {
         );
     }
 
-    pub fn lightmap_start_blocks(&mut self) {
+    fn lightmap_start_blocks(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.lightmap_blocks_pipe);
     }
 
-    pub fn lightmap_start_models(&mut self) {
+    fn lightmap_start_models(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.lightmap_models_pipe);
     }
 
-    pub fn end_lightmap(&mut self) {
+    fn end_lightmap(&mut self) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.lightmap_rpass)
     }
 
-    pub fn start_raygen(&mut self) {
+    fn start_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         #[repr(C)] // for push constants
@@ -1255,7 +1090,7 @@ impl InternalRenderer {
         );
     }
 
-    pub fn raygen_start_blocks(&mut self) {
+    fn raygen_start_blocks(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.raygen_blocks_pipe);
@@ -1312,7 +1147,7 @@ impl InternalRenderer {
         };
     }
 
-    pub fn raygen_block(&mut self, block_id: BlockId, shift: ivec3) {
+    fn raygen_block(&mut self, block_id: BlockId, shift: ivec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         let block_mesh = &self.block_palette_meshes[block_id as usize];
@@ -1376,7 +1211,7 @@ impl InternalRenderer {
         CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
     }
 
-    pub fn raygen_start_models(&mut self) {
+    fn raygen_start_models(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         unsafe { self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE) };
 
@@ -1412,7 +1247,11 @@ impl InternalRenderer {
         }
     }
 
-    pub fn raygen_model(&mut self, model_mesh: &InternalMeshModel, model_trans: &MeshTransform) {
+    fn raygen_model(
+        &mut self,
+        model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        model_trans: &MeshTransform,
+    ) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         unsafe {
             self.lumal.device.cmd_bind_vertex_buffers(
@@ -1508,7 +1347,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn lightmap_block(&mut self, block_id: BlockId, shift: ivec3) {
+    fn lightmap_block(&mut self, block_id: BlockId, shift: ivec3) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         let block_mesh = &self.block_palette_meshes[block_id as usize];
@@ -1577,7 +1416,11 @@ impl InternalRenderer {
         }
     }
 
-    pub fn lightmap_model(&mut self, model_mesh: &InternalMeshModel, model_trans: &MeshTransform) {
+    fn lightmap_model(
+        &mut self,
+        model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        model_trans: &MeshTransform,
+    ) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
         unsafe {
             self.lumal.device.cmd_bind_vertex_buffers(
@@ -1637,7 +1480,7 @@ impl InternalRenderer {
         CHECK_AND_LIGHTMAP_MODEL_FACE!(i8vec3::new(0, 0, -1), zzN);
     }
 
-    pub fn update_particles(&mut self) {
+    fn update_particles(&mut self) {
         let mut write_index = 0;
 
         for i in 0..self.particles.len() {
@@ -1679,7 +1522,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn raygen_map_particles(&mut self) {
+    fn raygen_map_particles(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
@@ -1703,14 +1546,14 @@ impl InternalRenderer {
         }
     }
 
-    pub fn raygen_start_grass(&mut self) {
+    fn raygen_start_grass(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         unsafe {
             self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
         }
     }
 
-    pub fn updade_grass(&mut self, wind_direction: vec2) {
+    fn updade_grass(&mut self, wind_direction: vec2) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
         self.lumal.bind_compute_pipe(command_buffer, &self.pipes.update_grass_pipe);
 
@@ -1759,7 +1602,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn updade_water(&mut self) {
+    fn updade_water(&mut self) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
         self.lumal.bind_compute_pipe(command_buffer, &self.pipes.update_water_pipe);
 
@@ -1806,7 +1649,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn raygen_map_grass(&mut self, grass: &InternalMeshFoliage, pos: &vec3) {
+    fn raygen_map_grass(&mut self, grass: &InternalMeshFoliage, pos: &vec3) {
         let command_buffers = self.cmdbufs.graphics_command_buffers.current();
 
         let size = 10;
@@ -1859,7 +1702,7 @@ impl InternalRenderer {
         };
     }
 
-    pub fn raygen_start_water(&mut self) {
+    fn raygen_start_water(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe { self.lumal.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE) };
@@ -1867,7 +1710,7 @@ impl InternalRenderer {
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.raygen_water_pipe);
     }
 
-    pub fn raygen_map_water(&mut self, _water: &InternalMeshLiquid, pos: &vec3) {
+    fn raygen_map_water(&mut self, _water: &InternalMeshLiquid, pos: &vec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         let quality_size = 32;
         #[repr(C)] // for push constants
@@ -1902,15 +1745,15 @@ impl InternalRenderer {
         };
     }
 
-    pub fn end_raygen(&mut self) {
+    fn end_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.gbuffer_rpass);
     }
 
-    pub fn start_2nd_spass(&mut self) {
+    fn start_2nd_spass(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
-        let ao_lut = InternalRenderer::generate_lut::<8>(
+        let ao_lut = ao_lut::generate_lut::<8>(
             16.0 / 1000.0,
             vec2::new(
                 self.lumal.vulkan_data.swapchain_extent.width as f32,
@@ -1960,7 +1803,7 @@ impl InternalRenderer {
         );
     }
 
-    pub fn diffuse(&mut self) {
+    fn diffuse(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.diffuse_pipe);
@@ -1995,7 +1838,7 @@ impl InternalRenderer {
         } // btw, every such call is fullscreen triangle
     }
 
-    pub fn ambient_occlusion(&mut self) {
+    fn ambient_occlusion(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
@@ -2010,7 +1853,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn glossy_raygen(&mut self) {
+    fn glossy_raygen(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
@@ -2026,7 +1869,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn raygen_start_smoke(&mut self) {
+    fn raygen_start_smoke(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
@@ -2036,7 +1879,7 @@ impl InternalRenderer {
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.fill_stencil_smoke_pipe);
     }
 
-    pub fn raygen_map_smoke(&mut self, _smoke: &InternalMeshVolumetric, pos: &vec3) {
+    fn raygen_map_smoke(&mut self, _smoke: &InternalMeshVolumetric, pos: &vec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         #[repr(C)] // for push constants
@@ -2064,7 +1907,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn smoke(&mut self) {
+    fn smoke(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
@@ -2079,7 +1922,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn glossy(&mut self) {
+    fn glossy(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
@@ -2115,7 +1958,7 @@ impl InternalRenderer {
         }
     }
 
-    pub fn tonemap(&mut self) {
+    fn tonemap(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         unsafe {
@@ -2130,14 +1973,14 @@ impl InternalRenderer {
         }
     }
 
-    pub fn end_2nd_spass(&mut self) {
+    fn end_2nd_spass(&mut self) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         // Currently, there is no UI because it is getting abstracted away (l0l)
         self.lumal.cmd_end_renderpass(command_buffer, &mut self.rpasses.shade_rpass);
     }
 
-    pub fn end_frame(&mut self, window: &Window) {
+    fn end_frame(&mut self, window: &Window) {
         self.lumal.end_frame(
             &[
                 // "Special" cmb used by UI copies & layout transitions HAS to be first
@@ -2187,10 +2030,15 @@ impl InternalRenderer {
 
         let should_recreate = self.lumal.should_recreate;
         if should_recreate {
+            lumal::atrace!();
             self.recreate_window(window);
+            lumal::atrace!();
             self.lumal.should_recreate = false;
         }
 
         // self
     }
+
+    type BufferType = lumal::Buffer;
+    type ImageType = lumal::Image;
 }

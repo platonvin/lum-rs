@@ -1,10 +1,11 @@
-use internal_renderer::*;
+use crate::internal_renderer::{
+    render_vk::{AllSamplers, InternalRendererVulkan},
+    Settings,
+};
 use lumal::vk;
 use lumal::{LumalSettings, Renderer};
 
-use crate::*;
-
-impl InternalRenderer {
+impl InternalRendererVulkan {
     #[cold]
     #[optimize(size)]
     pub fn create_all_samplers(

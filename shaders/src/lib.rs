@@ -125,3 +125,7 @@ pub fn get_shader(name: &str) -> Option<&'static [u8]> {
         _ => None,
     }
 }
+
+pub fn get_glsl(arg: &str) -> Option<&'static str> {
+    todo!()
+}
