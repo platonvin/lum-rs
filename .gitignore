@@ -1,5 +1,6 @@
 /target
 /.idea 
+temp
 /temp.md
 # compiled shaders (SPIR-V). They are not shipped
 *.spv 
@@ -27,3 +28,7 @@ analysis.jsoncargo
 /ipcr.md
 /RAW_README.md
 /iwmag.md
+/test.c
+/a.exe
+GL_CHANGES
+/webgpu_is_great

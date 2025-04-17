@@ -13,7 +13,7 @@ precision highp float;
 #include "common\consts.glsl"
 
 layout(input_attachment_index = 0, set = 0, binding = 1) uniform usubpassInput matNorm;
-layout(input_attachment_index = 1, set = 0, binding = 2) uniform  subpassInput depthBuffer;
+layout(input_attachment_index = 1, set = 0, binding = 2) uniform subpassInput depthBuffer;
 layout(set = 0, binding = 3 ) uniform sampler2D voxelPalette;
 layout(set = 0, binding = 4 ) uniform sampler3D radianceCache;
 layout(set = 0, binding = 5 ) uniform sampler2DShadow lightmap;

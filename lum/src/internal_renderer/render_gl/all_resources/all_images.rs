@@ -173,19 +173,11 @@ impl InternalRendererGL {
         let highres_frame =
             Self::create_image(gl, glow::TEXTURE_2D, glow::RGBA8, (width, height, 1));
 
-        let far_depth = Self::create_image(
-            gl,
-            glow::TEXTURE_2D,
-            glow::DEPTH_COMPONENT32F,
-            (width, height, 1),
-        );
+        // software depth, not hw
+        let far_depth = Self::create_image(gl, glow::TEXTURE_2D, glow::R32F, (width, height, 1));
 
-        let near_depth = Self::create_image(
-            gl,
-            glow::TEXTURE_2D,
-            glow::DEPTH_COMPONENT32F,
-            (width, height, 1),
-        );
+        // software depth, not hw
+        let near_depth = Self::create_image(gl, glow::TEXTURE_2D, glow::R32F, (width, height, 1));
 
         AllSwapchainDependentImages {
             highres_frame,

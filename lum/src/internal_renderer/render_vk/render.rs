@@ -24,7 +24,7 @@ use super::InternalRendererVulkan;
 
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
-impl render_interface::LumRendererAPI for InternalRendererVulkan {
+impl InternalRendererVulkan {
     fn new(
         lum_settings: &Settings,
         window: &Window,
@@ -51,7 +51,7 @@ impl render_interface::LumRendererAPI for InternalRendererVulkan {
         self.current_world.copy_data_from(&self.origin_world);
     }
 
-    fn index_block_xy(&self, n: usize) -> uvec2 {
+    pub fn index_block_xy(&self, n: usize) -> uvec2 {
         let x = n % BLOCK_PALETTE_SIZE_X as usize;
         let y = n / BLOCK_PALETTE_SIZE_X as usize;
         debug_assert!(y <= BLOCK_PALETTE_SIZE_Y as usize);
@@ -61,7 +61,7 @@ impl render_interface::LumRendererAPI for InternalRendererVulkan {
     // allocates temp block in palette for every block that intersects with every mesh blockified
     fn blockify_mesh(
         &mut self,
-        mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        mesh: &InternalMeshModel<lumal::Buffer, lumal::Image>,
         trans: &MeshTransform,
     ) {
         let rotate = mat4::from(trans.rotation);
@@ -858,7 +858,7 @@ impl render_interface::LumRendererAPI for InternalRendererVulkan {
 
     fn map_mesh(
         &mut self,
-        mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        mesh: &InternalMeshModel<lumal::Buffer, lumal::Image>,
         trans: &MeshTransform,
     ) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
@@ -1249,7 +1249,7 @@ impl render_interface::LumRendererAPI for InternalRendererVulkan {
 
     fn raygen_model(
         &mut self,
-        model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        model_mesh: &InternalMeshModel<lumal::Buffer, lumal::Image>,
         model_trans: &MeshTransform,
     ) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
@@ -1418,7 +1418,7 @@ impl render_interface::LumRendererAPI for InternalRendererVulkan {
 
     fn lightmap_model(
         &mut self,
-        model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+        model_mesh: &InternalMeshModel<lumal::Buffer, lumal::Image>,
         model_trans: &MeshTransform,
     ) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
@@ -2035,10 +2035,5 @@ impl render_interface::LumRendererAPI for InternalRendererVulkan {
             lumal::atrace!();
             self.lumal.should_recreate = false;
         }
-
-        // self
     }
-
-    type BufferType = lumal::Buffer;
-    type ImageType = lumal::Image;
 }

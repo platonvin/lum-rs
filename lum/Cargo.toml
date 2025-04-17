@@ -4,8 +4,10 @@
     edition = "2021"
 
 [features]
-    default = ["gl_backend"]
+    default = ["wgpu_backend"]
     vk_backend = []
+    wgpu_backend = []
+    # currently 50% implemented, abandoned
     gl_backend = []
     # controls wether Lum uses Lumal feature for validation layer names
     debug_validation_names = ["lumal/debug_validation_names"]
@@ -28,6 +30,7 @@
     glutin = "0.32.2"
     glutin-winit = "0.5.0"
     raw-window-handle = "0.6.2"
+    wgpu = "24.0.3"
 
 [lib]
     name = "lum"

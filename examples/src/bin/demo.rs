@@ -8,9 +8,7 @@ use std::{
 };
 
 use lum::{
-    internal_renderer::{
-        load_interface::LoadInterface, render_interface::LumRendererAPI, Settings,
-    },
+    internal_renderer::{load_interface::LoadInterface, Settings},
     renderer::{MeshFoliage, MeshLiquid, MeshModel, MeshVolumetric, Renderer},
     types::{u8vec3, uvec3, vec3, BlockId, MeshTransform},
 };
@@ -72,15 +70,15 @@ impl AllMeshes {
     }
 }
 
-struct AppState {
-    window: Window,
-    lum: lum::renderer::Renderer,
+struct AppState<'renderer> {
+    // window: &'renderer Window,
+    lum: lum::renderer::Renderer<'renderer>,
     meshes: AllMeshes,
     transforms: AllTransforms,
     about_to_close: bool,
 }
-impl AppState {
-    fn new(mut window: Window, event_loop: &EventLoop<()>) -> Self {
+impl<'renderer> AppState<'renderer> {
+    async fn new(mut window: Window, event_loop: &EventLoop<()>) -> Self {
         let settings = Settings {
             static_block_palette_size: 15,
             ..Settings::default()
@@ -97,7 +95,7 @@ impl AppState {
             100,
         );
 
-        let mut lum = pre_init_lum.init(&settings, &mut window, &event_loop);
+        let mut lum = pre_init_lum.init(&settings, window, &event_loop).await;
         let meshes = AllMeshes::new(&mut lum, grass);
 
         lum.load_block(1, "assets/dirt.vox");
@@ -115,11 +113,11 @@ impl AppState {
         lum.load_block(13, "assets/wood.vox");
         lum.load_block(14, "assets/planks.vox");
 
-        lum.renderer.update_block_palette_to_gpu();
-        lum.renderer.update_material_palette_to_gpu();
+        // lum.renderer.update_block_palette_to_gpu();
+        // lum.renderer.update_material_palette_to_gpu();
 
         Self {
-            window,
+            // window,
             lum,
             meshes,
             transforms: Default::default(),
@@ -234,11 +232,11 @@ impl AppState {
         }
 
         self.lum.prepare_frame();
-        self.lum.end_frame(&self.window);
+        self.lum.end_frame();
     }
 }
 
-impl ApplicationHandler for AppState {
+impl<'renderer> ApplicationHandler for AppState<'renderer> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         println!("Resumed")
     }
@@ -285,11 +283,32 @@ impl ApplicationHandler for AppState {
         } else {
             flame::clear();
             self.render();
+            // _event_loop.
         }
     }
-}
 
-fn main() {
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
+        let _ = (event_loop, cause);
+    }
+
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: ()) {
+        let _ = (event_loop, event);
+    }
+
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        let _ = event_loop;
+    }
+
+    fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+        let _ = event_loop;
+    }
+
+    fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
+        let _ = event_loop;
+    }
+}
+#[pollster::main]
+async fn main() {
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let window_attributes = Window::default_attributes()
@@ -299,7 +318,7 @@ fn main() {
         ;
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();
-    let mut state = AppState::new(window, &event_loop);
+    let mut state = AppState::new(window, &event_loop).await;
     state.load_scene("assets/scene").unwrap();
     let result = event_loop.run_app(&mut state);
     state.destroy();

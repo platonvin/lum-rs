@@ -9,7 +9,7 @@ use crate::{
 };
 // use internal_renderer::{InternalRendererVulkan, *};
 use lumal::vk;
-use lumal::{ring::Ring, set_debug_names, LumalSettings, Renderer};
+use lumal::{LumalSettings, Renderer};
 
 impl InternalRendererVulkan {
     #[cold]

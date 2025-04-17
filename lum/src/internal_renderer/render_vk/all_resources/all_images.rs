@@ -8,7 +8,6 @@ use crate::{
         Settings,
     },
     types::{uvec3, uvec3_to_extent3d},
-    *,
 };
 // use internal_renderer::{InternalRendererVulkan, *};
 use lumal::vk;

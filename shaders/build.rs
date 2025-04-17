@@ -53,37 +53,85 @@ fn main() {
             continue;
         }
 
-        let mut out_path = out_dir.join(path.file_name().unwrap());
-        add_extension(&mut out_path, "spv");
+        // for Vulkan
+        let mut out_spv = out_dir.join(path.file_name().unwrap());
+        add_extension(&mut out_spv, "spv");
 
-        if !needs_recompile(&path, &out_path) {
-            println!("Skipping up-to-date shader: {}", path.display());
+        if !needs_recompile(&path, &out_spv) {
+            // println!("Skipping up-to-date shader: {}", path.display());
             continue;
         }
 
-        println!(
-            "Compiling shader: {} -> {}",
-            path.display(),
-            out_path.display()
-        );
-        let status = Command::new("glslc")
+        // println!(
+        //     "Compiling shader: {} -> {}",
+        //     path.display(),
+        //     out_spv.display()
+        // );
+        // current SPIR‑V pass:
+        let status_spv = Command::new("glslc")
             .arg(&path)
+            .arg("-DVULKANN") // define VULKAN
+            // .arg("VULKAN")
             .arg("-o")
-            .arg(&out_path)
+            .arg(&out_spv)
             .arg("--target-env=vulkan1.1")
             .arg("-g")
             .status()
             .expect("Failed to execute glslc");
 
-        assert!(status.success());
-
-        if !status.success() {
-            eprintln!("Failed to compile shader: {}", path.display());
-            continue;
+        if !status_spv.success() {
+            panic!("Failed to compile shader: {}", path.display());
         }
-
-        println!("Successfully compiled shader: {}", path.display());
     }
+
+    // for entry in fs::read_dir("shaders_gl").expect("Failed to read shaders directory") {
+    //     let entry = entry.expect("Failed to read shader entry");
+    //     let path = entry.path();
+
+    //     if !path.is_file() {
+    //         continue;
+    //     }
+
+    //     // for OpenGL
+    //     let mut out_glsl = out_dir.join(path.file_name().unwrap());
+    //     add_extension(&mut out_glsl, "glsl");
+
+    //     if !needs_recompile(&path, &out_glsl) {
+    //         // println!("Skipping up-to-date shader: {}", path.display());
+    //         continue;
+    //     }
+
+    //     let status_glsl = Command::new("glslangValidator")
+    //         .arg("-E") // only run the preprocessor
+    //         .arg("-DOPENGL") // define OPENGL
+    //         .arg("--client opengl") // define OPENGL
+    //         // .arg("--target-env=opengl")
+    //         // .arg("--glsl-version")
+    //         // .arg("300es")
+    //         // .arg("OPENGL")
+    //         .arg(&path)
+    //         .arg("-o")
+    //         .arg(&out_glsl)
+    //         .status()
+    //         .expect("Failed to preprocess GLSL");
+    //     // let status_glsl = Command::new("glslangValidator")
+    //     //     .arg("-E") // only run the preprocessor
+    //     //     .arg("-DOPENGL") // define OPENGL
+    //     //     .arg("-G300") // define OPENGL
+    //     //     // .arg("--target-env=opengl")
+    //     //     // .arg("--glsl-version")
+    //     //     // .arg("300es")
+    //     //     // .arg("OPENGL")
+    //     //     .arg(&path)
+    //     //     .arg("-o")
+    //     //     .arg(&out_glsl)
+    //     //     .status()
+    //     //     .expect("Failed to preprocess GLSL");
+
+    //     if !status_glsl.success() {
+    //         panic!("Failed to preprocess GLSL: {}", path.display());
+    //     }
+    // }
 
     // inform Cargo about the compiled shaders directory so it can be included later
     println!(

@@ -8,9 +8,13 @@ pub mod aabb;
 pub mod ao_lut;
 pub mod load_interface;
 pub mod ogt_vox;
+#[cfg(feature = "gl_backend")]
 pub mod render_gl;
 pub mod render_interface;
+// #[cfg(feature = "vk_backend")]
 pub mod render_vk;
+#[cfg(feature = "wgpu_backend")]
+pub mod render_wgpu;
 
 #[derive(Clone, Copy)]
 pub struct Settings {
@@ -70,8 +74,8 @@ impl Default for Camera {
 
 #[derive(Debug, Clone, Copy)]
 pub struct SunLight {
-    light_transform: mat4,
-    light_dir: vec3,
+    pub light_transform: mat4,
+    pub light_dir: vec3,
 }
 impl Default for SunLight {
     fn default() -> Self {

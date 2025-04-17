@@ -1,0 +1,87 @@
+// map.comp (WGSL translation)
+
+// --- Push Constants ---
+struct PushConstants {
+    inverse_trans: mat4x4<f32>, // map game voxel world to modelVoxels
+    shift: vec4<i32>,           // Shift applied to global invocation ID
+};
+// Assuming push constants mapped to a uniform buffer at group 0, binding 2 (avoiding overlap)
+// Adjust group/binding as needed.
+@group(0) @binding(2) var<uniform> pco: PushConstants;
+
+// --- Storage Texture Bindings ---
+// Group 0 bindings
+@group(0) @binding(0) var blocks_tex: texture_storage_3d<r16sint, read>;     // readonly iimage3D blocks (r16i -> r16sint)
+@group(0) @binding(1) var blockPalette_tex: texture_storage_3d<r8uint, write>; // writeonly uimage3D blockPalette (r8ui -> r8uint)
+
+// Group 1 bindings
+@group(1) @binding(0) var modelVoxels_tex: texture_storage_3d<r8uint, read>; // readonly uimage3D modelVoxels
+
+// --- Constants ---
+const BLOCK_PALETTE_SIZE_X: i32 = 64;
+const STATIC_BLOCK_COUNT: i32 = 15; // Block IDs >= this are considered dynamic/writable
+
+// --- Helper Functions ---
+// Calculates the coordinate within the block palette texture atlas
+fn voxel_in_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
+    let block_x = block_id % BLOCK_PALETTE_SIZE_X;
+    let block_y = block_id / BLOCK_PALETTE_SIZE_X;
+    // Assuming palette is a 3D texture where Z=0 is used, and blocks are laid out in XY plane
+    return relative_voxel_pos + vec3<i32>(16 * block_x, 16 * block_y, 0);
+}
+
+// --- Compute Shader Entry Point ---
+@compute @workgroup_size(4, 4, 4)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    // Get texture dimensions (used for bounds checking if needed, not explicitly used in GLSL logic)
+    // let model_size = textureDimensions(modelVoxels_tex); // Example
+
+    // Cast push constant shift once
+    let shift_f32 = vec3<f32>(pco.shift.xyz);
+
+    // Calculate world voxel coordinate for this invocation
+    let invocation_voxel_f32 = vec3<f32>(global_id); // Voxel relative to shift start
+    // Add 0.5 for center sampling before transform, add shift
+    let world_voxel_f32 = invocation_voxel_f32 + 0.5 + shift_f32;
+    let world_voxel_i32 = vec3<i32>(floor(world_voxel_f32)); // Integer world voxel coord
+
+    // Transform world voxel center coordinate to model voxel coordinate
+    let model_voxel_f32 = (pco.inverse_trans * vec4<f32>(world_voxel_f32, 1.0)).xyz;
+    let model_voxel_i32 = vec3<i32>(floor(model_voxel_f32)); // Integer model voxel coord
+
+    // --- Bounds Check (Optional but Recommended) ---
+    // It's good practice to check if the calculated coordinates are within texture bounds
+    // let block_tex_size = textureDimensions(blocks_tex);
+    // if (any(world_voxel_i32 / 16 >= block_tex_size) || any(world_voxel_i32 / 16 < vec3(0))) { return; }
+    // let model_tex_size = textureDimensions(modelVoxels_tex);
+    // if (any(model_voxel_i32 >= model_tex_size) || any(model_voxel_i32 < vec3(0))) { return; }
+    // let palette_tex_size = textureDimensions(blockPalette_tex);
+    // (Add checks for target_palette_voxel below if needed)
+    // --- End Bounds Check ---
+
+    // Calculate the target block grid coordinate
+    let target_block_i32 = world_voxel_i32 / 16;
+
+    // Load the target block ID from the 'blocks' texture (needs integer coordinates)
+    // Assuming block ID is stored in the 'r' component (r16sint)
+    let target_block_id = textureLoad(blocks_tex, target_block_i32).r; // No LOD for storage textures
+
+    // Check if the target block is dynamic (writable)
+    if (target_block_id >= STATIC_BLOCK_COUNT) {
+        // Load the voxel data from the 'modelVoxels' texture using model coordinates
+        // Assuming voxel data is stored in the 'r' component (r8uint)
+        let voxel_data = textureLoad(modelVoxels_tex, model_voxel_i32); // Returns vec4<u32> for r8uint
+
+        // If the loaded model voxel is not empty (assuming non-zero means not empty)
+        if (voxel_data.r != 0u) {
+            // Calculate the coordinate within the target block (0-15 range)
+            let voxel_in_block_i32 = world_voxel_i32 % 16;
+            // Calculate the final coordinate within the block palette texture atlas
+            let target_palette_voxel_i32 = voxel_in_palette(voxel_in_block_i32, target_block_id);
+
+            // Store the loaded voxel data into the 'blockPalette' texture
+            // textureStore takes coords (i32), value (vec4<u32> for r8uint)
+            textureStore(blockPalette_tex, target_palette_voxel_i32, voxel_data);
+        }
+    }
+}

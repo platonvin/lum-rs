@@ -1,0 +1,338 @@
+struct Material {
+    color: vec3<f32>,
+    emmitance: f32,
+    roughness: f32,
+    transparancy: f32, // Casually ignoring the fact that I do not have transparency
+};
+
+struct Constants {
+    timeSeed: i32,
+    iters: i32, // Unused
+};
+
+struct ReqBuffer {
+    updateReqests: array<i32, 4>, // Assuming i8vec4 can be represented as i32, 4 for padding
+};
+
+@group(0) @binding(0) var<uniform> ubo: Constants;
+@group(0) @binding(1) var blocks: texture_3d<i32>;
+@group(0) @binding(2) var blockPalette: texture_3d<u32>;
+@group(0) @binding(3) var voxelPalette: texture_2d<f32>;
+@group(0) @binding(4) var radianceCache2read: texture_3d<f32>;
+@group(0) @binding(5) var radianceCache2write: texture_storage_3d<rgba16float, write>;
+@group(0) @binding(6) var<storage, read> reqBuffer: ReqBuffer;
+
+// @push_constant var<push_constant> constants: Constants;
+
+const BLOCK_PALETTE_SIZE_X: i32 = 64;
+const REACTIVNESS: f32 = 0.01;
+const RAYS_PER_PROBE: i32 = 64; // TODO: change to spec const
+const PI: f32 = 3.1415926535897932384626433832795;
+const world_size: vec3<f32> = vec3<f32>(48.0, 48.0, 16.0);
+var<private> globalLightDir: vec3<f32> = vec3<f32>(0.5, 0.5, -0.9);
+const k: u32 = 1103515245u;
+
+var<private> random_storage: vec3<u32>;
+// var<workgroup> _light: array<vec3<f32>, RAYS_PER_PROBE / 32>; // Maximum possible requires size
+var<workgroup> _light: array<vec3<f32>, 2>; // Maximum possible requires size
+
+fn hash33(x: vec3<u32>) -> vec3<f32> {
+    var x_modified = x;
+    x_modified = ((x_modified >> 8u) ^ x_modified.yzx) * k;
+    x_modified = ((x_modified >> 8u) ^ x_modified.yzx) * k;
+    x_modified = ((x_modified >> 8u) ^ x_modified.yzx) * k;
+
+    return vec3<f32>(x_modified) * (1.0 / f32(0xffffffffu));
+}
+
+fn Random3D() -> vec3<f32> {
+    let res = hash33(random_storage);
+    random_storage.x = random_storage.x + 1u;
+    return res;
+}
+
+fn randomSpherePoint(rand: vec3<f32>) -> vec3<f32> {
+    let ang1 = (rand.x + 1.0) * PI; // [-1..1) -> [0..2*PI)
+    let u = rand.y; // [-1..1), cos and acos(2v-1) cancel each other out, so we arrive at [-1..1)
+    let u2 = u * u;
+    let sqrt1MinusU2 = sqrt(1.0 - u2);
+    let x = sqrt1MinusU2 * cos(ang1);
+    let y = sqrt1MinusU2 * sin(ang1);
+    let z = u;
+    return vec3<f32>(x, y, z);
+}
+
+fn NormalOrientedHemispherePoint(rand: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let v = randomSpherePoint(rand);
+    return v * sign(dot(v, n));
+}
+
+fn randomCosineWeightedHemispherePoint(rand: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let r = rand.x * 0.5 + 0.5; // [-1..1) -> [0..1)
+    let angle = PI * rand.y + PI; // [-1..1] -> [0..2*PI)
+    let sr = sqrt(r);
+    let p = vec2<f32>(sr * cos(angle), sr * sin(angle));
+    let ph = vec3<f32>(p.xy, sqrt(1.0 - dot(p, p)));
+    let tangent = normalize(rand);
+    let bitangent = cross(tangent, n);
+    let tangent_normalized = cross(bitangent, n);
+
+    return tangent_normalized * ph.x + bitangent * ph.y + n * ph.z;
+}
+
+fn GetBlock(block_pos: vec3<i32>) -> i32 {
+    return textureLoad(blocks, block_pos, 0).r;
+}
+
+fn voxel_in_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
+    let block_x = block_id % BLOCK_PALETTE_SIZE_X;
+    let block_y = block_id / BLOCK_PALETTE_SIZE_X;
+
+    return relative_voxel_pos + vec3<i32>(16 * block_x, 16 * block_y, 0);
+}
+
+fn voxel_in_bit_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
+    let block_x = block_id % BLOCK_PALETTE_SIZE_X;
+    let block_y = block_id / BLOCK_PALETTE_SIZE_X;
+
+    return relative_voxel_pos + vec3<i32>(0 + 2 * block_x, 0 + 16 * block_y, 0);
+}
+
+fn GetVoxel(pos: vec3<f32>) -> vec2<i32> {
+    let ipos = vec3<i32>(floor(pos));
+    let iblock_pos = ipos / 16;
+    let relative_voxel_pos = ipos % 16;
+
+    let block_id = GetBlock(iblock_pos);
+    let voxel_pos_in_palette = voxel_in_palette(relative_voxel_pos, block_id);
+    let voxel = textureLoad(blockPalette, voxel_pos_in_palette, 0).r;
+
+    return vec2<i32>(i32(voxel), block_id);
+}
+
+fn GetMat(voxel: i32) -> Material {
+    var mat: Material;
+
+    mat.color.r = textureLoad(voxelPalette, vec2<i32>(0, voxel), 0).r;
+    mat.color.g = textureLoad(voxelPalette, vec2<i32>(1, voxel), 0).r;
+    mat.color.b = textureLoad(voxelPalette, vec2<i32>(2, voxel), 0).r;
+    mat.transparancy = 1.0 - textureLoad(voxelPalette, vec2<i32>(3, voxel), 0).r;
+    mat.emmitance = textureLoad(voxelPalette, vec2<i32>(4, voxel), 0).r;
+    mat.roughness = textureLoad(voxelPalette, vec2<i32>(5, voxel), 0).r;
+
+    return mat;
+}
+
+fn square(a: f32) -> f32 {
+    return a * a;
+}
+
+fn sample_radiance(position: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    let block_pos = (position + normal * 16.0) / 16.0;
+    let sampled_light = textureSampleLevel(radianceCache2read, (block_pos + 0.5) / world_size, 0.0, 0.0).rgb;
+
+    return sampled_light;
+}
+
+fn initTvals(rayOrigin: vec3<f32>, rayDirection: vec3<f32>, tMax_ptr: ptr<function, vec3<f32>>, tDelta_ptr: ptr<function, vec3<f32>>, blockPos_ptr: ptr<function, vec3<i32>>) {
+    let effective_origin = rayOrigin;
+
+    let block_corner1 = (floor(effective_origin) - effective_origin) / rayDirection; // Now corners are relative vectors
+    let block_corner2 = (floor(effective_origin) - effective_origin) / rayDirection + 1.0 / rayDirection;
+    (*tMax_ptr).x = max(block_corner1.x, block_corner2.x); // 1 of these will be negative so max is just to get positive
+    (*tMax_ptr).y = max(block_corner1.y, block_corner2.y);
+    (*tMax_ptr).z = max(block_corner1.z, block_corner2.z);
+
+    (*tDelta_ptr) = 1.0 / abs(rayDirection); // How many dir vectors needed to move 1.0 across each axis
+    (*blockPos_ptr) = vec3<i32>(floor(effective_origin)); // Round origin to block pos
+}
+
+fn CastRay_fast(origin: vec3<f32>, direction: vec3<f32>, fraction_ptr: ptr<function, f32>, normal_ptr: ptr<function, vec3<f32>>, material_ptr: ptr<function, Material>, left_bounds_ptr: ptr<function, bool>) -> bool {
+    var block_hit = false;
+    (*fraction_ptr) = 0.0;
+    (*normal_ptr) = vec3<f32>(0.0);
+    (*material_ptr) = Material(vec3<f32>(0.0), 0.0, 0.0, 0.0);
+    (*left_bounds_ptr) = false;
+
+    let one_div_dir = 1.0 / direction;
+    let bprecomputed_corner = direction > vec3<f32>(0.0);
+    let precomputed_corner = vec3<f32>(bprecomputed_corner) * 16.0;
+
+    var current_voxel = GetVoxel(origin).x;
+    var current_block = GetVoxel(origin).y;
+
+    var iterations = 0;
+    let max_dist = 16.0 * 8.0; // TODO: quality settings
+
+    loop {
+        (*fraction_ptr) += 0.5;
+        let pos = origin + direction * (*fraction_ptr);
+
+        current_voxel = GetVoxel(pos).x;
+        current_block = GetVoxel(pos).y;
+
+        if (current_block == 0) {
+            let box_precomp = vec3<f32>((floor(pos / 16.0) * 16.0)) + precomputed_corner;
+            let temp = -pos * one_div_dir;
+            let block_corner = box_precomp * one_div_dir + temp;
+
+            let _f = min(block_corner.x, min(block_corner.y, block_corner.z));
+            let f = max(_f, 0.01); // Safety
+
+            (*fraction_ptr) += f;
+        }
+
+        if (current_voxel != 0) {
+            block_hit = true;
+            break;
+        }
+
+        if (any(pos < vec3<f32>(0.0)) || any(pos >= world_size * 16.0)) {
+            block_hit = false;
+            (*left_bounds_ptr) = true;
+            break;
+        }
+
+        if ((*fraction_ptr) >= max_dist) {
+            block_hit = false;
+            (*left_bounds_ptr) = true;
+            break;
+        }
+    }
+
+    let before_hit = origin + direction * ((*fraction_ptr) - 1.5);
+
+    if (current_voxel != 0) {
+        let steps = select(vec3<i32>(1), vec3<i32>(-1), direction < vec3<f32>(0.0));
+
+        var tMax = vec3<f32>(0.0);
+        var tDelta = vec3<f32>(0.0);
+        var voxel_pos_before_hit = vec3<i32>(0);
+        initTvals(before_hit, direction, &tMax, &tDelta, &voxel_pos_before_hit);
+        var voxel_pos = voxel_pos_before_hit;
+        var fcurrentStepDiretion = vec3<f32>(0.0);
+        var current_voxel_id = GetVoxel(vec3<f32>(voxel_pos)).x;
+        var ray_march_iterations = 0;
+
+        loop {
+            if (!(ray_march_iterations < 4 && current_voxel_id == 0)) {
+                break;
+            }
+            ray_march_iterations += 1;
+
+            fcurrentStepDiretion.x = select(1.0, 0.0, !(tMax.x <= tMax.y && tMax.x <= tMax.z));
+            fcurrentStepDiretion.y = select(1.0, 0.0, !(tMax.y <= tMax.x && tMax.y <= tMax.z));
+            fcurrentStepDiretion.z = select(1.0, 0.0, !(tMax.z <= tMax.x && tMax.z <= tMax.y));
+
+            voxel_pos += steps * vec3<i32>(fcurrentStepDiretion);
+            let tDelta_fcurrentStepDiretion = tDelta * fcurrentStepDiretion;
+            tMax += tDelta_fcurrentStepDiretion;
+
+            current_voxel_id = GetVoxel(vec3<f32>(voxel_pos)).x;
+        }
+
+        (*normal_ptr) = -(vec3<f32>(steps) * fcurrentStepDiretion);
+        let tFinal = tMax - tDelta;
+        (*fraction_ptr) = dot(tFinal, fcurrentStepDiretion);
+
+        (*material_ptr) = GetMat(current_voxel_id);
+    }
+
+    return block_hit;
+}
+
+fn madfrac(a: f32, b: f32) -> f32 {
+    return (a) * (b) - floor((a) * (b));
+}
+
+fn sphericalFibonacci(i: f32, n: f32) -> vec3<f32> {
+    let PHI = sqrt(5.0) * 0.5 + 0.5;
+    let phi = 2.0 * PI * madfrac(i, PHI - 1.0);
+    let cosTheta = 1.0 - (2.0 * i + 1.0) * (1.0 / n);
+    let sinTheta = sqrt(clamp(1.0 - cosTheta * cosTheta, 0.0, 1.0));
+
+    return vec3<f32>(
+        cos(phi) * sinTheta,
+        sin(phi) * sinTheta,
+        cosTheta);
+}
+
+fn probeId_to_rayDir(probe_id: i32) -> vec3<f32> {
+    return sphericalFibonacci(f32(probe_id), f32(RAYS_PER_PROBE));
+}
+
+fn trace_ray(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> vec3<f32> {
+    var fraction: f32;
+    var normal: vec3<f32>;
+    var material: Material;
+    var left_bounds: bool;
+    let hit = CastRay_fast(ray_pos, ray_dir, &fraction, &normal, &material, &left_bounds);
+    var light = vec3<f32>(0.0);
+    var reflection = vec3<f32>(1.0);
+
+    if (hit) {
+        let propagated_light = sample_radiance(ray_pos + fraction * ray_dir, normal);
+        light += reflection * propagated_light * material.color + material.color * material.emmitance;
+    } else {
+        let global_light_participance = -dot(ray_dir, globalLightDir);
+        if (global_light_participance > 0.95) {
+            light += reflection * global_light_participance * (vec3<f32>(0.9, 0.9, 0.6) * 3.0);
+        } else {
+            // Sky blue
+            light += reflection * (vec3<f32>(0.53, 0.81, 0.92) * 0.1);
+        }
+    }
+
+    return light;
+}
+
+fn store_probe(probe_pos: vec3<i32>, accumulated_light: vec3<f32>) {
+    let old_light = textureLoad(radianceCache2read, probe_pos, 0).rgb;
+    let old_light_clamped = clamp(old_light, vec3<f32>(0.0), vec3<f32>(1.0));
+    let new_light = mix(old_light_clamped, accumulated_light, REACTIVNESS);
+    textureStore(radianceCache2write, probe_pos, vec4<f32>(new_light, 1.0));
+}
+
+@compute @workgroup_size(RAYS_PER_PROBE, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
+        @builtin(local_invocation_index) local_invocation_index: u32,
+        @builtin(subgroup_id) subgroup_id: u32,
+        @builtin(subgroup_size) subgroup_size: u32) {
+    let local_pos = vec3<i32>(global_id);
+    globalLightDir = normalize(globalLightDir);
+
+    let probe_id = i32(local_pos.x) % RAYS_PER_PROBE;
+    let req_num = i32(local_pos.x) / RAYS_PER_PROBE;
+    let probe_pos = vec3<i32>(reqBuffer.updateReqests[req_num * 4 + 0], reqBuffer.updateReqests[req_num * 4 + 1], reqBuffer.updateReqests[req_num * 4 + 2]);
+    random_storage = vec3<u32>(vec2<u32>(local_pos.xy + ubo.timeSeed), u32(ubo.timeSeed)); 
+
+    let block_corner = vec3<f32>(probe_pos) * 16.0;
+    let block_center = block_corner + 8.0;
+    var ray_pos = block_center;
+    var ray_dir = probeId_to_rayDir(probe_id);
+    ray_dir = normalize(ray_dir + 0.1 * ((Random3D() - 0.5) * 2.0));
+    ray_pos += ray_dir * 6.0;
+    ray_pos += (Random3D() - 0.5) * 2.0;
+    ray_dir = select(ray_dir, -ray_dir, (probe_id % 2) == 0); // To sample light blocks themselves
+
+    var ray_light = trace_ray(ray_pos, ray_dir);
+    let avg_ray_light = subgroupAdd(ray_light) / f32(subgroup_size);
+
+    if (local_invocation_index == 0u) {
+        _light[subgroup_id] = avg_ray_light;
+    }
+    workgroupBarrier();
+
+    if (subgroup_id == 0u) {
+        var final_light = vec3<f32>(0.0);
+        let subgroups_per_workgroup = RAYS_PER_PROBE / i32(subgroup_size);
+        for (var i: i32 = 0; i < subgroups_per_workgroup; i += 1) {
+            final_light += _light[i];
+        }
+        final_light /= f32(subgroups_per_workgroup);
+
+        if (local_invocation_index == 0u) {
+            store_probe(probe_pos, final_light);
+        }
+    }
+}

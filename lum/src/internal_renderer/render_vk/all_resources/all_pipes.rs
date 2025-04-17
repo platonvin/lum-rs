@@ -3,15 +3,12 @@ use std::mem::offset_of;
 use crate::{
     internal_renderer::{
         render_vk::{
-            AllBuffers, AllCommandBuffers, AllIndependentImages, AllPipes, AllSamplers,
-            AllSwapchainDependentImages, InternalRendererVulkan, BLOCK_PALETTE_SIZE_X,
-            BLOCK_PALETTE_SIZE_Y, CHOSEN_DEPTH_FORMAT, FRAME_FORMAT, LIGHTMAPS_FORMAT,
-            MATNORM_FORMAT, RADIANCE_FORMAT, SECONDARY_DEPTH_FORMAT,
+            AllBuffers, AllIndependentImages, AllPipes, AllSamplers, AllSwapchainDependentImages,
+            InternalRendererVulkan,
         },
         Settings,
     },
     types::*,
-    *,
 };
 // use internal_renderer::{InternalRendererVulkan, *};
 use lumal::{
@@ -19,7 +16,7 @@ use lumal::{
     vk::Sampler,
 };
 use lumal::{descriptors::*, vk};
-use lumal::{ring::Ring, set_debug_names, LumalSettings, Renderer};
+use lumal::{ring::Ring, LumalSettings, Renderer};
 // This file could be just a data
 // it is setting up all the descriptors/layouts for pipes and pipes themeselves
 

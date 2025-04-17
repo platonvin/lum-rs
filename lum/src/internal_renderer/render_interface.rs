@@ -113,95 +113,95 @@ impl SunLight {
 }
 
 // not over Vulkan, but over Lum needs
-pub trait LumRendererAPI {
-    type BufferType;
-    type ImageType;
+// pub trait LumRendererAPI<'window> {
+//     type BufferType;
+//     type ImageType;
 
-    fn new(
-        lum_settings: &Settings,
-        window: &Window,
-        foliage_descriptions: Vec<InternalMeshFoliageDesc>,
-    ) -> Self;
+//     async fn new(
+//         lum_settings: &Settings,
+//         window: &'window Window,
+//         foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+//     ) -> Self;
 
-    fn update_camera(&mut self);
-    fn update_light_transform(&mut self);
-    fn start_blockify(&mut self);
-    fn index_block_xy(&self, n: usize) -> uvec2;
-    fn blockify_mesh(
-        &mut self,
-        mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
-        trans: &MeshTransform,
-    );
-    fn end_blockify(&mut self);
-    fn find_radiance_to_update(&mut self);
-    fn update_radiance(&mut self);
-    // starts the stage where you can "request drawing" things
-    // under the hood it prepares Vulkan for recording draw calls
-    fn start_frame(&mut self);
+//     fn update_camera(&mut self);
+//     fn update_light_transform(&mut self);
+//     fn start_blockify(&mut self);
+//     fn index_block_xy(&self, n: usize) -> uvec2;
+//     fn blockify_mesh(
+//         &mut self,
+//         mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+//         trans: &MeshTransform,
+//     );
+//     fn end_blockify(&mut self);
+//     fn find_radiance_to_update(&mut self);
+//     fn update_radiance(&mut self);
+//     // starts the stage where you can "request drawing" things
+//     // under the hood it prepares Vulkan for recording draw calls
+//     fn start_frame(&mut self);
 
-    // fn flush_buffer_memory(&mut self, buffer: &mut Self::Buffer);
+//     // fn flush_buffer_memory(&mut self, buffer: &mut Self::Buffer);
 
-    fn _update_radiance(&mut self);
+//     fn _update_radiance(&mut self);
 
-    // when shift is zero, no work is done (so dont cache this)
-    fn shift_radiance(&mut self, radiance_shift: ivec3);
-    fn exec_copies(&mut self);
-    fn start_map(&mut self);
+//     // when shift is zero, no work is done (so dont cache this)
+//     fn shift_radiance(&mut self, radiance_shift: ivec3);
+//     fn exec_copies(&mut self);
+//     fn start_map(&mut self);
 
-    fn map_mesh(
-        &mut self,
-        mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
-        trans: &MeshTransform,
-    );
-    fn end_map(&mut self);
+//     fn map_mesh(
+//         &mut self,
+//         mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+//         trans: &MeshTransform,
+//     );
+//     fn end_map(&mut self);
 
-    fn end_compute(&mut self);
+//     fn end_compute(&mut self);
 
-    fn start_lightmap(&mut self);
-    fn lightmap_start_blocks(&mut self);
+//     fn start_lightmap(&mut self);
+//     fn lightmap_start_blocks(&mut self);
 
-    fn lightmap_start_models(&mut self);
+//     fn lightmap_start_models(&mut self);
 
-    fn end_lightmap(&mut self);
+//     fn end_lightmap(&mut self);
 
-    fn start_raygen(&mut self);
-    fn raygen_start_blocks(&mut self);
-    fn is_face_visible(&self, normal: vec3, camera_dir: vec3) -> bool;
-    fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockId);
-    fn raygen_block(&mut self, block_id: BlockId, shift: ivec3);
-    fn raygen_start_models(&mut self);
-    fn raygen_model_face(&mut self, normal: vec3, buff: &IndexedVertices);
-    fn raygen_model(
-        &mut self,
-        model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
-        model_trans: &MeshTransform,
-    );
-    fn lightmap_block_face(&self, _normal: ivec3, buff: &IndexedVertices, _block_id: BlockId);
-    fn lightmap_block(&mut self, block_id: BlockId, shift: ivec3);
-    fn lightmap_model_face(&mut self, _normal: vec3, buff: &IndexedVertices);
-    fn lightmap_model(
-        &mut self,
-        model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
-        model_trans: &MeshTransform,
-    );
-    fn update_particles(&mut self);
-    fn raygen_map_particles(&mut self);
-    fn raygen_start_grass(&mut self);
-    fn updade_grass(&mut self, wind_direction: vec2);
-    fn updade_water(&mut self);
-    fn raygen_map_grass(&mut self, grass: &InternalMeshFoliage, pos: &vec3);
-    fn raygen_start_water(&mut self);
-    fn raygen_map_water(&mut self, _water: &InternalMeshLiquid, pos: &vec3);
-    fn end_raygen(&mut self);
-    fn start_2nd_spass(&mut self);
-    fn diffuse(&mut self);
-    fn ambient_occlusion(&mut self);
-    fn glossy_raygen(&mut self);
-    fn raygen_start_smoke(&mut self);
-    fn raygen_map_smoke(&mut self, _smoke: &InternalMeshVolumetric, pos: &vec3);
-    fn smoke(&mut self);
-    fn glossy(&mut self);
-    fn tonemap(&mut self);
-    fn end_2nd_spass(&mut self);
-    fn end_frame(&mut self, window: &Window);
-}
+//     fn start_raygen(&mut self);
+//     fn raygen_start_blocks(&mut self);
+//     fn is_face_visible(&self, normal: vec3, camera_dir: vec3) -> bool;
+//     fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: BlockId);
+//     fn raygen_block(&mut self, block_id: BlockId, shift: ivec3);
+//     fn raygen_start_models(&mut self);
+//     fn raygen_model_face(&mut self, normal: vec3, buff: &IndexedVertices);
+//     fn raygen_model(
+//         &mut self,
+//         model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+//         model_trans: &MeshTransform,
+//     );
+//     fn lightmap_block_face(&self, _normal: ivec3, buff: &IndexedVertices, _block_id: BlockId);
+//     fn lightmap_block(&mut self, block_id: BlockId, shift: ivec3);
+//     fn lightmap_model_face(&mut self, _normal: vec3, buff: &IndexedVertices);
+//     fn lightmap_model(
+//         &mut self,
+//         model_mesh: &InternalMeshModel<Self::BufferType, Self::ImageType>,
+//         model_trans: &MeshTransform,
+//     );
+//     fn update_particles(&mut self);
+//     fn raygen_map_particles(&mut self);
+//     fn raygen_start_grass(&mut self);
+//     fn updade_grass(&mut self, wind_direction: vec2);
+//     fn updade_water(&mut self);
+//     fn raygen_map_grass(&mut self, grass: &InternalMeshFoliage, pos: &vec3);
+//     fn raygen_start_water(&mut self);
+//     fn raygen_map_water(&mut self, _water: &InternalMeshLiquid, pos: &vec3);
+//     fn end_raygen(&mut self);
+//     fn start_2nd_spass(&mut self);
+//     fn diffuse(&mut self);
+//     fn ambient_occlusion(&mut self);
+//     fn glossy_raygen(&mut self);
+//     fn raygen_start_smoke(&mut self);
+//     fn raygen_map_smoke(&mut self, _smoke: &InternalMeshVolumetric, pos: &vec3);
+//     fn smoke(&mut self);
+//     fn glossy(&mut self);
+//     fn tonemap(&mut self);
+//     fn end_2nd_spass(&mut self);
+//     fn end_frame(&mut self, window: &Window);
+// }
