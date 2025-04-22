@@ -27,6 +27,11 @@ utilize copy queue
 
 RUST-ANALYZER:
  - suggest variable with attention to type
+
+ scc actions build / test:
+  scc complexity tracking
+  binary sizes
+  wgpu can be tested??
  - 
 
 package profile:
@@ -105,3 +110,21 @@ IMPORTANT: compiling to wasm:
   - move it to lumal
   - vulkan as first class support since it is more explicit
     - this means that translating vulkan to gl should be "no-op" in most cases and less work in other
+
+define all push constant structs and use sizeof for push constant sizes
+
+structs instead of function arguments
+
+actions build / test:
+  binary sizes
+  scc complexity tracking
+  wgpu can be tested / benched??
+  same for vk
+
+vertex writeable storage is not supported in web
+
+move volumetrics to forward for perfomance and quality (when projections overlap they are rendered incorrectly atm)  
+
+more settings to comptime via types - e.g. typed images
+
+wgpu vk write_buffer in cmdbuffer for small sizes

@@ -1,34 +1,35 @@
-[alias]     # command aliases
-    c = "check"
-    t = "test"
-    b = "build"
-    r = "run"
-    br = "build --release"
-    brr = "run --release" # yes one extra r.
+[alias]
+c = "check"
+t = "test"
+b = "build"
+r = "run"
+br = "build --release"
+brr = "run --release" # yes one extra r.
 
 [build]
-    rustflags = [
-        # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
-        # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
-    ]
+    [target.x86_64-pc-windows-gnu]
+    linker = "x86_64-w64-mingw32-gcc"
+
 
 [env]
-    RUST_BACKTRACE = "short" # this is what i love in Rust
+RUST_BACKTRACE = "short" # this is what i love in Rust
     
+# native is highest perfomance build
 [profile.native.build-override]
-    rustflags = [
-        "-C", "target-cpu=native",
-        # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
-        # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
-        "-Zlocation-detail=none",
-        "-Zfmt-debug=none",
-    ]
+rustflags = [
+    "-C", "target-cpu=native",
+    # "-C", "link-arg=-fuse-ld=lld",
+    # "-Z", "threads=8"
+    "-Zlocation-detail=none",
+    "-Zfmt-debug=none",
+]
     
+# natsize is smallest build
 [profile.natsize.build-override]
-    rustflags = [
-        "-C", "target-cpu=native",
-        # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
-        # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
-        "-Zlocation-detail=none",
-        "-Zfmt-debug=none",
-    ]
+rustflags = [
+    "-C", "target-cpu=native",
+    # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
+    # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
+    "-Zlocation-detail=none",
+    "-Zfmt-debug=none",
+]

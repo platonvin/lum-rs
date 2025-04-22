@@ -2,11 +2,8 @@
 
 // --- Bindings ---
 // Input Attachment treated as Texture
-@group(0) @binding(0) var matNorm_tex: texture_2d<f32>; // usubpassInput matNorm
-
-// Voxel Palette Texture & Sampler
+@group(0) @binding(0) var matNorm_tex: texture_2d<u32>; // usubpassInput matNorm
 @group(0) @binding(1) var voxelPalette_tex: texture_2d<f32>; // sampler2D voxelPalette (Assuming R32Float format)
-// @group(0) @binding(2) var nearest_samp: sampler; // Sampler - Not needed if only using textureLoad
 
 // --- Structs ---
 struct Material {
@@ -20,8 +17,7 @@ struct Material {
 fn load_mat(frag_coord_xy: vec2<i32>) -> i32 {
     // Load from texture bound at binding 0
     let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0); // LOD 0
-    // Round and cast to i32
-    let mat = i32(round(loaded_val.x));
+    let mat = i32(loaded_val.x);
     return mat;
 }
 

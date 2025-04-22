@@ -7,7 +7,9 @@ struct UboData {
     global_light_dir: vec4<f32>,
     lightmap_proj: mat4x4<f32>,
     frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
     timeseed: i32,
+    delta_time: f32,
 };
 
 
@@ -18,15 +20,15 @@ struct Constants {
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(0) @binding(1) var<uniform> pco: Constants;
+@group(1) @binding(0) var<uniform> pco: Constants;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) mat_norm: u32, // Assuming mat_norm is packed in vertex shader
+    @location(0) mat_norm: vec4<u32>,
 };
 
 struct FragmentOutput {
-    @location(0) outMatNorm: u32,
+    @location(0) outMatNorm: vec4<u32>,
 };
 
 @fragment

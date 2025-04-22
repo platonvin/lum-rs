@@ -1,95 +1,128 @@
-#version 450
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+};
 
-//simple color -> color map shader just to fix colors lol
+struct FragmentOutput {
+    @location(0) frame_color: vec4<f32>,
+};
 
-// layout(location = 0)  in vec2 non_clip_pos;
-layout(location = 0) out vec4 frame_color;
+@group(0) @binding(0) var rendered_frame: texture_2d<f32>;
 
-layout(input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput rendered_frame;
+const COLOR_ENCODE_VALUE: f32 = 8.0;
 
-const float COLOR_ENCODE_VALUE = 8.0;
-vec3 decode_color(vec3 encoded_color){
-    return encoded_color*COLOR_ENCODE_VALUE;
+fn decode_color(encoded_color: vec3<f32>) -> vec3<f32> {
+    return encoded_color * COLOR_ENCODE_VALUE;
 }
-vec3 encode_color(vec3 color){
-    return color/COLOR_ENCODE_VALUE;
+
+fn encode_color(color: vec3<f32>) -> vec3<f32> {
+    return color / COLOR_ENCODE_VALUE;
 }
 
-float luminance(vec3 v){
-    return dot(v, vec3(0.2126f, 0.7152f, 0.0722f));
+fn luminance(v: vec3<f32>) -> f32 {
+    return dot(v, vec3<f32>(0.2126, 0.7152, 0.0722));
 }
-vec3 change_luminance(vec3 c_in, float l_out){
-    float l_in = luminance(c_in);
+
+fn change_luminance(c_in: vec3<f32>, l_out: f32) -> vec3<f32> {
+    let l_in = luminance(c_in);
+    if (l_in == 0.0) {
+        return vec3<f32>(l_out); // Avoid division by zero
+    }
     return c_in * (l_out / l_in);
 }
-vec3 reinhard_extended(vec3 v, float max_white){
-    vec3 numerator = v * (1.0f + (v / vec3(max_white * max_white)));
-    return numerator / (1.0f + v);
+
+fn reinhard_extended(v: vec3<f32>, max_white: f32) -> vec3<f32> {
+    let max_white_sq = max_white * max_white;
+    let numerator = v * (vec3<f32>(1.0) + (v / vec3<f32>(max_white_sq)));
+    return numerator / (vec3<f32>(1.0) + v);
 }
-vec3 reinhard_extended_luminance(vec3 v, float max_white_l){
-    float l_old = luminance(v);
-    float numerator = l_old * (1.0f + (l_old / (max_white_l * max_white_l)));
-    float l_new = numerator / (1.0f + l_old);
+
+fn reinhard_extended_luminance(v: vec3<f32>, max_white_l: f32) -> vec3<f32> {
+    let l_old = luminance(v);
+    let max_white_l_sq = max_white_l * max_white_l;
+    let numerator = l_old * (1.0 + (l_old / max_white_l_sq));
+    let l_new = numerator / (1.0 + l_old);
     return change_luminance(v, l_new);
 }
-vec3 uncharted2_tonemap_partial(vec3 x){
-    float A = 0.15f;
-    float B = 0.50f;
-    float C = 0.10f;
-    float D = 0.20f;
-    float E = 0.02f;
-    float F = 0.30f;
-    return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
-}
-vec3 uncharted2_filmic(vec3 v){
-    float exposure_bias = 2.0f;
-    vec3 curr = uncharted2_tonemap_partial(v * exposure_bias);
 
-    vec3 W = vec3(11.2f);
-    vec3 white_scale = vec3(1.0f) / uncharted2_tonemap_partial(W);
+fn uncharted2_tonemap_partial(x: vec3<f32>) -> vec3<f32> {
+    let A = 0.15;
+    let B = 0.50;
+    let C = 0.10;
+    let D = 0.20;
+    let E = 0.02;
+    let F = 0.30;
+    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+fn uncharted2_filmic(v: vec3<f32>) -> vec3<f32> {
+    let exposure_bias = 2.0;
+    let curr = uncharted2_tonemap_partial(v * exposure_bias);
+    let W = vec3<f32>(11.2);
+    let white_scale = vec3<f32>(1.0) / uncharted2_tonemap_partial(W);
     return curr * white_scale;
 }
-vec3 aces_approx(vec3 v){
-    v *= 0.6f;
-    float a = 2.51f;
-    float b = 0.03f;
-    float c = 2.43f;
-    float d = 0.59f;
-    float e = 0.14f;
-    return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
+
+fn aces_approx(v: vec3<f32>) -> vec3<f32> {
+    let modified_v = v * 0.6;
+    let a = 2.51;
+    let b = 0.03;
+    let c = 2.43;
+    let d = 0.59;
+    let e = 0.14;
+    return clamp((modified_v * (a * modified_v + b)) / (modified_v * (c * modified_v + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
 }
-vec3 tonemap(vec3 color){
+
+fn tonemap(color: vec3<f32>) -> vec3<f32> {
     // return reinhard_extended(color, 5.0);
     return reinhard_extended_luminance(color, 5.0);
     // return uncharted2_filmic(color);
     // return aces_approx(color);
 }
 
-vec3 adjust_brightness(vec3 color, float value) {
+fn adjust_brightness(color: vec3<f32>, value: f32) -> vec3<f32> {
     return color + value;
 }
-vec3 adjust_contrast(vec3 color, float value) {
-    // return 0.5 + value * (color - 0.5);
-    return 0.5 + (1.0 + value) * (color - 0.5);
+
+fn adjust_contrast(color: vec3<f32>, value: f32) -> vec3<f32> {
+    return vec3<f32>(0.5) + (1.0 + value) * (color - vec3<f32>(0.5));
 }
-vec3 adjust_exposure(vec3 color, float value) {
+
+fn adjust_exposure(color: vec3<f32>, value: f32) -> vec3<f32> {
     return (1.0 + value) * color;
 }
-vec3 adjust_saturation(vec3 color, float value) {
-    float grayscale = luminance(color);
-    return mix(vec3(grayscale), color, 1.0 + value);
+
+fn adjust_saturation(color: vec3<f32>, value: f32) -> vec3<f32> {
+    let grayscale = luminance(color);
+    return mix(vec3<f32>(grayscale), color, 1.0 + value);
 }
 
-void main() {
-    // frame_color = vec4(vec3(0.5), 1);
-    vec3 color = decode_color(subpassLoad(rendered_frame).xyz);
+@fragment
+fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
+    let tex_coord = vec2<i32>(pos.xy);
+    let encoded_color = textureLoad(rendered_frame, tex_coord, 0).rgb;
+    var color = decode_color(encoded_color);
 
-    color = adjust_saturation(color, .1);
-    color = adjust_contrast(color, .1);
+    color = adjust_saturation(color, 0.1);
+    color = adjust_contrast(color, 0.1);
     color = adjust_exposure(color, 0.5);
     color = tonemap(color);
 
-    // frame_color = vec4(vec3(non_clip_pos,0), 1);
-    frame_color = vec4(color,1);
-    // frame_color = vec4(vec3(color.x), .5);
-} 
+    var out: FragmentOutput;
+    out.frame_color = vec4<f32>(color, 1.0);
+    return out;
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var pos = vec2<f32>(0.0);
+    if (vertexIndex == 0u) {
+        pos = vec2<f32>(-1.0, -1.0);
+    } else if (vertexIndex == 1u) {
+        pos = vec2<f32>(3.0, -1.0);
+    } else {
+        pos = vec2<f32>(-1.0, 3.0);
+    }
+    var out: VertexOutput;
+    out.position = vec4<f32>(pos, 0.0, 1.0);
+    return out;
+}

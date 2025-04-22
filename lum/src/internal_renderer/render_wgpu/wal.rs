@@ -1,23 +1,19 @@
-use std::{borrow::Cow, collections::HashMap, num::NonZeroU64};
+use std::{borrow::Cow, collections::HashMap, num::NonZero};
 use wgpu::{
-    util::{DeviceExt, StagingBelt},
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BufferBindingType, BufferUsages,
-    ColorTargetState, ComputePipelineDescriptor, Features, FragmentState, FrontFace,
-    MultisampleState, PipelineLayout, PipelineLayoutDescriptor, PolygonMode, PrimitiveState,
-    PrimitiveTopology, PushConstantRange, RenderPipelineDescriptor, ShaderModule, ShaderSource,
+    util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntry, BufferBinding, BufferBindingType, ColorTargetState,
+    ComputePipelineDescriptor, Features, FragmentState, FrontFace, MultisampleState,
+    PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology,
+    RenderPipelineDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource,
     VertexBufferLayout, VertexState,
 };
-use wgpu::{BindGroupLayout, ShaderModuleDescriptor};
-use wgpu::{BindGroupLayoutDescriptor, StencilState};
-use wgpu::{BindGroupLayoutEntry, TextureFormat};
+use wgpu::{BindingResource, BindingType, DepthStencilState, ShaderStages};
 
 use lumal::ring::Ring;
 
-use wgpu::{
-    BindingResource, BindingType, BlendComponent, BlendFactor, BlendOperation, BlendState,
-    CompareFunction, DepthStencilState, ShaderStages,
-};
 use winit::window::Window;
+
+use super::SWAPCHAIN_FORMAT;
 
 // Webgpu Abstraction Layer
 pub struct Wal<'window> {
@@ -37,33 +33,25 @@ pub struct Wal<'window> {
 pub struct ComputePipe {
     pub pipeline: Option<wgpu::ComputePipeline>,
     pub pipeline_layout: Option<wgpu::PipelineLayout>,
-    pub bind_groups: Option<Ring<wgpu::BindGroup>>,
     pub pc_buffers: Option<Ring<wgpu::Buffer>>,
-    pub pc_belts: Option<wgpu::util::StagingBelt>,
     pub pc_size: u32,
-    // pub push_constant_binding_index: Option<u32>,
     // current push constants offset
     pub current_pc_offset: u32,
+    pub static_bind_groups: Option<Ring<wgpu::BindGroup>>,
+    pub pc_bind_groups: Option<Ring<wgpu::BindGroup>>,
 }
 #[derive(Debug, Default)]
 pub struct RasterPipe {
     pub pipeline: Option<wgpu::RenderPipeline>,
     pub pipeline_layout: Option<wgpu::PipelineLayout>,
-    /// Instead of a ring of descriptor sets, we maintain one or more bind groups.
-    pub bind_groups: Option<Ring<wgpu::BindGroup>>,
-    // we need to store them. Otherwise, they are dropped
+    // Bind groups that are the same accross frames (e.g. camera parameters)
+    pub static_bind_groups: Option<Ring<wgpu::BindGroup>>,
+    // layout for bind groups, where dynamic bindings need to be
     pub pc_buffers: Option<Ring<wgpu::Buffer>>,
-    pub pc_belts: Option<wgpu::util::StagingBelt>,
-    // pub pc_desc: Option<PushConstantDescription>,
-    pub pc_size: Option<NonZeroU64>,
-    // why would we need this?
-    // pub push_constant_binding_index: Option<u32>,
+    pub pc_size: u32,
     pub current_pc_offset: u32,
-}
-
-pub struct Image {
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
+    pub dynamic_bind_group_layout: Option<wgpu::BindGroupLayout>,
+    pub pc_bind_groups: Option<Ring<wgpu::BindGroup>>,
 }
 
 #[derive(Clone, Debug)]
@@ -73,12 +61,11 @@ pub struct AttrFormOffs {
     pub offset: usize,
 }
 
-#[derive(Debug)]
-pub struct DescriptorInfo {
-    // Define the structure of DescriptorInfo based on your needs
-    pub size: wgpu::BufferSize,
-    pub usage: wgpu::BufferUsages,
-    // Add other relevant information
+#[derive(Clone)]
+pub enum ResourceType<'a> {
+    PushConstant, // for marking where pc is
+    Dynamic(BindingType),
+    Static(BindingType, Ring<BindingResource<'a>>),
 }
 
 #[derive(Clone)]
@@ -88,22 +75,17 @@ pub struct BindGroupDescription<'a> {
     pub binding: u32,
     /// Which shader stages can see this binding.
     pub visibility: ShaderStages,
-    /// The type of the binding
-    pub ty: BindingType,
-    /// If this value is Some, indicates this entry is an array. Array size must be 1 or greater.
-    ///
-    /// If this value is Some and `ty` is `BindingType::Texture`, [`Features::TEXTURE_BINDING_ARRAY`] must be supported.
-    ///
-    /// If this value is Some and `ty` is any other variant, bind group creation will fail.
-    pub count: Option<std::num::NonZeroU32>,
+    // / The type of the binding
     /// so, what function gets is array of rings, and they get converted to ring of arrays
-    pub resources: Ring<BindingResource<'a>>,
+    /// If bind group is dynamic, then Ring is empty
+    pub resources: ResourceType<'a>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PushConstantDescription {
-    pub size: NonZeroU64,
-    pub max_count: u64,
+    pub size: u32,
+    pub max_count: u32,
+    pub stages: ShaderStages,
 }
 #[derive(Clone, Debug)]
 pub struct ShaderStage {
@@ -121,6 +103,11 @@ pub struct RenderPass {
     pub depth_stencil_view: Option<Ring<wgpu::TextureView>>,
     /// The extent (width and height) of the render area.
     pub extent: winit::dpi::PhysicalSize<u32>,
+}
+
+pub struct Image {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
 }
 
 impl<'window> Wal<'window> {
@@ -150,19 +137,20 @@ impl<'window> Wal<'window> {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("Device"),
-                    required_features: Features::TEXTURE_FORMAT_16BIT_NORM
-                        | Features::DEPTH32FLOAT_STENCIL8,
+                    required_features: Features::DEPTH32FLOAT_STENCIL8
+                        | Features::FLOAT32_FILTERABLE,
                     ..Default::default()
                 },
                 None,
             )
             .await
             .unwrap();
+        unsafe { SWAPCHAIN_FORMAT = Some(surface.get_capabilities(&adapter).formats[0]) };
 
         // 5) Configure the swapchain (surface)
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_capabilities(&adapter).formats[0], // TODO: pick proper format
+            format: unsafe { SWAPCHAIN_FORMAT.unwrap() },
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Mailbox,
@@ -209,15 +197,13 @@ impl<'window> Wal<'window> {
     // so you can map it immediately.
     pub fn create_buffer(
         &self,
-        usage: wgpu::BufferUsages,
+        mut usage: wgpu::BufferUsages,
         size: usize,
         host_visible: bool,
     ) -> wgpu::Buffer {
-        // let usage_flags = if host_visible {
-        //     usage | wgpu::BufferUsages::MAP_WRITE
-        // } else {
-        //     usage
-        // };
+        if host_visible {
+            usage |= wgpu::BufferUsages::MAP_WRITE;
+        }
 
         self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Buffer"),
@@ -255,6 +241,7 @@ impl<'window> Wal<'window> {
     //
     // The provided `usage` is OR‑ed with COPY_DST.
     // This method requires that the data type T implements Pod from bytemuck.
+    #[inline]
     pub fn create_and_upload_buffer<T>(
         &self,
         elements: &[T],
@@ -295,23 +282,43 @@ impl<'window> Wal<'window> {
         usage: wgpu::TextureUsages,
         extent: wgpu::Extent3d,
         mip_level_count: u32,
+        label: Option<&str>,
     ) -> Ring<Image> {
         (0..ring_size)
-            .map(|_| {
-                let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("Image Ring Texture"),
-                    size: extent,
-                    mip_level_count,
-                    sample_count: 1,
-                    dimension,
-                    format,
-                    usage,
-                    view_formats: &[],
-                });
-                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                Image { texture, view }
-            })
+            .map(|_| self.create_image(dimension, format, usage, extent, mip_level_count, label))
             .collect()
+    }
+
+    pub fn create_image(
+        &self,
+        dimension: wgpu::TextureDimension,
+        format: wgpu::TextureFormat,
+        usage: wgpu::TextureUsages,
+        extent: wgpu::Extent3d,
+        mip_level_count: u32,
+        label: Option<&str>,
+    ) -> Image {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size: extent,
+            mip_level_count,
+            sample_count: 1,
+            dimension,
+            format,
+            usage,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            // we dont create stencil views
+            aspect: if format.has_depth_aspect() {
+                wgpu::TextureAspect::DepthOnly
+                // wgpu::TextureAspect::All
+            } else {
+                wgpu::TextureAspect::All
+            },
+            ..Default::default()
+        });
+        Image { texture, view }
     }
 
     pub fn create_shader_module(&self, wgsl_code: &str, label: Option<&str>) -> wgpu::ShaderModule {
@@ -335,12 +342,11 @@ impl<'window> Wal<'window> {
     ) -> RasterPipe {
         let frame_count = self.config.desired_maximum_frame_latency as usize;
         let mut pc_buffers = None;
-        let mut push_constant_binding_index = None;
 
         if let Some(pc_desc) = &push_constant_description {
             // cant be single one cause then we would not be able to write a lot to a buffer
             // in other words, this buffer is array of push constant structs
-            let single_pc_size = pc_desc.size.get();
+            let single_pc_size = pc_desc.size.next_multiple_of(256);
             let pc_buffer_size = single_pc_size * pc_desc.max_count;
 
             pc_buffers = Some(
@@ -348,79 +354,180 @@ impl<'window> Wal<'window> {
                     .map(|_| {
                         self.device.create_buffer(&wgpu::BufferDescriptor {
                             label,
-                            size: pc_buffer_size,
+                            size: pc_buffer_size as u64,
                             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                             mapped_at_creation: false,
                         })
                     })
                     .collect::<Ring<_>>(),
             );
-
-            push_constant_binding_index =
-                Some(bind_descriptions.iter().map(|b| b.binding).max().map_or(0, |max| max + 1));
         }
 
-        let mut bind_group_layout_entries: Vec<_> = bind_descriptions
+        // Separate dynamic and static bind group descriptions
+        let (static_bind_descriptions, mut dynamic_bind_descriptions): (Vec<_>, Vec<_>) =
+            bind_descriptions
+                .iter()
+                .partition(|b| matches!(b.resources, ResourceType::Static(_, _)));
+
+        // remove push constants
+        dynamic_bind_descriptions
+            .retain(|bind_desc| !matches!(bind_desc.resources, ResourceType::PushConstant));
+
+        let static_bind_group_layout_entries: Vec<_> = static_bind_descriptions
             .iter()
             .map(|b| BindGroupLayoutEntry {
                 binding: b.binding,
                 visibility: b.visibility,
-                ty: b.ty.clone(),
-                count: b.count,
+                ty: match &b.resources {
+                    ResourceType::Static(ty, _resources_ring) => *ty,
+                    ResourceType::Dynamic(_) | ResourceType::PushConstant => {
+                        panic!("static bind groups cannot have dynamic/pc resources")
+                    }
+                },
+                count: None,
             })
             .collect();
 
-        if let Some(pc_desc) = &push_constant_description {
-            bind_group_layout_entries.push(BindGroupLayoutEntry {
-                binding: push_constant_binding_index.unwrap(),
-                visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: true, // cause we use offset to emulate single push constant struct buffer bound while its actually an array
-                    min_binding_size: Some(pc_desc.size), // always the same, we dont bind more then one push constant struct at some offset
-                },
-                count: None,
+        let static_bind_group_layout =
+            self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label,
+                entries: &static_bind_group_layout_entries,
             });
-        }
 
-        let bind_group_layout = self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label,
-            entries: &bind_group_layout_entries,
-        });
-
-        let mut all_bind_groups = Vec::new();
+        // Create static bind groups for each frame
+        let mut all_static_bind_groups = Vec::new();
 
         for frame in 0..frame_count {
-            let mut bind_group_entries: Vec<_> = bind_descriptions
+            let mut bind_group_entries: Vec<_> = static_bind_descriptions
                 .iter()
                 .map(|b| BindGroupEntry {
                     binding: b.binding,
-                    resource: b.resources[frame].clone(),
+                    resource: {
+                        match &b.resources {
+                            ResourceType::Dynamic(_) | ResourceType::PushConstant => {
+                                panic!(
+                                    "Dynamic/pc resources should not end up in static descriptions"
+                                )
+                            }
+                            ResourceType::Static(_ty, binding_resources) => {
+                                binding_resources[frame].clone()
+                            }
+                        }
+                    },
                 })
                 .collect();
 
-            if let Some(ref buffers_ring) = pc_buffers {
-                bind_group_entries.push(BindGroupEntry {
-                    binding: push_constant_binding_index.unwrap(),
-                    resource: BindingResource::Buffer(
-                        buffers_ring[frame].as_entire_buffer_binding(),
-                    ),
-                });
-            }
-
             let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
                 label,
-                layout: &bind_group_layout,
+                layout: &static_bind_group_layout,
                 entries: &bind_group_entries,
             });
-            all_bind_groups.push(bind_group);
+            all_static_bind_groups.push(bind_group);
         }
 
-        let bind_groups = Some(Ring::from_vec(all_bind_groups));
+        let static_bind_groups = Some(Ring::from_vec(all_static_bind_groups));
+
+        // Create layout for dynamic bind groups
+        let dynamic_bind_group_layout_entries: Vec<_> = dynamic_bind_descriptions
+            .iter()
+            .map(|b| BindGroupLayoutEntry {
+                binding: b.binding,
+                visibility: b.visibility,
+                ty: match &b.resources {
+                    ResourceType::Dynamic(ty) => *ty,
+                    ResourceType::Static(_, _) | ResourceType::PushConstant => {
+                        panic!(
+                            "{}: dynamic bind groups cannot have static/pc resources",
+                            label.unwrap_or("")
+                        )
+                    }
+                },
+                count: None,
+            })
+            .collect();
+
+        let pc_bind_group_layout = if !push_constant_description.is_none() {
+            Some(
+                self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                    label: Some("dynamic_bind_group_layout"),
+                    entries: &[BindGroupLayoutEntry {
+                        binding: 0, // we dont actually care whats specified, we now it in advance
+                        visibility: push_constant_description.as_ref().unwrap().stages,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: Some(
+                                NonZero::new(
+                                    push_constant_description.as_ref().unwrap().size as u64,
+                                )
+                                .unwrap(),
+                            ),
+                        },
+                        count: None,
+                    }],
+                }),
+            )
+        } else {
+            None
+        };
+
+        let pc_bind_group = if push_constant_description.is_some() {
+            Some(
+                (0..frame_count)
+                    .map(|frame| {
+                        self.device.create_bind_group(&BindGroupDescriptor {
+                            label,
+                            layout: pc_bind_group_layout.as_ref().unwrap(),
+                            entries: &[BindGroupEntry {
+                                binding: 0,
+                                resource: {
+                                    BindingResource::Buffer(BufferBinding {
+                                        buffer: &pc_buffers.as_ref().unwrap()[frame],
+                                        offset: 0, // its dynamic so 0 means we start at the beginning of buffer
+                                        size: Some(
+                                            NonZero::new(
+                                                push_constant_description.as_ref().unwrap().size
+                                                    as u64,
+                                            )
+                                            .unwrap(),
+                                        ),
+                                    })
+                                },
+                            }],
+                        })
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+        let dynamic_bind_group_layout = if !dynamic_bind_group_layout_entries.is_empty() {
+            Some(
+                self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                    label: Some("dynamic_bind_group_layout"),
+                    entries: &dynamic_bind_group_layout_entries,
+                }),
+            )
+        } else {
+            None
+        };
+
+        // Define pipeline layout with both static and dynamic bind group layouts
+        let mut bind_group_layouts = Vec::new();
+        bind_group_layouts.push(&static_bind_group_layout); // static_bind_group_layout is always exists
+
+        if let Some(ref pc_layout) = pc_bind_group_layout {
+            bind_group_layouts.push(pc_layout);
+        }
+
+        if let Some(ref dynamic_layout) = dynamic_bind_group_layout {
+            bind_group_layouts.push(dynamic_layout);
+        }
 
         let pipeline_layout = self.device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label,
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &bind_group_layouts,
             push_constant_ranges: &[],
         });
 
@@ -478,10 +585,12 @@ impl<'window> Wal<'window> {
         RasterPipe {
             pipeline: Some(render_pipeline),
             pipeline_layout: Some(pipeline_layout),
-            bind_groups,
+            static_bind_groups,
+            dynamic_bind_group_layout,
             pc_buffers,
             current_pc_offset: 0,
-            pc_size: push_constant_description.map(|pc_desc| pc_desc.size),
+            pc_size: push_constant_description.map_or(0, |pc| pc.size),
+            pc_bind_groups: pc_bind_group,
         }
     }
 
@@ -489,25 +598,42 @@ impl<'window> Wal<'window> {
         &self,
         bind_descriptions: &[BindGroupDescription],
         shader_stage: &ShaderStage,
-        label: Option<&str>,
         push_constant_description: Option<PushConstantDescription>,
+        label: Option<&str>,
     ) -> ComputePipe {
         let frame_count = self.config.desired_maximum_frame_latency as usize;
         let mut pc_buffers = None;
-        let mut push_constant_binding_index = None;
+        // let mut push_constant_binding_index = None;
 
-        let mut bind_group_layout_entries: Vec<_> = bind_descriptions
+        // Separate dynamic and static bind group descriptions
+        let (static_bind_descriptions, mut dynamic_bind_descriptions): (Vec<_>, Vec<_>) =
+            bind_descriptions
+                .iter()
+                .partition(|b| matches!(b.resources, ResourceType::Static(_, _)));
+
+        // remove push constants
+        dynamic_bind_descriptions
+            .retain(|bind_desc| !matches!(bind_desc.resources, ResourceType::PushConstant));
+
+        // Create layout for static bind groups
+        let static_bind_group_layout_entries: Vec<_> = static_bind_descriptions
             .iter()
             .map(|b| BindGroupLayoutEntry {
                 binding: b.binding,
                 visibility: b.visibility,
-                ty: b.ty.clone(),
-                count: b.count,
+                ty: match &b.resources {
+                    ResourceType::Static(ty, _resources_ring) => *ty,
+                    ResourceType::Dynamic(_) | ResourceType::PushConstant => {
+                        panic!("static bind groups cannot have dynamic/pc resources")
+                    }
+                },
+                count: None,
             })
             .collect();
 
+        let mut all_bind_group_layout_entries = static_bind_group_layout_entries.clone();
         if let Some(pc_desc) = &push_constant_description {
-            let single_pc_size = pc_desc.size.get();
+            let single_pc_size = pc_desc.size;
             let pc_buffer_size = single_pc_size * pc_desc.max_count;
 
             pc_buffers = Some(
@@ -515,67 +641,159 @@ impl<'window> Wal<'window> {
                     .map(|_| {
                         self.device.create_buffer(&wgpu::BufferDescriptor {
                             label,
-                            size: pc_buffer_size,
+                            size: pc_buffer_size as u64,
                             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                             mapped_at_creation: false,
                         })
                     })
                     .collect::<Ring<_>>(),
             );
-
-            push_constant_binding_index =
-                Some(bind_descriptions.iter().map(|b| b.binding).max().map_or(0, |max| max + 1));
-
-            bind_group_layout_entries.push(BindGroupLayoutEntry {
-                binding: push_constant_binding_index.unwrap(),
-                visibility: ShaderStages::COMPUTE,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: Some(pc_desc.size),
-                },
-                count: None,
-            });
         }
 
-        let bind_group_layout = self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label,
-            entries: &bind_group_layout_entries,
-        });
+        let static_bind_group_layout =
+            self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label,
+                entries: &all_bind_group_layout_entries,
+            });
 
-        let mut all_bind_groups = Vec::new();
+        // Create static bind groups for each frame
+        let mut all_static_bind_groups = Vec::new();
 
         for frame in 0..frame_count {
-            let mut bind_group_entries: Vec<_> = bind_descriptions
+            let mut bind_group_entries: Vec<_> = static_bind_descriptions
                 .iter()
                 .map(|b| BindGroupEntry {
                     binding: b.binding,
-                    resource: b.resources[frame].clone(),
+                    resource: {
+                        match &b.resources {
+                            ResourceType::Dynamic(_) | ResourceType::PushConstant => {
+                                panic!(
+                                    "Dynamic/pc resources should not end up in static descriptions"
+                                )
+                            }
+                            ResourceType::Static(_ty, binding_resources) => {
+                                binding_resources[frame].clone()
+                            }
+                        }
+                    },
                 })
                 .collect();
 
-            if let Some(ref buffers_ring) = pc_buffers {
-                bind_group_entries.push(BindGroupEntry {
-                    binding: push_constant_binding_index.unwrap(),
-                    resource: BindingResource::Buffer(
-                        buffers_ring[frame].as_entire_buffer_binding(),
-                    ),
-                });
-            }
-
             let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
                 label,
-                layout: &bind_group_layout,
+                layout: &static_bind_group_layout,
                 entries: &bind_group_entries,
             });
-            all_bind_groups.push(bind_group);
+            all_static_bind_groups.push(bind_group);
         }
 
-        let bind_groups = Some(Ring::from_vec(all_bind_groups));
+        let static_bind_groups = Some(Ring::from_vec(all_static_bind_groups));
+
+        // Create layout for dynamic bind groups
+        let dynamic_bind_group_layout_entries: Vec<_> = dynamic_bind_descriptions
+            .iter()
+            .map(|b| BindGroupLayoutEntry {
+                binding: b.binding,
+                visibility: b.visibility,
+                ty: match &b.resources {
+                    ResourceType::Static(_, _) => {
+                        panic!("static bind groups cannot have dynamic resources")
+                    }
+                    ResourceType::Dynamic(ty) => *ty,
+                    ResourceType::PushConstant => BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: NonZero::new(
+                            push_constant_description.as_ref().unwrap().size as u64,
+                        ),
+                    },
+                },
+                count: None,
+            })
+            .collect();
+
+        let pc_bind_group_layout = if !push_constant_description.is_none() {
+            Some(
+                self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                    label: Some("dynamic_bind_group_layout"),
+                    entries: &[BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: push_constant_description.as_ref().unwrap().stages,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: Some(
+                                NonZero::new(
+                                    push_constant_description.as_ref().unwrap().size as u64,
+                                )
+                                .unwrap(),
+                            ),
+                        },
+                        count: None,
+                    }],
+                }),
+            )
+        } else {
+            None
+        };
+
+        let pc_bind_group = if push_constant_description.is_some() {
+            Some(
+                (0..frame_count)
+                    .map(|frame| {
+                        self.device.create_bind_group(&BindGroupDescriptor {
+                            label,
+                            layout: pc_bind_group_layout.as_ref().unwrap(),
+                            entries: &[BindGroupEntry {
+                                binding: 0,
+                                resource: {
+                                    BindingResource::Buffer(BufferBinding {
+                                        buffer: &pc_buffers.as_ref().unwrap()[frame],
+                                        offset: 0, // its dynamic so 0 means we start at the beginning of buffer
+                                        size: Some(
+                                            NonZero::new(
+                                                push_constant_description.as_ref().unwrap().size
+                                                    as u64,
+                                            )
+                                            .unwrap(),
+                                        ),
+                                    })
+                                },
+                            }],
+                        })
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+        let dynamic_bind_group_layout = if !dynamic_bind_group_layout_entries.is_empty() {
+            Some(
+                self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                    label: Some("dynamic_bind_group_layout"),
+                    entries: &dynamic_bind_group_layout_entries,
+                }),
+            )
+        } else {
+            None
+        };
+
+        // Define pipeline layout with both static and dynamic bind group layouts
+        let mut bind_group_layouts = Vec::new();
+        bind_group_layouts.push(&static_bind_group_layout);
+
+        if let Some(ref pc_layout) = pc_bind_group_layout {
+            bind_group_layouts.push(pc_layout);
+        }
+
+        if let Some(ref dynamic_layout) = dynamic_bind_group_layout {
+            bind_group_layouts.push(dynamic_layout);
+        }
 
         let pipeline_layout = self.device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label,
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &bind_group_layouts,
             push_constant_ranges: &[],
         });
 
@@ -593,10 +811,208 @@ impl<'window> Wal<'window> {
         ComputePipe {
             pipeline: Some(compute_pipeline),
             pipeline_layout: Some(pipeline_layout),
-            bind_groups,
+            static_bind_groups,
             pc_buffers,
-            pc_size: push_constant_description.map_or(0, |desc| desc.size.get() as u32),
+            pc_size: push_constant_description.map_or(0, |desc| desc.size as u32),
             current_pc_offset: 0,
+            pc_bind_groups: pc_bind_group,
         }
     }
+
+    pub fn bind_raster_pipeline<'a>(
+        &self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        pipe: &RasterPipe,
+    ) {
+        let current_frame = self.frame_index % self.config.desired_maximum_frame_latency as usize;
+
+        render_pass.set_pipeline(pipe.pipeline.as_ref().unwrap());
+
+        let mut bind_index = 0;
+        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
+            render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            bind_index += 1;
+        }
+
+        if let Some(ref pc_bind_groups) = pipe.pc_bind_groups {
+            let padded_pc_size = pipe.pc_size.next_multiple_of(256);
+            render_pass.set_bind_group(
+                bind_index,
+                pc_bind_groups.current(),
+                &[pipe.current_pc_offset * padded_pc_size as u32],
+            );
+            bind_index += 1;
+        }
+    }
+
+    pub fn bind_compute_pipeline<'a>(
+        &self,
+        compute_pass: &mut wgpu::ComputePass<'a>,
+        pipe: &ComputePipe,
+    ) {
+        compute_pass.set_pipeline(&pipe.pipeline.as_ref().unwrap());
+
+        let mut bind_index = 0;
+        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
+            compute_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            bind_index += 1;
+        }
+
+        if let Some(ref pc_bind_groups) = pipe.pc_bind_groups {
+            let padded_pc_size = pipe.pc_size.next_multiple_of(256);
+            compute_pass.set_bind_group(
+                bind_index,
+                pc_bind_groups.current(),
+                &[pipe.current_pc_offset * padded_pc_size as u32],
+            );
+            bind_index += 1;
+        }
+    }
+
+    pub fn draw_with_params<'a>(
+        &self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        pipe: &mut RasterPipe,
+        dynamic_bind_group: Option<&BindGroup>,
+        push_constants: Option<&[u8]>,
+        vertices: core::ops::Range<u32>,
+        instances: core::ops::Range<u32>,
+    ) {
+        let mut bind_index = 0;
+        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
+            // render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            bind_index += 1;
+        }
+
+        if let Some(pc_data) = push_constants {
+            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            render_pass.set_bind_group(
+                bind_index,
+                pipe.pc_bind_groups.as_ref().unwrap().current(),
+                &[pipe.current_pc_offset * padded_pc_size as u32],
+            );
+            bind_index += 1;
+        }
+
+        if let Some(bind_group) = dynamic_bind_group {
+            render_pass.set_bind_group(bind_index, bind_group, &[]);
+            bind_index += 1;
+        }
+
+        // emulate push constants with dynamically offset'ed separate buffer
+        if let Some(pc_data) = push_constants {
+            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
+            let buffer = pc_buffers.current();
+            // self.queue.write_buffer(
+            //     buffer,
+            //     (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
+            //     pc_data,
+            // );
+            pipe.current_pc_offset += 1;
+        }
+
+        render_pass.draw(vertices, instances);
+    }
+
+    pub fn draw_indexed_with_params<'a>(
+        &self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        pipe: &mut RasterPipe,
+        dynamic_bind_group: Option<&BindGroup>,
+        push_constants: Option<&[u8]>,
+        indices: core::ops::Range<u32>,
+        base_vertex: i32,
+        instances: core::ops::Range<u32>,
+    ) {
+        let mut bind_index = 0;
+        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
+            // render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            bind_index += 1;
+        }
+
+        if let Some(pc_data) = push_constants {
+            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            render_pass.set_bind_group(
+                bind_index,
+                pipe.pc_bind_groups.as_ref().unwrap().current(),
+                &[pipe.current_pc_offset * padded_pc_size as u32],
+            );
+            bind_index += 1;
+        }
+
+        if let Some(bind_group) = dynamic_bind_group {
+            render_pass.set_bind_group(bind_index, bind_group, &[]);
+            bind_index += 1;
+        }
+
+        // emulate push constants with dynamically offset'ed separate buffer
+        if let Some(pc_data) = push_constants {
+            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
+            let buffer = pc_buffers.current();
+            // self.queue.write_buffer(
+            //     buffer,
+            //     (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
+            //     pc_data,
+            // );
+            pipe.current_pc_offset += 1;
+        }
+
+        render_pass.draw_indexed(indices, base_vertex, instances);
+    }
+
+    pub fn dispatch_with_params<'a>(
+        &self,
+        compute_pass: &mut wgpu::ComputePass<'a>,
+        pipe: &mut ComputePipe,
+        dynamic_bind_group: Option<&BindGroup>,
+        push_constants: Option<&[u8]>,
+        workgroup_count_x: u32,
+        workgroup_count_y: u32,
+        workgroup_count_z: u32,
+    ) {
+        let mut bind_index = 0;
+        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
+            // compute_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            bind_index += 1;
+        }
+
+        if let Some(pc_data) = push_constants {
+            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            compute_pass.set_bind_group(
+                bind_index,
+                pipe.pc_bind_groups.as_ref().unwrap().current(),
+                &[pipe.current_pc_offset * padded_pc_size as u32],
+            );
+            bind_index += 1;
+        }
+
+        if let Some(bind_group) = dynamic_bind_group {
+            compute_pass.set_bind_group(bind_index, bind_group, &[]);
+            bind_index += 1;
+        }
+
+        // emulate push constants with dynamically offset'ed separate buffer
+        if let Some(pc_data) = push_constants {
+            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
+            let buffer = pc_buffers.current();
+            // self.queue.write_buffer(
+            //     buffer,
+            //     (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
+            //     pc_data,
+            // );
+            pipe.current_pc_offset += 1;
+        }
+
+        compute_pass.dispatch_workgroups(workgroup_count_x, workgroup_count_y, workgroup_count_z);
+    }
 }
+
+/*
+order goes like this:
+static bind group
+push_constants
+dynamic bind group
+*/

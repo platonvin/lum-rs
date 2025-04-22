@@ -2,7 +2,7 @@
 #![feature(custom_inner_attributes)]
 #![feature(optimize_attribute)]
 #![feature(where_clause_attrs)]
-
+#![allow(unused)]
 // This is a glue-file
 // files that start with "all_" are initializing / destroying resources (packed in structs)
 // internal_renderer is where all the gpu commands are submitted

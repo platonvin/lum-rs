@@ -8,8 +8,8 @@ use std::{
 };
 
 use lum::{
-    internal_renderer::{load_interface::LoadInterface, Settings},
-    renderer::{MeshFoliage, MeshLiquid, MeshModel, MeshVolumetric, Renderer},
+    internal_renderer::Settings,
+    renderer::{atrace, MeshFoliage, MeshLiquid, MeshModel, MeshVolumetric, Renderer},
     types::{u8vec3, uvec3, vec3, BlockId, MeshTransform},
 };
 use winit::{
@@ -78,7 +78,7 @@ struct AppState<'renderer> {
     about_to_close: bool,
 }
 impl<'renderer> AppState<'renderer> {
-    async fn new(mut window: Window, event_loop: &EventLoop<()>) -> Self {
+    async fn new(window: Window, event_loop: &EventLoop<()>) -> Self {
         let settings = Settings {
             static_block_palette_size: 15,
             ..Settings::default()
@@ -90,12 +90,14 @@ impl<'renderer> AppState<'renderer> {
             // "shaders" is sub-crate that embeds some shaders into binary for simplicity
             // i can make it work fine without this, but only for local build, and distribution then becomes a problem
             // so embedding just makes you never care about where are shaders
-            shaders::get_shader("grass.vert.spv").unwrap().into(),
+            // shaders::get_shader("grass.vert.spv").unwrap(),
+            shaders::get_wgsl("grass.vert").unwrap(),
             13,
             100,
         );
 
         let mut lum = pre_init_lum.init(&settings, window, &event_loop).await;
+
         let meshes = AllMeshes::new(&mut lum, grass);
 
         lum.load_block(1, "assets/dirt.vox");
@@ -169,7 +171,7 @@ impl<'renderer> AppState<'renderer> {
                 >= stored_world_size.x as usize
                     * stored_world_size.y as usize
                     * stored_world_size.z as usize
-                    * std::mem::size_of::<BlockId>()
+                    * std::mem::size_of::<i16>()
         );
 
         let size2read =
@@ -182,13 +184,15 @@ impl<'renderer> AppState<'renderer> {
                         + stored_world_size.x * yy
                         + stored_world_size.x * stored_world_size.y * zz)
                         as usize;
-                    let loaded_block = BlockId::from_le_bytes(
+                    let loaded_block = i16::from_le_bytes(
                         stored_world[index * 2..index * 2 + 2].try_into().unwrap(),
                     );
 
                     // Clamp and set block
                     self.lum.renderer.origin_world[(xx as usize, yy as usize, zz as usize)] =
-                        loaded_block.clamp(0, self.lum.renderer.static_block_palette_size as i16);
+                        loaded_block
+                            .clamp(0 as i16, self.lum.renderer.static_block_palette_size as i16)
+                            as BlockId;
                 }
             }
         }
@@ -318,10 +322,14 @@ async fn main() {
         ;
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();
+
     let mut state = AppState::new(window, &event_loop).await;
+
     state.load_scene("assets/scene").unwrap();
+
     let result = event_loop.run_app(&mut state);
     state.destroy();
+
     result.unwrap();
     flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
 }

@@ -7,5 +7,6 @@
     },
     "[cpp]": {
         "editor.formatOnSave": false
-    }
+    },
+    "rust-analyzer.trace.server": "verbose"
 }

@@ -7,19 +7,22 @@ struct UboData {
     global_light_dir: vec4<f32>,
     lightmap_proj: mat4x4<f32>,
     frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
     timeseed: i32,
+    delta_time: f32,
 };
 
 struct Constants {
     block: i32,
-    shift: vec3<i32>,
+    shift_x: i32,
+    shift_y: i32,
+    shift_z: i32,
     FUCKWEB_unorm: u32, 
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(0) @binding(1) var blockPalette: texture_3d<u32>;
-
-@group(0) @binding(2) var<uniform> pco: Constants;
+@group(1) @binding(0) var<uniform> pco: Constants;
+// @group(0) @binding(2) var blockPalette: texture_3d<i32>;
 
 struct VertexInput {
     @location(0) posIn: vec3<u32>,
@@ -39,6 +42,9 @@ fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
 fn main(in: VertexInput) -> VertexOutput {
     let upos = vec3<i32>(in.posIn);
     let normal_encoded = pco.FUCKWEB_unorm;
+    let block = pco.block;
+    let shift = vec3<i32>(pco.shift_x, pco.shift_y, pco.shift_z);
+
     let s = (normal_encoded >> 7u) & 0x1u; // 0 if position 1 if negative
     let axis = vec3<i32>(
         i32((normal_encoded >> 0u) & 0x1u),
@@ -48,7 +54,7 @@ fn main(in: VertexInput) -> VertexOutput {
     let inorm = axis * (1 - i32(s) * 2);
     let fnorm = vec3<f32>(inorm);
 
-    let uworld_pos = upos + pco.shift;
+    let uworld_pos = upos + shift;
     let fworld_pos = vec4<f32>(vec3<f32>(uworld_pos), 1.0);
 
     var clip_coords: vec3<f32> = (ubo.trans_w2s * fworld_pos).xyz; // move up
@@ -58,7 +64,7 @@ fn main(in: VertexInput) -> VertexOutput {
     out.position = vec4<f32>(clip_coords, 1.0);
     out.sample_point = vec3<f32>(upos) - fnorm * 0.5; // for better rounding lol
 
-    let sample_block = u32(pco.block);
+    let sample_block = u32(block);
 
     out.bunorm = (sample_block & 0xFFFFu) | ((pco.FUCKWEB_unorm & 0xFFFFu) << 16u);
     return out;

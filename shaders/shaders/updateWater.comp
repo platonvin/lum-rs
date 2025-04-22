@@ -7,7 +7,7 @@ multiple heightmaps is like inverse fourier but for different frequancy and ampl
 its dft cause gpus are fast.
 */
 #extension GL_GOOGLE_include_directive : require
-#include "common\consts.glsl"
+#include "common/consts.glsl"
 
 precision highp int;
 precision highp float;

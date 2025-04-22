@@ -8,9 +8,9 @@ precision highp float;
 
 
 #extension GL_GOOGLE_include_directive : require
-#include "common\ext.glsl"
-#include "common\ubo.glsl"
-#include "common\consts.glsl"
+#include "common/ext.glsl"
+#include "common/ubo.glsl"
+#include "common/consts.glsl"
 
 layout(set = 0, binding = 1) uniform usampler2D matNorm;
 layout(set = 0, binding = 2) uniform sampler2D depthBuffer;

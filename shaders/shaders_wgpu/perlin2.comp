@@ -1,16 +1,13 @@
-struct Uniforms {
-    world_size: vec2<f32>,
-};
+const world_size: vec3<i32> = vec3<i32>(48, 48, 16);
+// @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(0) var noise_image: texture_storage_2d<rg32float, write>;
 
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(0) @binding(1) var noise_image: texture_storage_2d<rgba16snorm, write>;
-
-fn ihash1D_uint(q_in: u32) -> u32 {
-    var q = q_in;
-    q = q * 747796405u + 2891336453u;
-    q = (q << 13u) ^ q;
-    return q * (q * q * 15731u + 789221u) + 1376312589u;
-}
+// fn ihash1D_uint(q_in: u32) -> u32 {
+//     var q = q_in;
+//     q = q * 747796405u + 2891336453u;
+//     q = (q << 13u) ^ q;
+//     return q * (q * q * 15731u + 789221u) + 1376312589u;
+// }
 
 // fn ihash1D_vec2(q_in: vec2<u32>) -> vec2<u32> {
 //     var q = q_in;
@@ -22,29 +19,32 @@ fn ihash1D_uint(q_in: u32) -> u32 {
 fn ihash1D_vec4(q_in: vec4<u32>) -> vec4<u32> {
     var q = q_in;
     q = q * 747796405u + 2891336453u;
-    q = (q << 13u) ^ q;
+    q.x = (q.x << 13u) ^ q.x;
+    q.y = (q.y << 13u) ^ q.y;
+    q.z = (q.z << 13u) ^ q.z;
+    q.w = (q.w << 13u) ^ q.w;
     return q * (q * q * 15731u + 789221u) + 1376312589u;
 }
 
-fn hash1D_float(x: f32) -> f32 {
-    let state = u32(x * 8192.0) * 747796405u + 2891336453u;
-    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return f32((word >> 22u) ^ word) * (1.0 / f32(0xffffffffu));
-}
+// fn hash1D_float(x: f32) -> f32 {
+//     let state = u32(x * 8192.0) * 747796405u + 2891336453u;
+//     let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+//     return f32((word >> 22u) ^ word) * (1.0 / f32(0xffffffffu));
+// }
 
-fn hash1D_vec2(x: vec2<f32>) -> f32 {
-    let q_val = vec2<u32>(x * 8192.0);
-    let q_modified = 1103515245u * ((q_val >> 1u) ^ q_val.yx);
-    let n_val = 1103515245u * (q_val.x ^ (q_val.y >> 3u));
-    return f32(n_val) * (1.0 / f32(0xffffffffu));
-}
+// fn hash1D_vec2(x: vec2<f32>) -> f32 {
+//     let q_val = vec2<u32>(x * 8192.0);
+//     let q_modified = 1103515245u * ((q_val >> 1u) ^ q_val.yx);
+//     let n_val = 1103515245u * (q_val.x ^ (q_val.y >> 3u));
+//     return f32(n_val) * (1.0 / f32(0xffffffffu));
+// }
 
-fn hash1D_vec3(x: vec3<f32>) -> f32 {
-    var v = vec3<u32>(x * 8192.0) * 1664525u + 1013904223u;
-    v = v + v.yzx * v.zxy;
-    v = v ^ (v >> 16u);
-    return f32(v.x + f32(v.y) * f32(v.z)) * (1.0 / f32(0xffffffffu));
-}
+// fn hash1D_vec3(x: vec3<f32>) -> f32 {
+//     var v = vec3<u32>(x * 8192.0) * 1664525u + 1013904223u;
+//     v = v + v.yzx * v.zxy;
+//     v = v ^ (v >> 16u);
+//     return f32(v.x + f32(v.y) * f32(v.z)) * (1.0 / f32(0xffffffffu));
+// }
 
 // fn hash2D(x: vec2<f32>) -> vec2<f32> {
 //     let q_val = vec4<u32>(vec2u(x * 8192.0)).xyyx + vec4<u32>(0u, 3115245u).xxyy;
@@ -53,99 +53,99 @@ fn hash1D_vec3(x: vec3<f32>) -> f32 {
 //     return vec2<f32>(n_val) * (1.0 / f32(0xffffffffu));
 // }
 
-fn hash3D_vec2(x: vec2<f32>) -> vec3<f32> {
-    var v = vec3<u32>(x.xyx * 8192.0) * 1664525u + 1013904223u;
-    v = v + v.yzx * v.zxy;
-    v = v ^ (v >> 16u);
+// fn hash3D_vec2(x: vec2<f32>) -> vec3<f32> {
+//     var v = vec3<u32>(x.xyx * 8192.0) * 1664525u + 1013904223u;
+//     v = v + v.yzx * v.zxy;
+//     v = v ^ (v >> 16u);
 
-    let v_x_val = f32(v.x) + f32(v.y) * f32(v.z);
-    let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
-    let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
-    return vec3<f32>(v_x_val, v_y_val, v_z_val) * (1.0 / f32(0xffffffffu));
-}
+//     let v_x_val = f32(v.x) + f32(v.y) * f32(v.z);
+//     let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
+//     let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
+//     return vec3<f32>(v_x_val, v_y_val, v_z_val) * (1.0 / f32(0xffffffffu));
+// }
 
-fn hash3D_vec3(x: vec3<f32>) -> vec3<f32> {
-    var v = vec3<u32>(x * 8192.0) * 1664525u + 1013904223u;
-    v = v + v.yzx * v.zxy;
-    v = v ^ (v >> 16u);
+// fn hash3D_vec3(x: vec3<f32>) -> vec3<f32> {
+//     var v = vec3<u32>(x * 8192.0) * 1664525u + 1013904223u;
+//     v = v + v.yzx * v.zxy;
+//     v = v ^ (v >> 16u);
 
-    let v_x_val = f32(v.x) + f32(v.y) * f32(v.z);
-    let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
-    let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
-    return vec3<f32>(v_x_val, v_y_val, v_z_val) * (1.0 / f32(0xffffffffu));
-}
+//     let v_x_val = f32(v.x) + f32(v.y) * f32(v.z);
+//     let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
+//     let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
+//     return vec3<f32>(v_x_val, v_y_val, v_z_val) * (1.0 / f32(0xffffffffu));
+// }
 
-fn hash4D_vec2(x: vec2<f32>) -> vec4<f32> {
-    var v = vec4<u32>(x.xyyx * 8192.0) * 1664525u + 1013904223u;
+// fn hash4D_vec2(x: vec2<f32>) -> vec4<f32> {
+//     var v = vec4<u32>(x.xyyx * 8192.0) * 1664525u + 1013904223u;
 
-    v = v + v.yzxy * v.wxyz;
-    let v_x_val = f32(v.x) + f32(v.y) * f32(v.w);
-    let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
-    let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
-    let v_w_val = f32(v.w) + f32(v.y) * f32(v.z);
+//     v = v + v.yzxy * v.wxyz;
+//     let v_x_val = f32(v.x) + f32(v.y) * f32(v.w);
+//     let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
+//     let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
+//     let v_w_val = f32(v.w) + f32(v.y) * f32(v.z);
 
-    let v_x2_val = f32(v.x) + f32(v.y) * f32(v.w);
-    let v_w2_val = f32(v.w) + f32(v.y) * f32(v.z);
+//     let v_x2_val = f32(v.x) + f32(v.y) * f32(v.w);
+//     let v_w2_val = f32(v.w) + f32(v.y) * f32(v.z);
 
 
-    v = v ^ (v >> 16u);
+//     v = v ^ (v >> 16u);
 
-    return vec4<f32>(f32(v.x ^ (v >> 16u)), f32(v.y ^ (v >> 16u)), f32(v.z ^ (v >> 16u)), f32(v.w ^ (v >> 16u))) * (1.0 / f32(0xffffffffu));
-}
+//     return vec4<f32>(f32(v.x ^ (v >> 16u)), f32(v.y ^ (v >> 16u)), f32(v.z ^ (v >> 16u)), f32(v.w ^ (v >> 16u))) * (1.0 / f32(0xffffffffu));
+// }
 
-fn hash4D_vec4(x: vec4<f32>) -> vec4<f32> {
-    var v = vec4<u32>(x * 8192.0) * 1664525u + 1013904223u;
+// fn hash4D_vec4(x: vec4<f32>) -> vec4<f32> {
+//     var v = vec4<u32>(x * 8192.0) * 1664525u + 1013904223u;
 
-    v = v + v.yzxy * v.wxyz;
-    let v_x_val = f32(v.x) + f32(v.y) * f32(v.w);
-    let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
-    let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
-    let v_w_val = f32(v.w) + f32(v.y) * f32(v.z);
+//     v = v + v.yzxy * v.wxyz;
+//     let v_x_val = f32(v.x) + f32(v.y) * f32(v.w);
+//     let v_y_val = f32(v.y) + f32(v.z) * f32(v.x);
+//     let v_z_val = f32(v.z) + f32(v.x) * f32(v.y);
+//     let v_w_val = f32(v.w) + f32(v.y) * f32(v.z);
 
-    let v_x2_val = f32(v.x) + f32(v.y) * f32(v.w);
-    let v_y2_val = f32(v.y) + f32(v.z) * f32(v.x);
-    let v_z2_val = f32(v.z) + f32(v.x) * f32(v.y);
-    let v_w2_val = f32(v.w) + f32(v.y) * f32(v.z);
+//     let v_x2_val = f32(v.x) + f32(v.y) * f32(v.w);
+//     let v_y2_val = f32(v.y) + f32(v.z) * f32(v.x);
+//     let v_z2_val = f32(v.z) + f32(v.x) * f32(v.y);
+//     let v_w2_val = f32(v.w) + f32(v.y) * f32(v.z);
 
-    v = v ^ (v >> 16u);
+//     v = v ^ (v >> 16u);
 
-    return vec4<f32>(f32(v.x ^ (v >> 16u)), f32(v.y ^ (v >> 16u)), f32(v.z ^ (v >> 16u)), f32(v.w ^ (v >> 16u))) * (1.0 / f32(0xffffffffu));
-}
+//     return vec4<f32>(f32(v.x ^ (v >> 16u)), f32(v.y ^ (v >> 16u)), f32(v.z ^ (v >> 16u)), f32(v.w ^ (v >> 16u))) * (1.0 / f32(0xffffffffu));
+// }
 
-fn permutePrepareMod289_vec3(x: vec3<f32>) -> vec3<f32> {
-    return x - floor(x * (1.0 / 289.0)) * 289.0;
-}
+// fn permutePrepareMod289_vec3(x: vec3<f32>) -> vec3<f32> {
+//     return x - floor(x * (1.0 / 289.0)) * 289.0;
+// }
 
-fn permutePrepareMod289_vec4(x: vec4<f32>) -> vec4<f32> {
-    return x - floor(x * (1.0 / 289.0)) * 289.0;
-}
+// fn permutePrepareMod289_vec4(x: vec4<f32>) -> vec4<f32> {
+//     return x - floor(x * (1.0 / 289.0)) * 289.0;
+// }
 
-fn permuteResolve(x: vec4<f32>) -> vec4<f32> {
-    return fract(x * (7.0 / 288.0));
-}
+// fn permuteResolve(x: vec4<f32>) -> vec4<f32> {
+//     return fract(x * (7.0 / 288.0));
+// }
 
-fn permuteHashInternal(x: vec4<f32>) -> vec4<f32> {
-    return fract(x * ((34.0 / 289.0) * x + (1.0 / 289.0))) * 289.0;
-}
+// fn permuteHashInternal(x: vec4<f32>) -> vec4<f32> {
+//     return fract(x * ((34.0 / 289.0) * x + (1.0 / 289.0))) * 289.0;
+// }
 
-fn permuteHash2D(cell: vec4<f32>) -> vec4<f32> {
-    let cell_modified = permutePrepareMod289_vec4(cell * 32.0);
-    return permuteResolve(permuteHashInternal(permuteHashInternal(cell_modified.xzxz) + cell_modified.yyww));
-}
+// fn permuteHash2D(cell: vec4<f32>) -> vec4<f32> {
+//     let cell_modified = permutePrepareMod289_vec4(cell * 32.0);
+//     return permuteResolve(permuteHashInternal(permuteHashInternal(cell_modified.xzxz) + cell_modified.yyww));
+// }
 
-fn permuteHash2D_out(cell: vec4<f32>) -> vec4<f32> {
-    let cell_modified = permutePrepareMod289_vec4(cell);
-    let hashX_val = permuteHashInternal(permuteHashInternal(cell_modified.xzxz) + cell_modified.yyww);
-    let hashY_val = permuteResolve(permuteHashInternal(hashX_val));
-    return permuteResolve(hashX_val);
-}
+// fn permuteHash2D_out(cell: vec4<f32>) -> vec4<f32> {
+//     let cell_modified = permutePrepareMod289_vec4(cell);
+//     let hashX_val = permuteHashInternal(permuteHashInternal(cell_modified.xzxz) + cell_modified.yyww);
+//     let hashY_val = permuteResolve(permuteHashInternal(hashX_val));
+//     return permuteResolve(hashX_val);
+// }
 
-fn betterHash2D_vec2(x: vec2<f32>) -> vec2<f32> {
-    let q_val = vec2<u32>(x);
-    let h0 = ihash1D_uint(ihash1D_uint(q_val.x) + q_val.y);
-    let h1 = h0 * 1933247u + (~h0 ^ 230123u);
-    return vec2<f32>(f32(h0), f32(h1)) * (1.0 / f32(0xffffffffu));
-}
+// fn betterHash2D_vec2(x: vec2<f32>) -> vec2<f32> {
+//     let q_val = vec2<u32>(x);
+//     let h0 = ihash1D_uint(ihash1D_uint(q_val.x) + q_val.y);
+//     let h1 = h0 * 1933247u + (~h0 ^ 230123u);
+//     return vec2<f32>(f32(h0), f32(h1)) * (1.0 / f32(0xffffffffu));
+// }
 
 fn betterHash2D_vec4(cell: vec4<f32>) -> vec4<f32> {
     let i_val = vec4<u32>(cell);
@@ -153,73 +153,77 @@ fn betterHash2D_vec4(cell: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(vec4<f32>(hash_val) * (1.0 / f32(0xffffffffu)));
 }
 
-fn betterHash2D_out(cell: vec4<f32>) -> vec4<f32> {
-    let i_val = vec4<u32>(cell);
-    let hash0_val = ihash1D_vec4(ihash1D_vec4(i_val.xzxz) + i_val.yyww);
-    let hash1_val = hash0_val * 1933247u;
-    let hashX_val = vec4<f32>(vec4<f32>(hash0_val) * (1.0 / f32(0xffffffffu)));
-    let hashY_val = vec4<f32>(vec4<f32>(hash1_val) * (1.0 / f32(0xffffffffu)));
-    return hashX_val;
-}
+// fn betterHash2D_out(cell: vec4<f32>) -> vec4<f32> {
+//     let i_val = vec4<u32>(cell);
+//     let hash0_val = ihash1D_vec4(ihash1D_vec4(i_val.xzxz) + i_val.yyww);
+//     let hash1_val = hash0_val * 1933247u;
+//     let hashX_val = vec4<f32>(vec4<f32>(hash0_val) * (1.0 / f32(0xffffffffu)));
+//     let hashY_val = vec4<f32>(vec4<f32>(hash1_val) * (1.0 / f32(0xffffffffu)));
+//     return hashX_val;
+// }
 
-fn betterHash2D_vec2_coords(coords0: vec2<f32>, coords1: vec2<f32>) -> vec4<f32> {
-    let i_val = vec4<u32>(vec2<u32>(coords0), vec2<u32>(coords1));
-    let hash_val = vec4<u32>(ihash1D_vec4(ihash1D_vec4(i_val.xz) + i_val.yw).xxyy);
-    let hash_yw_val = hash_val.yw * 1933247u + (~hash_val.yw ^ 230123u);
-    return vec4<f32>(vec4<f32>(hash_val.xzxx) * (1.0 / f32(0xffffffffu)));
-}
+// fn betterHash2D_vec2_coords(coords0: vec2<f32>, coords1: vec2<f32>) -> vec4<f32> {
+//     let i_val = vec4<u32>(vec2<u32>(coords0), vec2<u32>(coords1));
+//     let hash_val = vec4<u32>(ihash1D_vec4(ihash1D_vec4(i_val.xz) + i_val.yw).xxyy);
+//     let hash_yw_val = hash_val.yw * 1933247u + (~hash_val.yw ^ 230123u);
+//     return vec4<f32>(vec4<f32>(hash_val.xzxx) * (1.0 / f32(0xffffffffu)));
+// }
 
 fn betterHash2D_vec4_coords(coords0: vec4<f32>, coords1: vec4<f32>) -> vec4<f32> {
     let hash0_val = ihash1D_vec4(ihash1D_vec4(vec4<u32>(vec2<u32>(coords0.xz), vec2<u32>(coords1.xz))) + vec4<u32>(vec2<u32>(coords0.yw), vec2<u32>(coords1.yw)));
-    let hash1_val = hash0_val * 1933247u + (~hash0_val ^ 230123u);
+    let tmp_x = ~hash0_val.x ^ 230123u;
+    let tmp_y = ~hash0_val.y ^ 230123u;
+    let tmp_z = ~hash0_val.z ^ 230123u;
+    let tmp_w = ~hash0_val.w ^ 230123u;
+    let hash1_val = hash0_val * 1933247u + vec4<u32>(tmp_x, tmp_y, tmp_z, tmp_w);
     let hashX_val = vec4<f32>(vec4<f32>(hash0_val) * (1.0 / f32(0xffffffffu)));
     let hashY_val = vec4<f32>(vec4<f32>(hash1_val) * (1.0 / f32(0xffffffffu)));
     return hashX_val;
 }
 
-fn permuteHash3D(cell: vec3<f32>, cellPlusOne: vec3<f32>) -> vec4<f32> {
-    let cell_modified = permutePrepareMod289_vec3(cell);
-    let cellPlusOne_modified = step(cell, vec3<f32>(287.5)) * cellPlusOne;
+// fn permuteHash3D(cell: vec3<f32>, cellPlusOne: vec3<f32>) -> vec4<f32> {
+//     let cell_modified = permutePrepareMod289_vec3(cell);
+//     let cellPlusOne_modified = step(cell, vec3<f32>(287.5)) * cellPlusOne;
 
-    let highHash_val = permuteHashInternal(permuteHashInternal(vec4<f32>(cell_modified.xy, cellPlusOne_modified.xy).xyxy) + vec4<f32>(cell_modified.yy, cellPlusOne_modified.yy).xxyy);
-    let lowHash_val = permuteResolve(permuteHashInternal(highHash_val + cell_modified.zzzz));
-    let highHash2_val = permuteResolve(permuteHashInternal(highHash_val + cellPlusOne_modified.zzzz));
-    return lowHash_val;
-}
+//     let highHash_val = permuteHashInternal(permuteHashInternal(vec4<f32>(cell_modified.xy, cellPlusOne_modified.xy).xyxy) + vec4<f32>(cell_modified.yy, cellPlusOne_modified.yy).xxyy);
+//     let lowHash_val = permuteResolve(permuteHashInternal(highHash_val + cell_modified.zzzz));
+//     let highHash2_val = permuteResolve(permuteHashInternal(highHash_val + cellPlusOne_modified.zzzz));
+//     return lowHash_val;
+// }
 
-fn fastHash3D(cell: vec3<f32>, cellPlusOne: vec3<f32>) -> vec4<f32> {
-    let kOffset = vec2<f32>(50.0, 161.0);
-    let kDomainScale = 289.0;
-    let kLargeValue = 635.298681;
-    let kk = 48.500388;
+// fn fastHash3D(cell: vec3<f32>, cellPlusOne: vec3<f32>) -> vec4<f32> {
+//     let kOffset = vec2<f32>(50.0, 161.0);
+//     let kDomainScale = 289.0;
+//     let kLargeValue = 635.298681;
+//     let kk = 48.500388;
     
-    let cell_modified = cell - floor(cell.xyz * (1.0 / kDomainScale)) * kDomainScale;
-    let cellPlusOne_modified = step(cell, vec3<f32>(kDomainScale - 1.5)) * cellPlusOne;
+//     let cell_modified = cell - floor(cell.xyz * (1.0 / kDomainScale)) * kDomainScale;
+//     let cellPlusOne_modified = step(cell, vec3<f32>(kDomainScale - 1.5)) * cellPlusOne;
 
-    let r = vec4<f32>(cell_modified.xy, cellPlusOne_modified.xy) + kOffset.xyxy;
-    let r_squared = r * r;
-    let r_multiplied = r_squared.xzxz * r_squared.yyww;
-    let highHash_xy = vec2<f32>(1.0 / (kLargeValue + vec2<f32>(cell_modified.z, cellPlusOne_modified.z) * kk));
-    let lowHash = fract(r_multiplied * highHash_xy.xxxx);
-    let highHash = fract(r_multiplied * highHash_xy.yyyy);
-    return lowHash;
-}
+//     let r = vec4<f32>(cell_modified.xy, cellPlusOne_modified.xy) + kOffset.xyxy;
+//     let r_squared = r * r;
+//     let r_multiplied = r_squared.xzxz * r_squared.yyww;
+//     let highHash_xy = vec2<f32>(1.0 / (kLargeValue + vec2<f32>(cell_modified.z, cellPlusOne_modified.z) * kk));
+//     let lowHash = fract(r_multiplied * highHash_xy.xxxx);
+//     let highHash = fract(r_multiplied * highHash_xy.yyyy);
+//     return lowHash;
+// }
 
-fn betterHash3D(cell: vec3<f32>, cellPlusOne: vec3<f32>) -> vec4<f32> {
-    let cells = vec4<u32>(vec2<u32>(cell.xy), vec2<u32>(cellPlusOne.xy));
-    let hash = ihash1D_vec4(ihash1D_vec4(cells.xzxz) + cells.yyww);
+// fn betterHash3D(cell: vec3<f32>, cellPlusOne: vec3<f32>) -> vec4<f32> {
+//     let cells = vec4<u32>(vec2<u32>(cell.xy), vec2<u32>(cellPlusOne.xy));
+//     let hash = ihash1D_vec4(ihash1D_vec4(cells.xzxz) + cells.yyww);
     
-    let lowHash = vec4<f32>(f32(ihash1D_uint(hash.x + u32(cell.z))),f32(ihash1D_uint(hash.y + u32(cell.z))),f32(ihash1D_uint(hash.z + u32(cell.z))),f32(ihash1D_uint(hash.w + u32(cell.z)))) * (1.0 / f32(0xffffffffu));
-    let highHash = vec4<f32>(f32(ihash1D_uint(hash.x + u32(cellPlusOne.z))),f32(ihash1D_uint(hash.y + u32(cellPlusOne.z))),f32(ihash1D_uint(hash.z + u32(cellPlusOne.z))),f32(ihash1D_uint(hash.w + u32(cellPlusOne.z)))) * (1.0 / f32(0xffffffffu));
-    return lowHash;
-}
+//     let lowHash = vec4<f32>(f32(ihash1D_uint(hash.x + u32(cell.z))),f32(ihash1D_uint(hash.y + u32(cell.z))),f32(ihash1D_uint(hash.z + u32(cell.z))),f32(ihash1D_uint(hash.w + u32(cell.z)))) * (1.0 / f32(0xffffffffu));
+//     let highHash = vec4<f32>(f32(ihash1D_uint(hash.x + u32(cellPlusOne.z))),f32(ihash1D_uint(hash.y + u32(cellPlusOne.z))),f32(ihash1D_uint(hash.z + u32(cellPlusOne.z))),f32(ihash1D_uint(hash.w + u32(cellPlusOne.z)))) * (1.0 / f32(0xffffffffu));
+//     return lowHash;
+// }
 
-fn smultiHash2D(cell: vec4<f32>) -> vec4<f32> {
-    let multiHash = betterHash2D_vec4(cell);
-    let hashX = multiHash * 2.0 - 1.0; 
-    let hashY = multiHash * 2.0 - 1.0;
-    return hashX;
-}
+// fn smultiHash2D(cell: vec4<f32>) -> vec4<f32> {
+//     let multiHash = betterHash2D_vec4(cell);
+//     let hashX = multiHash * 2.0 - 1.0; 
+//     let hashY = multiHash * 2.0 - 1.0;
+//     return hashX;
+// }
 
 fn perlinNoise_vec2_float(pos: vec2<f32>, scale: vec2<f32>, seed: f32) -> f32 {
     let pos_scaled = pos * scale;
@@ -241,50 +245,50 @@ fn perlinNoise_vec2_float(pos: vec2<f32>, scale: vec2<f32>, seed: f32) -> f32 {
     return dot(xSq_modified, gradients_modified);
 }
 
-fn perlinNoise_vec2_mat2_float(pos: vec2<f32>, scale: vec2<f32>, transform: mat2x2<f32>, seed: f32) -> f32 {
-    let pos_scaled = pos * scale;
-    let i = vec4<f32>(floor(pos_scaled).xyxy) + vec4<f32>(vec2<f32>(0.0, 1.0).xxyy);
-    let f = (vec4<f32>(pos_scaled.xyxy) - vec4<f32>(i.xyxy)) - vec4<f32>(vec2<f32>(0.0, 1.0).xxyy);
-    let i_modified = fract(i / scale.xyxy) * scale.xyxy + seed;
+// fn perlinNoise_vec2_mat2_float(pos: vec2<f32>, scale: vec2<f32>, transform: mat2x2<f32>, seed: f32) -> f32 {
+//     let pos_scaled = pos * scale;
+//     let i = vec4<f32>(floor(pos_scaled).xyxy) + vec4<f32>(vec2<f32>(0.0, 1.0).xxyy);
+//     let f = (vec4<f32>(pos_scaled.xyxy) - vec4<f32>(i.xyxy)) - vec4<f32>(vec2<f32>(0.0, 1.0).xxyy);
+//     let i_modified = fract(i / scale.xyxy) * scale.xyxy + seed;
 
-    let gradientX = betterHash2D_vec4(i_modified);
-    let gradientY = betterHash2D_vec4(i_modified);
-    let gradientX_modified = gradientX - 0.49999;
-    let gradientY_modified = gradientY - 0.49999;
+//     let gradientX = betterHash2D_vec4(i_modified);
+//     let gradientY = betterHash2D_vec4(i_modified);
+//     let gradientX_modified = gradientX - 0.49999;
+//     let gradientY_modified = gradientY - 0.49999;
 
-    let mt = vec4<f32>(transform[0][0], transform[0][1], transform[1][0], transform[1][1]);
-    let rg = vec4<f32>(gradientX_modified.x, gradientY_modified.x, gradientX_modified.y, gradientY_modified.y);
-    let rg_transformed = rg.xxzz * mt.xyxy + rg.yyww * mt.zwzw;
-    let gradientX_xy = rg_transformed.xz;
-    let gradientY_xy = rg_transformed.yw;
+//     let mt = vec4<f32>(transform[0][0], transform[0][1], transform[1][0], transform[1][1]);
+//     let rg = vec4<f32>(gradientX_modified.x, gradientY_modified.x, gradientX_modified.y, gradientY_modified.y);
+//     let rg_transformed = rg.xxzz * mt.xyxy + rg.yyww * mt.zwzw;
+//     let gradientX_xy = rg_transformed.xz;
+//     let gradientY_xy = rg_transformed.yw;
 
-    let rg2 = vec4<f32>(gradientX_modified.z, gradientY_modified.z, gradientX_modified.w, gradientY_modified.w);
-    let rg_transformed2 = rg2.xxzz * mt.xyxy + rg2.yyww * mt.zwzw;
-    let gradientX_zw = rg_transformed2.xz;
-    let gradientY_zw = rg_transformed2.yw;
-    let gradientX_final = vec4<f32>(gradientX_xy.xy,gradientX_zw.xy);
-    let gradientY_final = vec4<f32>(gradientY_xy.xy,gradientY_zw.xy);
+//     let rg2 = vec4<f32>(gradientX_modified.z, gradientY_modified.z, gradientX_modified.w, gradientY_modified.w);
+//     let rg_transformed2 = rg2.xxzz * mt.xyxy + rg2.yyww * mt.zwzw;
+//     let gradientX_zw = rg_transformed2.xz;
+//     let gradientY_zw = rg_transformed2.yw;
+//     let gradientX_final = vec4<f32>(gradientX_xy.xy,gradientX_zw.xy);
+//     let gradientY_final = vec4<f32>(gradientY_xy.xy,gradientY_zw.xy);
 
-    let gradients = inverseSqrt(gradientX_final * gradientX_final + gradientY_final * gradientY_final) * (gradientX_final * f.xzxz + gradientY_final * f.yyww);
-    let gradients_modified = gradients * 2.3703703703703703703703703703704;
-    let f_squared = f * f;
-    let f_added = f_squared.xzxz + f_squared.yyww;
-    let xSq = 1.0 - min(vec4<f32>(1.0), f_added);
-    return dot(xSq * xSq * xSq, gradients_modified);
-}
+//     let gradients = inverseSqrt(gradientX_final * gradientX_final + gradientY_final * gradientY_final) * (gradientX_final * f.xzxz + gradientY_final * f.yyww);
+//     let gradients_modified = gradients * 2.3703703703703703703703703703704;
+//     let f_squared = f * f;
+//     let f_added = f_squared.xzxz + f_squared.yyww;
+//     let xSq = 1.0 - min(vec4<f32>(1.0), f_added);
+//     return dot(xSq * xSq * xSq, gradients_modified);
+// }
 
-fn perlinNoise_vec2_float_float(pos: vec2<f32>, scale: vec2<f32>, rotation: f32, seed: f32) -> f32 {
-    let sinCos = vec2<f32>(sin(rotation), cos(rotation));
-    let transform = mat2x2<f32>(sinCos.y, sinCos.x, sinCos.x, sinCos.y);
-    return perlinNoise_vec2_mat2_float(pos, scale, transform, seed);
-}
+// fn perlinNoise_vec2_float_float(pos: vec2<f32>, scale: vec2<f32>, rotation: f32, seed: f32) -> f32 {
+//     let sinCos = vec2<f32>(sin(rotation), cos(rotation));
+//     let transform = mat2x2<f32>(sinCos.y, sinCos.x, sinCos.x, sinCos.y);
+//     return perlinNoise_vec2_mat2_float(pos, scale, transform, seed);
+// }
 
-@group(0) @binding(0) var<uniform> world_size: Uniforms;
+// @group(0) @binding(0) var<uniform> world_size: Uniforms;
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let fpix = vec2<f32>(vec2<f32>(global_id.xy) + 0.5);
     let ipix = vec2<i32>(fpix);
-    let noise_val = perlinNoise_vec2_float(fpix/(2.0*world_size.world_size), vec2<f32>(3.0), 0.0);
+    let noise_val = perlinNoise_vec2_float(fpix/(2.0*vec2<f32>(world_size.xy)), vec2<f32>(3.0), 0.0);
     textureStore(noise_image, ipix, vec4<f32>(noise_val,noise_val,noise_val, 1.0));
 }

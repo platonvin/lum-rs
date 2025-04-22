@@ -8,8 +8,11 @@ use crate::{
 };
 
 // use multiversion::multiversion;
-use qvek::{i8vec4, ivec3, uvec2, uvec3};
-use wgpu::{Extent3d, ImageCopyBuffer, ImageCopyTexture, Origin3d};
+use qvek::{i8vec4, ivec3, ivec4, uvec2, uvec3};
+use wgpu::{
+    Extent3d, Origin3d, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo,
+    COPY_BYTES_PER_ROW_ALIGNMENT,
+};
 use winit::window::Window;
 
 use super::InternalRendererWebGPU;
@@ -37,7 +40,8 @@ impl<'window> InternalRendererWebGPU<'window> {
         lum_settings: &Settings,
         window: Window,
         // event_loop: &winit::event_loop::EventLoop<()>,
-        foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+        // foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+        foliage_descriptions: Vec<render_wgpu::MeshFoliageDesc>,
     ) -> Self {
         InternalRendererWebGPU::create(lum_settings, window, foliage_descriptions).await
     }
@@ -155,20 +159,20 @@ impl<'window> InternalRendererWebGPU<'window> {
     // }
 
     /// Copies the entire world state to the staging buffer.
-    pub fn end_blockify(&mut self) {
-        let (dim_x, dim_y, dim_z) = self.current_world.dimensions();
-        let count_to_copy = dim_x * dim_y * dim_z;
-        // Cast the current world data to a byte slice.
-        let data: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                self.current_world.data.as_ptr() as *const u8,
-                count_to_copy * size_of::<BlockId>(),
-            )
-        };
-        // Write the data to the staging_world buffer.
-        self.wal.queue.write_buffer(&self.buffers.staging_world.current(), 0, data);
-        // No explicit flush is required in WGPU.
-    }
+    // pub fn end_blockify(&mut self) {
+    //     let (dim_x, dim_y, dim_z) = self.current_world.dimensions();
+    //     let count_to_copy = dim_x * dim_y * dim_z;
+    //     // Cast the current world data to a byte slice.
+    //     let data: &[u8] = unsafe {
+    //         std::slice::from_raw_parts(
+    //             self.current_world.data.as_ptr() as *const u8,
+    //             count_to_copy * size_of::<BlockId>(),
+    //         )
+    //     };
+    //     // Write the data to the staging_world buffer.
+    //     self.wal.queue.write_buffer(&self.buffers.staging_world.current(), 0, data);
+    //     // No explicit flush is required in WGPU.
+    // }
 
     // i love the fact that none of these does anything
     #[optimize(speed)]
@@ -269,7 +273,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         //     }
         // }
 
-        self.radiance_updates.resize(pushed_radiance_count as usize, i8vec4::zero());
+        self.radiance_updates.resize(pushed_radiance_count as usize, ivec4::zero());
 
         let mut i = 0;
         for zz in 0..self.settings.world_size.z {
@@ -277,7 +281,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 for xx in 0..self.settings.world_size.x {
                     if visited.get(xx as usize, yy as usize, zz as usize) {
                         assert_assume!(i < self.radiance_updates.len());
-                        self.radiance_updates[i] = i8vec4!(xx, yy, zz, 0);
+                        self.radiance_updates[i] = ivec4!(xx, yy, zz, 0);
                         i += 1;
                     }
                 }
@@ -333,16 +337,13 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         // Copy radiance_updates from CPU memory to staging buffer.
         let count_to_copy = self.radiance_updates.len();
-        let size_to_copy = (count_to_copy * size_of::<i8vec4>()) as u64;
+        let size_to_copy = (count_to_copy * size_of::<ivec4>()) as usize;
         let data: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                self.radiance_updates.as_ptr() as *const u8,
-                count_to_copy * size_of::<i8vec4>(),
-            )
+            std::slice::from_raw_parts(self.radiance_updates.as_ptr() as *const u8, size_to_copy)
         };
-        self.wal
-            .queue
-            .write_buffer(&self.buffers.staging_radiance_updates.first(), 0, data);
+        let mut staging_data =
+            self.buffers.staging_radiance_updates.current().slice(..).get_mapped_range_mut();
+        staging_data[0..size_to_copy].copy_from_slice(data);
 
         // Record a buffer copy from the staging buffer to the GPU radiance updates buffer.
         if count_to_copy > 0 {
@@ -351,37 +352,32 @@ impl<'window> InternalRendererWebGPU<'window> {
                 0,
                 &self.buffers.gpu_radiance_updates.first(),
                 0,
-                size_to_copy,
+                size_to_copy as u64,
             );
         }
-        // No explicit barriers are needed in WGPU.
-
         // Begin a compute pass.
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Radiance Compute Pass"),
             timestamp_writes: None,
         });
         // Bind the compute pipeline.
-        let bind_group = self.pipes.radiance_pipe.bind_groups.as_ref().unwrap().current();
-        compute_pass.set_pipeline(self.pipes.radiance_pipe.pipeline.as_ref().unwrap());
-        compute_pass.set_bind_group(0, Some(bind_group), &[]);
-
-        #[repr(C)]
-        #[derive(Clone, Copy, as_u8_slice_derive::AsU8Slice)]
-        struct PushConstant {
-            time: i32,
-            iters: i32,
-        }
-        let push_constant = PushConstant {
-            // time: self.frame_counter,
-            time: 1,
-            iters: 0,
-        };
-        compute_pass.set_push_constants(0, push_constant.as_u8_slice());
+        // let bind_group = self.pipes.radiance_pipe.bind_groups.as_ref().unwrap().current();
+        // compute_pass.set_pipeline(self.pipes.radiance_pipe.pipeline.as_ref().unwrap());
+        // compute_pass.set_bind_group(0, Some(bind_group), &[]);
+        self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.radiance_pipe);
 
         // Dispatch the compute work.
         let workgroup_count = count_to_copy as u32;
-        compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+
+        self.wal.dispatch_with_params(
+            &mut compute_pass,
+            &mut self.pipes.radiance_pipe,
+            None,
+            None,
+            workgroup_count,
+            1,
+            1,
+        );
     }
 
     /// Shifts the radiance cache texture content by copying a region from the "current" image
@@ -432,7 +428,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         // First, copy from the current radiance cache to the previous one.
         // In WGPU, we use copy_texture_to_texture. (No explicit barriers are needed.)
-        let src_copy = ImageCopyTexture {
+        let src_copy = TexelCopyTextureInfo {
             texture: &self.independent_images.radiance_cache.current().texture,
             mip_level: 0,
             origin: Origin3d {
@@ -442,7 +438,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             },
             aspect: wgpu::TextureAspect::All,
         };
-        let dst_copy = ImageCopyTexture {
+        let dst_copy = TexelCopyTextureInfo {
             texture: &self.independent_images.radiance_cache.previous().texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
@@ -451,13 +447,13 @@ impl<'window> InternalRendererWebGPU<'window> {
         encoder.copy_texture_to_texture(src_copy, dst_copy, copy_extent);
 
         // Then, copy back from the previous image to the current one with a destination offset.
-        let src_back = ImageCopyTexture {
+        let src_back = TexelCopyTextureInfo {
             texture: &self.independent_images.radiance_cache.previous().texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         };
-        let dst_back = ImageCopyTexture {
+        let dst_back = TexelCopyTextureInfo {
             texture: &self.independent_images.radiance_cache.current().texture,
             mip_level: 0,
             origin: Origin3d {
@@ -502,8 +498,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 occlusion_query_set: None,
             };
             {
-                // Begin and immediately end a render pass to clear.
-                encoder.begin_render_pass(&rp_desc);
+                //TODO:
+                // encoder.clear_texture();
             }
         }
 
@@ -514,13 +510,13 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: 16,
                 depth_or_array_layers: 16,
             };
-            let src = ImageCopyTexture {
+            let src = TexelCopyTextureInfo {
                 texture: &self.independent_images.origin_block_palette.previous().texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             };
-            let dst = ImageCopyTexture {
+            let dst = TexelCopyTextureInfo {
                 texture: &self.independent_images.origin_block_palette.current().texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
@@ -538,18 +534,22 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         // Finally, copy the world buffer to the world texture.
         {
-            // We assume that self.buffers.world_buffer is a wgpu::Buffer.
             let bytes_per_row = self.settings.world_size.x * std::mem::size_of::<BlockId>() as u32;
-            let layout = wgpu::ImageDataLayout {
+
+            //TODO: idk pad this
+            let padded_bytes_per_row = bytes_per_row.next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT);
+
+            let layout = wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(bytes_per_row),
+                bytes_per_row: Some(padded_bytes_per_row),
                 rows_per_image: Some(self.settings.world_size.y),
+                // rows_per_image: None, // not required?
             };
-            let buffer_copy = ImageCopyBuffer {
+            let buffer_copy = TexelCopyBufferInfo {
                 buffer: self.buffers.staging_world.current(),
                 layout,
             };
-            let dst = ImageCopyTexture {
+            let dst = TexelCopyTextureInfo {
                 texture: &self.independent_images.world.current().texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
@@ -562,6 +562,34 @@ impl<'window> InternalRendererWebGPU<'window> {
             };
             encoder.copy_buffer_to_texture(buffer_copy, dst, extent);
         }
+        // let (dim_x, dim_y, dim_z) = (&mut self.renderer).current_world.dimensions();
+        // let count_to_copy = dim_x * dim_y * dim_z;
+        // // Cast the current world data to a byte slice.
+        // let data: &[u8] = unsafe {
+        //     std::slice::from_raw_parts(
+        //         (&mut self.renderer).current_world.data.as_ptr() as *const u8,
+        //         count_to_copy * size_of::<BlockId>(),
+        //     )
+        // };
+        // self.wal.queue.write_texture(
+        //     TexelCopyTextureInfo {
+        //         texture: todo!(),
+        //         mip_level: todo!(),
+        //         origin: todo!(),
+        //         aspect: todo!(),
+        //     },
+        //     data,
+        //     TexelCopyBufferLayout {
+        //         offset: 0,
+        //         bytes_per_row: todo!(),
+        //         rows_per_image: todo!(),
+        //     },
+        //     Extent3d {
+        //         width: dim_x,
+        //         height: dim_y,
+        //         depth_or_array_layers: dim_z,
+        //     },
+        // );
     }
 }
 

@@ -4,7 +4,7 @@
 const BLOCK_PALETTE_SIZE_X: i32 = 64;
 const STATIC_BLOCK_COUNT: i32 = 15; // Unused in this shader?
 const PI: f32 = 3.1415926535;
-const world_size: vec3<i32> = vec3<i32>(256, 256, 256); // Example value
+const world_size: vec3<i32> = vec3<i32>(48, 48, 16);
 const BLADES_PER_INSTANCE: i32 = 1; // From shader const
 const VERTICES_PER_BLADE: u32 = 6u; // From shader const (use u32 for indices)
 const MAX_HEIGHT: f32 = 3.0; // From shader const (use f32)
@@ -20,7 +20,9 @@ struct UboData {
     global_light_dir: vec4<f32>,
     lightmap_proj: mat4x4<f32>,
     frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
     timeseed: i32,
+    delta_time: f32,
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
@@ -29,6 +31,7 @@ struct UboData {
 @group(0) @binding(1) var state_tex: texture_2d<f32>; // sampler2D state
 @group(0) @binding(2) var linear_samp: sampler;      // Sampler for state_tex
 
+@group(1) @binding(0) var<uniform> pco: PushConstants;
 // --- Push Constants ---
 struct PushConstants {
     shift: vec4<f32>,
@@ -38,7 +41,6 @@ struct PushConstants {
     y_flip: i32,
 };
 // Assuming push constants mapped to uniform buffer at group 1
-@group(1) @binding(0) var<uniform> pco: PushConstants;
 
 // --- Vertex Output Structure ---
 struct VertexOutput {
@@ -128,7 +130,8 @@ fn load_offset(local_pos: vec2<f32>) -> vec2<f32> {
     // Normalize world pos to UVs for state texture
     let state_uv = world_pos / (vec2<f32>(world_size.xy) * 16.0);
     // Sample texture using sampler
-    let offset = textureSample(state_tex, linear_samp, state_uv).xy;
+    // let offset = textureSample(state_tex, linear_samp, state_uv).xy;
+    let offset = vec2f(0);
     return offset; // Assuming offset stored in RG channels
 }
 

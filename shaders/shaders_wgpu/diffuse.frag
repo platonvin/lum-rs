@@ -1,6 +1,6 @@
 // WGSL translation of diffuse.frag
 
-const world_size: vec3<i32> = vec3<i32>(256, 256, 256); // Example value
+const world_size: vec3<i32> = vec3<i32>(48, 48, 16); // Example value
 const COLOR_ENCODE_VALUE: f32 = 8.0;
 const RAYS_PER_PROBE: i32 = 32; // Seems unused in fragment shader logic provided
 const PI: f32 = 3.1415926535;
@@ -14,17 +14,18 @@ struct UboData {
     global_light_dir: vec4<f32>,
     lightmap_proj: mat4x4<f32>,
     frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
     timeseed: i32,
+    delta_time: f32,
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
 
 // --- Bindings ---
 // Input Attachments treated as Textures
-@group(0) @binding(1) var matNorm_tex: texture_2d<f32>; // usubpassInput matNorm (RGBA8 format assumed for .rgba access)
+@group(0) @binding(1) var matNorm_tex: texture_2d<u32>;
 @group(0) @binding(2) var depthBuffer_tex: texture_depth_2d; // subpassInput depthBuffer
 
-// Regular Textures & Samplers
 @group(0) @binding(3) var voxelPalette_tex: texture_2d<f32>; // sampler2D voxelPalette (Assuming R32Float format)
 @group(0) @binding(4) var nearest_samp: sampler; // Sampler for voxelPalette_tex
 
@@ -91,8 +92,8 @@ fn sample_radiance_directional(position: vec3<f32>, normal: vec3<f32>) -> vec3<f
         total_colour = total_colour + probe_weight * probe_colour;
     }
 
-    // Prevent division by zero if total_weight is extremely small
-    if (total_weight < 1e-6) {
+    if total_weight < 1e-6 {
+        // Prevent division by zero if total_weight is extremely small
         return vec3<f32>(0.0);
     }
     return total_colour / total_weight;
@@ -114,7 +115,7 @@ fn load_norm(frag_coord_xy: vec2<i32>) -> vec3<f32> {
     // Assuming mat ID is in .x and normal in .gba, encoded as u8
     let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0); // LOD 0
     // Decode GBA components from [0,1] to [-1,1]
-    let norm = (loaded_val.gba * 2.0) - 1.0;
+    let norm = (vec3f(loaded_val.gba) * 2.0) - 1.0;
     return norm;
 }
 
@@ -152,10 +153,7 @@ fn GetMat(voxel: i32) -> Material {
 }
 
 fn get_origin_from_depth(depth: f32, clip_pos: vec2<f32>) -> vec3<f32> {
-    let origin = ubo.campos.xyz +
-        (ubo.horizline_scaled.xyz * clip_pos.x) +
-        (ubo.vertiline_scaled.xyz * clip_pos.y) +
-        (ubo.camdir.xyz * depth);
+    let origin = ubo.campos.xyz + (ubo.horizline_scaled.xyz * clip_pos.x) + (ubo.vertiline_scaled.xyz * clip_pos.y) + (ubo.camdir.xyz * depth);
     return origin;
 }
 
@@ -166,7 +164,7 @@ fn get_origin_from_depth(depth: f32, clip_pos: vec2<f32>) -> vec3<f32> {
 
 // WGSL equivalents for bit manipulation
 fn next_after(x: f32, s: i32) -> f32 {
-    let ix= bitcast<u32>(x);
+    let ix = bitcast<u32>(x);
     let fxp1 = bitcast<f32>(ix + u32(s)); // Cast s to u32 for bitwise add
     return fxp1;
 }
@@ -192,7 +190,7 @@ fn sample_lightmap(world_pos: vec3<f32>, normal: vec3<f32>) -> f32 {
 
     // Apply bias based on normal vs light direction
     // Note: Bias values (-0.9, +0.9) seem large, might need adjustment.
-    if (dot_prod > 0.0) {
+    if dot_prod > 0.0 {
         biased_pos = world_pos - normal * 0.9;
     } else {
         biased_pos = world_pos + normal * 0.9;
@@ -201,30 +199,28 @@ fn sample_lightmap(world_pos: vec3<f32>, normal: vec3<f32>) -> f32 {
     // Project position into light space
     let light_clip_h = ubo.lightmap_proj * vec4<f32>(biased_pos, 1.0);
     // Perspective divide (if lightmap_proj is a perspective matrix)
-    if (light_clip_h.w != 0.0) {
-         let light_clip = light_clip_h.xyz / light_clip_h.w;
-         let light_uv = light_clip.xy * 0.5 + 0.5; // Convert clip space [-1, 1] to UV [0, 1]
-         let world_depth_in_light_space = light_clip.z; // Depth in light's view [0, 1] or similar range
+    if light_clip_h.w != 0.0 {
+        let light_clip = light_clip_h.xyz / light_clip_h.w;
+        let light_uv = light_clip.xy * 0.5 + 0.5; // Convert clip space [-1, 1] to UV [0, 1]
+        let world_depth_in_light_space = light_clip.z; // Depth in light's view [0, 1] or similar range
 
          // Simple PCF 5-tap (manual unroll from GLSL)
-         let pcfshift = vec2<f32>(1.0 / 1024.0); // Assumes 1024x1024 lightmap
-         var total_light: f32 = 0.0;
+        let pcfshift = vec2<f32>(1.0 / 1024.0); // Assumes 1024x1024 lightmap
+        var total_light: f32 = 0.0;
 
-         total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(-pcfshift.x, 0.0));
-         total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, 0.0));
-         total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(pcfshift.x, 0.0));
-         total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, -pcfshift.y));
-         total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, pcfshift.y));
+        total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(-pcfshift.x, 0.0));
+        total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, 0.0));
+        total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(pcfshift.x, 0.0));
+        total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, -pcfshift.y));
+        total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, pcfshift.y));
 
          // Average the taps and apply intensity factor
          // Original GLSL scaled result by 0.15. Apply here.
-         return (total_light / 5.0) * 0.15;
+        return (total_light / 5.0) * 0.15;
     } else {
         // Avoid division by zero if w is 0 (unlikely with proper projection)
         return 1.0; // Not shadowed if projection fails
     }
-
-
 }
 
 fn decode_color(encoded_color: vec3<f32>) -> vec3<f32> {

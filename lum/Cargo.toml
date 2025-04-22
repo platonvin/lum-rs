@@ -17,11 +17,12 @@
     features = ["debug_validation_names"]
 
 [dependencies]
-    # lumal = { git = "https://github.com/platonvin/lumal-rs.git", branch = "master"} # lumal is lum's abstraction layer over vulkan
+    # lumal is lum's abstraction layer over vulkan
+    # lumal = { git = "https://github.com/platonvin/lumal-rs.git", branch = "master"} 
+    lumal = { path = "../lumal" }
     shaders = { path = "../shaders" }
-    lumal = { path = "../../lumal-rs" } # for development
     as_u8_slice_derive = { path = "../as_u8_slice_derive" } # derive macro for AsU8Slice, needed by Vulkanalia
-    winit = "0.30.8"
+    winit = "0.30.9"
     qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
     pub-fields = "0.1.1"
     block-mesh = "0.2.0"

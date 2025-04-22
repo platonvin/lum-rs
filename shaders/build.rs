@@ -134,6 +134,7 @@ fn main() {
     // }
 
     // inform Cargo about the compiled shaders directory so it can be included later
+
     println!(
         "cargo:rustc-env=COMPILED_SHADERS_PATH={}/",
         out_dir.display()

@@ -14,9 +14,9 @@ but 32 is clearly not multiply of 11, and sadly 11x3=33 is one more than 32
 */
 
 #extension GL_GOOGLE_include_directive : require
-#include "common\ext.glsl"
-#include "common\ubo.glsl"
-#include "common\consts.glsl"
+#include "common/ext.glsl"
+#include "common/ubo.glsl"
+#include "common/consts.glsl"
 
 layout(set = 0, binding = 1) uniform sampler2D state;
 

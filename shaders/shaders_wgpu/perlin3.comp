@@ -1,8 +1,7 @@
-// struct Uniforms {
-//     // Add any uniform data if needed
-// };
+const world_size: vec3<i32> = vec3<i32>(48, 48, 16);
 
-@group(0) @binding(0) var noise_image: texture_storage_3d<rgba16snorm, write>;
+// @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(0) var noise_image: texture_storage_3d<rgba32float, write>;
 
 const UI0: u32 = 1597334673u;
 const UI1: u32 = 3812015801u;

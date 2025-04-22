@@ -5,8 +5,8 @@ precision highp int;
 precision highp float;
 
 #extension GL_GOOGLE_include_directive : require
-#include "common\ext.glsl"
-#include "common\consts.glsl"
+#include "common/ext.glsl"
+#include "common/consts.glsl"
 
 //well, its not really radiance. Its more of a minecraft lighting but raytraced
 //its not that realistic but imho looks good

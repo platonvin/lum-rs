@@ -97,10 +97,7 @@ fn bench_dispatch(c: &mut Criterion) {
         // we have to drop cause my threads are busy waiting and will conflict with rayon
         drop(mine_pool);
 
-        let rayon_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(thread_count)
-            .build()
-            .unwrap();
+        let rayon_pool = rayon::ThreadPoolBuilder::new().num_threads(thread_count).build().unwrap();
         bench_rayon(&rayon_pool, thread_count);
         group.bench_with_input(
             BenchmarkId::new("rayon", thread_count),

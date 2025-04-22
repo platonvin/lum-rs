@@ -6,9 +6,9 @@ precision varp int;
 precision varp float;
 
 #extension GL_GOOGLE_include_directive : require
-#include "common\ext.glsl"
-#include "common\ubo.glsl"
-#include "common\consts.glsl"
+#include "common/ext.glsl"
+#include "common/ubo.glsl"
+#include "common/consts.glsl"
 
 layout(binding = 0, set = 1) uniform usampler3D modelVoxels;
 

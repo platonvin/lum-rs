@@ -2030,9 +2030,8 @@ impl InternalRendererVulkan {
 
         let should_recreate = self.lumal.should_recreate;
         if should_recreate {
-            lumal::atrace!();
             self.recreate_window(window);
-            lumal::atrace!();
+
             self.lumal.should_recreate = false;
         }
     }

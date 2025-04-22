@@ -14,17 +14,34 @@ use super::Settings;
 use crate::{containers::Array3D, types::*};
 
 const FRAME_FORMAT: TextureFormat = TextureFormat::Rgb10a2Unorm;
-const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth16Unorm;
+const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 const MATNORM_FORMAT: TextureFormat = TextureFormat::Rgba8Uint;
 const RADIANCE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 const SECONDARY_DEPTH_FORMAT: TextureFormat = TextureFormat::R16Float;
 const BLOCK_PALETTE_SIZE_X: u32 = 64;
 const BLOCK_PALETTE_SIZE_Y: u32 = 64;
+const BLOCK_SIZE: u32 = 16;
 const FRAMES_IN_FLIGHT: usize = 2;
 const DEPTH_FORMAT_SPARE: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8; // TODO somehow D32 faster than wgpu::TextureFormat::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED: wgpu::TextureFormat = wgpu::TextureFormat::Depth32FloatStencil8;
 static mut CHOSEN_DEPTH_FORMAT: Option<wgpu::TextureFormat> =
     Some(TextureFormat::Depth32FloatStencil8); // TODO:
+static mut SWAPCHAIN_FORMAT: Option<wgpu::TextureFormat> = None;
+
+#[derive(Debug, Clone, Default)]
+pub struct MeshFoliageDesc {
+    // shader, compiled into spirv
+    // owned by description for siplicity
+    pub code: &'static str,
+
+    // Stored separately cause im fell in love with ecs
+    // pub pipe: lumal::RasterPipe,
+
+    // how many vertices will be in per-blade drawcall
+    pub vertices: u32,
+    // how many blades is there in a block (linear)
+    pub density: u32,
+}
 
 #[derive(Default)]
 pub struct AllPipes {
@@ -45,8 +62,7 @@ pub struct AllPipes {
     pub glossy_pipe: RasterPipe,
     pub smoke_pipe: RasterPipe,
     pub tonemap_pipe: RasterPipe,
-    pub overlay_pipe: RasterPipe,
-
+    // pub overlay_pipe: RasterPipe,
     pub radiance_pipe: ComputePipe,
     pub map_pipe: ComputePipe,
     // pub map_push_layout: Option<wgpu::BindGroupLayout>,
@@ -72,6 +88,7 @@ pub struct AllSwapchainDependentImages {
     pub highres_frame: Ring<Image>, // Ring equivalent will need careful management
     pub highres_depth_stencil: Ring<Image>,
     pub highres_mat_norm: Ring<Image>,
+    pub full_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
     pub stencil_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
     pub far_depth: Ring<Image>,
     pub near_depth: Ring<Image>,
@@ -90,12 +107,15 @@ pub struct AllIndependentImages {
 }
 
 pub struct AllBuffers {
-    pub staging_world: Ring<wgpu::Buffer>, // Ring equivalent
+    // we dont need staging buffers since thats not how WGPU works
+    pub staging_world: Ring<wgpu::Buffer>,
     pub light_uniform: Ring<wgpu::Buffer>,
     pub uniform: Ring<wgpu::Buffer>,
     pub ao_lut_uniform: Ring<wgpu::Buffer>,
     pub gpu_radiance_updates: Ring<wgpu::Buffer>,
+    // we dont need staging buffers since thats not how WGPU works
     pub staging_radiance_updates: Ring<wgpu::Buffer>,
+    pub gpu_particles_staged: Ring<wgpu::Buffer>,
     pub gpu_particles: Ring<wgpu::Buffer>,
 }
 
@@ -108,15 +128,15 @@ pub struct InternalRendererWebGPU<'window> {
     lightmap_extent: Extent3d,
 
     pipes: AllPipes,
-    foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+    foliage_descriptions: Vec<MeshFoliageDesc>,
     dependent_images: Option<AllSwapchainDependentImages>,
     // rpasses: AllRenderPasses,
     independent_images: AllIndependentImages,
     buffers: AllBuffers,
     samplers: AllSamplers,
     // cmdbufs: AllCommandBuffers,
-    radiance_updates: Vec<i8vec4>,
-    special_radiance_updates: Vec<i8vec4>,
+    radiance_updates: Vec<ivec4>,
+    special_radiance_updates: Vec<ivec4>,
 
     camera: Camera,
     light: SunLight,
@@ -152,7 +172,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     pub async fn create(
         lum_settings: &Settings,
         window: Window,
-        foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+        foliage_descriptions: Vec<MeshFoliageDesc>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
         let mut wal = wal::Wal::new(window).await;
@@ -280,19 +300,19 @@ impl<'window> InternalRendererWebGPU<'window> {
 fn create_dependent(
     wal: &wal::Wal,
     settings: &Settings,
-    foliage_descriptions: &Vec<InternalMeshFoliageDesc>,
+    foliage_descriptions: &Vec<MeshFoliageDesc>,
     lumal_settings: &Settings,
     independent_images: &AllIndependentImages,
     buffers: &AllBuffers,
     samplers: &AllSamplers,
 ) -> (AllSwapchainDependentImages, AllPipes) {
     let mut dependent_images = InternalRendererWebGPU::create_dependent_images(wal, settings);
-    let mut pipes: AllPipes = AllPipes::default();
-    pipes
-        .raygen_foliage_pipes
-        .resize_with(foliage_descriptions.len(), || RasterPipe::default());
+    // let mut pipes: AllPipes = AllPipes::default();
+    // pipes
+    //     .raygen_foliage_pipes
+    //     .resize_with(foliage_descriptions.len(), || RasterPipe::default());
 
-    unsafe {
+    let pipes = unsafe {
         InternalRendererWebGPU::create_all_pipes(
             wal,
             settings,
@@ -301,7 +321,7 @@ fn create_dependent(
             &dependent_images,
             samplers,
             foliage_descriptions,
-        );
-    }
+        )
+    };
     (dependent_images, pipes)
 }

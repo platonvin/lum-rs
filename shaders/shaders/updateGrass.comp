@@ -2,7 +2,7 @@
 
 //basically updates grass "marks" texture.. Simple, unefficient and looks cool  
 #extension GL_GOOGLE_include_directive : require
-#include "common\consts.glsl"
+#include "common/consts.glsl"
 
 precision highp int;
 precision highp float;

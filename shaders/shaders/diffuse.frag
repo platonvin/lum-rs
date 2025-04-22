@@ -8,9 +8,9 @@ ambient + "radiant" diffuse + lightmaps
 precision highp int;
 precision highp float;
 #extension GL_GOOGLE_include_directive : require
-#include "common\ext.glsl"
-#include "common\ubo.glsl"
-#include "common\consts.glsl"
+#include "common/ext.glsl"
+#include "common/ubo.glsl"
+#include "common/consts.glsl"
 
 layout(input_attachment_index = 0, set = 0, binding = 1) uniform usubpassInput matNorm;
 layout(input_attachment_index = 1, set = 0, binding = 2) uniform subpassInput depthBuffer;

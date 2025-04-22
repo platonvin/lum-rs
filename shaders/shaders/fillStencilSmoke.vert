@@ -4,8 +4,8 @@
 layout (location = 0) out float end_depth;
 
 #extension GL_GOOGLE_include_directive : require
-#include "common\ext.glsl"
-#include "common\ubo.glsl"
+#include "common/ext.glsl"
+#include "common/ubo.glsl"
 
 layout(push_constant) uniform restrict readonly constants{
     vec4 originSize;

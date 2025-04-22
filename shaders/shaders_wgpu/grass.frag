@@ -12,8 +12,7 @@ struct FragmentOutput {
     @location(0) outMatNorm: vec4<u32>,
 };
 
-// Apply early depth testing, equivalent to layout(early_fragment_tests) in;
-@fragment @early_depth_test
+@fragment
 fn main(input: FragmentInput) -> FragmentOutput {
     var output: FragmentOutput;
 

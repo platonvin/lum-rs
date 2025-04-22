@@ -5,9 +5,9 @@ precision highp int;
 
 //dont swap
 #extension GL_GOOGLE_include_directive : require
-#include "common\ext.glsl"
-#include "common\ubo.glsl"
-#include "common\consts.glsl"
+#include "common/ext.glsl"
+#include "common/ubo.glsl"
+#include "common/consts.glsl"
 
 // layout(location = 0) in vec3 zero_origin;
 // layout(location = 0) in vec2 clip_pos;

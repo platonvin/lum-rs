@@ -1,7 +1,5 @@
 #![allow(non_camel_case_types)]
 
-pub type MatID = u8;
-
 use block_mesh::VoxelVisibility;
 use lumal::vk;
 use qvek::vek;
@@ -41,12 +39,13 @@ pub type quat = vek::quaternion::Quaternion<f32>;
 pub type dquat = vek::quaternion::Quaternion<f64>;
 
 #[allow(non_camel_case_types)]
-pub type BlockId = i16;
+pub type BlockId = i32;
 #[allow(non_camel_case_types)]
 // Material ID and Voxel are essentially the same thing
-pub type MatId = u8;
+pub type MatId = i32;
 // TODO: enum with empty / non-empty using NonZeroU8
-pub type Voxel = u8;
+// pub type Voxel = u8;
+pub type Voxel = i32;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct VoxelForContour(pub Voxel);
@@ -114,20 +113,20 @@ pub struct AoLut {
 pub struct VoxelVertex {
     pub pos: u8vec3,
     pub norm: i8vec3,
-    pub mat_id: MatID,
+    pub mat_id: MatId,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelVertex {
     pub pos: u8vec3,
-    pub mat_id: MatID,
+    pub mat_id: MatId,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelQuad {
     pub size: u8vec2,
     pub pos: u8vec3,
-    pub mat_id: MatID,
+    pub mat_id: MatId,
 }
 
 #[repr(C)]
@@ -198,8 +197,10 @@ pub struct InternalMeshModel<BufferType, ImageType> {
     // size of voxels. So if only one sprite, equal to its size, but when multiple - equal to sum of sizes
     pub total_size: uvec3, // integer because in voxels
 
-                           // // array of offset + size for all the sprites in a spritesheet
-                           // pub sprites: Vec<SpriteDescription>,
+    // // array of offset + size for all the sprites in a spritesheet
+    // pub sprites: Vec<SpriteDescription>,
+    pub voxels_bind_group_fragment: Option<wgpu::BindGroup>,
+    pub voxels_bind_group_compute: Option<wgpu::BindGroup>,
 }
 
 //5.76k bytes for compact 100 sprites (models)
@@ -236,8 +237,8 @@ pub struct InternalMeshFoliage {
 
 #[derive(Clone, Debug, Default)]
 pub struct InternalMeshLiquid {
-    pub main: MatID,
-    pub foam: MatID,
+    pub main: MatId,
+    pub foam: MatId,
 }
 
 #[derive(Clone, Debug, Default)]

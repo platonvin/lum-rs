@@ -5,22 +5,32 @@ struct Material {
     transparancy: f32, // Casually ignoring the fact that I do not have transparency
 };
 
-struct Constants {
-    timeSeed: i32,
-    iters: i32, // Unused
+struct UboData {
+    trans_w2s: mat4x4<f32>,
+    campos: vec4<f32>,
+    camdir: vec4<f32>,
+    horizline_scaled: vec4<f32>,
+    vertiline_scaled: vec4<f32>,
+    global_light_dir: vec4<f32>,
+    lightmap_proj: mat4x4<f32>,
+    frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
+    timeseed: i32,
+    delta_time: f32,
 };
 
 struct ReqBuffer {
     updateReqests: array<i32, 4>, // Assuming i8vec4 can be represented as i32, 4 for padding
 };
 
-@group(0) @binding(0) var<uniform> ubo: Constants;
+@group(0) @binding(0) var<uniform> ubo: UboData;
 @group(0) @binding(1) var blocks: texture_3d<i32>;
-@group(0) @binding(2) var blockPalette: texture_3d<u32>;
+@group(0) @binding(2) var blockPalette: texture_3d<i32>;
 @group(0) @binding(3) var voxelPalette: texture_2d<f32>;
 @group(0) @binding(4) var radianceCache2read: texture_3d<f32>;
 @group(0) @binding(5) var radianceCache2write: texture_storage_3d<rgba16float, write>;
 @group(0) @binding(6) var<storage, read> reqBuffer: ReqBuffer;
+@group(0) @binding(7) var linear_sampler: sampler;           // Sampler for depthBuffer
 
 // @push_constant var<push_constant> constants: Constants;
 
@@ -36,13 +46,21 @@ var<private> random_storage: vec3<u32>;
 // var<workgroup> _light: array<vec3<f32>, RAYS_PER_PROBE / 32>; // Maximum possible requires size
 var<workgroup> _light: array<vec3<f32>, 2>; // Maximum possible requires size
 
-fn hash33(x: vec3<u32>) -> vec3<f32> {
-    var x_modified = x;
-    x_modified = ((x_modified >> 8u) ^ x_modified.yzx) * k;
-    x_modified = ((x_modified >> 8u) ^ x_modified.yzx) * k;
-    x_modified = ((x_modified >> 8u) ^ x_modified.yzx) * k;
+fn hash33(v: vec3<u32>) -> vec3<f32> {
+    var v_modified = v;
+    v_modified.x = ((v_modified.x >> 8u) ^ v_modified.y) * k;
+    v_modified.y = ((v_modified.y >> 8u) ^ v_modified.z) * k;
+    v_modified.z = ((v_modified.z >> 8u) ^ v_modified.x) * k;
 
-    return vec3<f32>(x_modified) * (1.0 / f32(0xffffffffu));
+    v_modified.x = ((v_modified.x >> 8u) ^ v_modified.y) * k;
+    v_modified.y = ((v_modified.y >> 8u) ^ v_modified.z) * k;
+    v_modified.z = ((v_modified.z >> 8u) ^ v_modified.x) * k;
+
+    v_modified.x = ((v_modified.x >> 8u) ^ v_modified.y) * k;
+    v_modified.y = ((v_modified.y >> 8u) ^ v_modified.z) * k;
+    v_modified.z = ((v_modified.z >> 8u) ^ v_modified.x) * k;
+
+    return vec3<f32>(v_modified) * (1.0 / f32(0xffffffffu));
 }
 
 fn Random3D() -> vec3<f32> {
@@ -128,8 +146,8 @@ fn square(a: f32) -> f32 {
 }
 
 fn sample_radiance(position: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
-    let block_pos = (position + normal * 16.0) / 16.0;
-    let sampled_light = textureSampleLevel(radianceCache2read, (block_pos + 0.5) / world_size, 0.0, 0.0).rgb;
+    let block_pos = (position + normal * 8.0) / 16.0;
+    let sampled_light = textureSampleLevel(radianceCache2read, linear_sampler, (block_pos + 0.5) / world_size, 0.0).rgb;
 
     return sampled_light;
 }
@@ -293,18 +311,21 @@ fn store_probe(probe_pos: vec3<i32>, accumulated_light: vec3<f32>) {
     textureStore(radianceCache2write, probe_pos, vec4<f32>(new_light, 1.0));
 }
 
+var<workgroup> why_are_subgroups_not_supported: array<vec3<f32>, RAYS_PER_PROBE>;
+
 @compute @workgroup_size(RAYS_PER_PROBE, 1, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
-        @builtin(local_invocation_index) local_invocation_index: u32,
-        @builtin(subgroup_id) subgroup_id: u32,
-        @builtin(subgroup_size) subgroup_size: u32) {
+        // @builtin(local_invocation_index) local_invocation_index: u32,
+        // @builtin(subgroup_id) subgroup_id: u32,
+        // @builtin(subgroup_size) subgroup_size: u32,
+        @builtin(local_invocation_id) local_id: vec3<u32>) {
     let local_pos = vec3<i32>(global_id);
     globalLightDir = normalize(globalLightDir);
 
     let probe_id = i32(local_pos.x) % RAYS_PER_PROBE;
     let req_num = i32(local_pos.x) / RAYS_PER_PROBE;
     let probe_pos = vec3<i32>(reqBuffer.updateReqests[req_num * 4 + 0], reqBuffer.updateReqests[req_num * 4 + 1], reqBuffer.updateReqests[req_num * 4 + 2]);
-    random_storage = vec3<u32>(vec2<u32>(local_pos.xy + ubo.timeSeed), u32(ubo.timeSeed)); 
+    random_storage = vec3<u32>(vec2<u32>(local_pos.xy + ubo.timeseed), u32(ubo.timeseed)); 
 
     let block_corner = vec3<f32>(probe_pos) * 16.0;
     let block_center = block_corner + 8.0;
@@ -316,23 +337,27 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
     ray_dir = select(ray_dir, -ray_dir, (probe_id % 2) == 0); // To sample light blocks themselves
 
     var ray_light = trace_ray(ray_pos, ray_dir);
-    let avg_ray_light = subgroupAdd(ray_light) / f32(subgroup_size);
+    // let avg_ray_light = subgroupAdd(ray_light) / f32(subgroup_size);
 
-    if (local_invocation_index == 0u) {
-        _light[subgroup_id] = avg_ray_light;
+    for (var i = 0; i < i32(firstTrailingBit(RAYS_PER_PROBE)); i++) {
+        why_are_subgroups_not_supported[local_id.x] = ray_light;
+        workgroupBarrier();
+        if local_id.x >= u32(1) << u32(i) {
+            ray_light = why_are_subgroups_not_supported[local_id.x - (u32(1) << u32(i))] + ray_light;
+        }
+        workgroupBarrier();
     }
+
+    // if (local_invocation_index == 0u) {
+    //     _light[subgroup_id] = avg_ray_light;
+    // }
     workgroupBarrier();
 
-    if (subgroup_id == 0u) {
-        var final_light = vec3<f32>(0.0);
-        let subgroups_per_workgroup = RAYS_PER_PROBE / i32(subgroup_size);
-        for (var i: i32 = 0; i < subgroups_per_workgroup; i += 1) {
-            final_light += _light[i];
-        }
-        final_light /= f32(subgroups_per_workgroup);
+    if (probe_id == 0) {
+        let final_light = why_are_subgroups_not_supported[0] / f32(RAYS_PER_PROBE);
 
-        if (local_invocation_index == 0u) {
-            store_probe(probe_pos, final_light);
-        }
+        store_probe(probe_pos, final_light);
+        // if (local_invocation_index == 0u) {
+        // }
     }
 }

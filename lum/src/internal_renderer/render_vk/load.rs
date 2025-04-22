@@ -163,8 +163,8 @@ impl LoadInterface for InternalRendererVulkan {
         for xx in 0..size.x {
             for yy in 0..size.y {
                 for zz in 0..size.z {
-                    let voxel =
-                        model.voxel_data[(xx + yy * size.x + zz * size.x * size.y) as usize];
+                    let voxel = model.voxel_data[(xx + yy * size.x + zz * size.x * size.y) as usize]
+                        as Voxel;
                     // some padding for generator
                     padded_voxel_data[(xx as usize + 1, yy as usize + 1, zz as usize + 1)] =
                         VoxelForContour(voxel);
@@ -192,6 +192,8 @@ impl LoadInterface for InternalRendererVulkan {
             triangles,
             voxels,
             total_size: size,
+            voxels_bind_group_compute: todo!("REFACTOR THIS BULLSHIT"),
+            voxels_bind_group_fragment: todo!("REFACTOR THIS BULLSHIT"),
             // sprites: vec![],
         }
     }

@@ -2,7 +2,7 @@
 
 // --- Assumed constants (from common/consts.glsl & shader) ---
 // Define world_size, adjust as needed
-const world_size: vec3<i32> = vec3<i32>(256, 256, 256); // Example value
+const world_size: vec3<i32> = vec3<i32>(48, 48, 16);
 const PI: f32 = 3.1415926535;
 const BLOCK_PALETTE_SIZE_X: i32 = 64; // From constant_id
 const COLOR_ENCODE_VALUE: f32 = 8.0;
@@ -21,20 +21,14 @@ struct UboData {
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-
-// --- Bindings ---
-// Note: Binding indices are assumed, adjust to match pipeline layout
 @group(0) @binding(1) var mat_norm_tex: texture_2d<u32>;          // usampler2D matNorm (Assuming single uint channel, maybe RGBA8ui?)
 @group(0) @binding(2) var depthBuffer_tex: texture_depth_2d;     // sampler2D depthBuffer (Depth texture)
 @group(0) @binding(3) var depth_samp: sampler;                   // Sampler for depthBuffer_tex
-
-@group(0) @binding(4) var blocks_tex: texture_3d<i32>;           // isampler3D blocks (Signed integer texture)
-@group(0) @binding(5) var blockPalette_tex: texture_3d<u32>;     // usampler3D blockPalette (Unsigned integer texture)
+@group(0) @binding(4) var world: texture_3d<i32>;           // isampler3D blocks (Signed integer texture)
+@group(0) @binding(5) var blockPalette_tex: texture_3d<i32>;     // usampler3D blockPalette (Unsigned integer texture)
 @group(0) @binding(6) var voxelPalette_tex: texture_2d<f32>;     // sampler2D voxelPalette (Assuming R32Float format per channel)
-// Binding 7: Sampler for voxelPalette (Nearest assumed, using textureLoad only)
-
-@group(0) @binding(8) var radianceCache_tex: texture_3d<f32>;    // sampler3D radianceCache
-@group(0) @binding(9) var linear_samp: sampler;                // Sampler for radianceCache
+@group(0) @binding(7) var radianceCache_tex: texture_3d<f32>;    // sampler3D radianceCache
+@group(0) @binding(8) var linear_samp: sampler;                // Sampler for radianceCache
 
 // --- Structs ---
 struct Material {
@@ -62,7 +56,7 @@ fn GetBlock(block_pos: vec3<i32>) -> i32 {
     // Clamp coordinates to avoid out-of-bounds reads if necessary
     let clamped_pos = clamp(block_pos, vec3<i32>(0), world_size - vec3<i32>(1));
     // Load from integer texture
-    let block = textureLoad(blocks_tex, clamped_pos, 0).r; // LOD 0, assuming ID is in 'r' channel
+    let block = textureLoad(world, clamped_pos, 0).r; // LOD 0, assuming ID is in 'r' channel
     return block;
 }
 

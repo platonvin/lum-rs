@@ -1,20 +1,23 @@
 use crate::{
     internal_renderer::{
+        self,
         render_wgpu::{
             wal::{
-                AttrFormOffs, BindGroupDescription, DescriptorInfo, Image, PushConstantDescription,
-                ShaderStage, Wal,
+                BindGroupDescription, Image, PushConstantDescription, ResourceType, ShaderStage,
+                Wal,
             },
             AllBuffers, AllIndependentImages, AllPipes, AllSamplers, AllSwapchainDependentImages,
-            InternalRendererWebGPU,
+            InternalRendererWebGPU, MeshFoliageDesc, FRAME_FORMAT, MATNORM_FORMAT,
+            SWAPCHAIN_FORMAT,
         },
         Settings,
     },
     types::*,
 };
 use lumal::ring::Ring;
-use std::{mem::offset_of, num::NonZero};
+use std::mem::offset_of;
 use wgpu::*;
+
 pub fn buffers_to_binding_resources<'a>(
     buffers: &'a Ring<wgpu::Buffer>,
 ) -> Ring<BindingResource<'a>> {
@@ -32,6 +35,17 @@ pub fn buffers_to_binding_resources<'a>(
 }
 pub fn images_to_binding_resources<'a>(images: &'a Ring<Image>) -> Ring<BindingResource<'a>> {
     let resources = images.iter().map(|img| BindingResource::TextureView(&img.view)).collect();
+    Ring::from_vec(resources)
+}
+pub fn images_to_binding_resources_previous<'a>(
+    images: &'a Ring<Image>,
+) -> Ring<BindingResource<'a>> {
+    // let resources = images.iter().map(|img| BindingResource::TextureView(&img.view)).collect();
+    let mut resources = vec![];
+    for i in 0..images.len() {
+        let src_i = if i == 0 { images.len() - 1 } else { i - 1 };
+        resources.push(BindingResource::TextureView(&images[src_i].view));
+    }
     Ring::from_vec(resources)
 }
 pub fn sampler_to_binding_resources<'a>(sampler: &'a wgpu::Sampler) -> Ring<BindingResource<'a>> {
@@ -95,6 +109,7 @@ pub fn rings_of_texture_views_to_ring_of_texture_view_bindings<'a>(
 pub struct PackedVoxelCircuit {
     pub pos: u8vec4,
 }
+
 impl<'window> InternalRendererWebGPU<'window> {
     pub unsafe fn create_all_pipes(
         wal: &Wal,
@@ -103,24 +118,32 @@ impl<'window> InternalRendererWebGPU<'window> {
         iimages: &AllIndependentImages,
         dimages: &AllSwapchainDependentImages,
         samplers: &AllSamplers,
-        foliage_descriptions: &[InternalMeshFoliageDesc],
+        foliage_descriptions: &[MeshFoliageDesc],
     ) -> AllPipes {
         let lightmap_blocks_pipe = Wal::create_raster_pipe(
             &wal,
-            &[BindGroupDescription {
-                binding: 0,
-                visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            &[
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.light_uniform),
+                    ),
                 },
-                count: None,
-                resources: buffers_to_binding_resources(&buffers.light_uniform),
-            }],
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    resources: ResourceType::PushConstant,
+                },
+            ],
             &[ShaderStage {
                 stage: ShaderStages::VERTEX,
-                code: shaders::get_wgsl("lightmapBlocks.vert").unwrap(),
+                code: shaders::get_wgsl("lightmap_blocks.vert").unwrap(),
             }],
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
@@ -134,7 +157,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             PrimitiveTopology::TriangleList,
             vec![],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
@@ -142,24 +165,33 @@ impl<'window> InternalRendererWebGPU<'window> {
             }),
             None,
             Some(PushConstantDescription {
-                size: todo!(),
-                max_count: todo!(),
+                size: std::mem::size_of::<ivec4>() as u32,
+                max_count: 16 * 1024,
+                stages: ShaderStages::VERTEX_FRAGMENT,
             }),
             Some("lightmap blocks pipe"),
         );
         let lightmap_models_pipe = Wal::create_raster_pipe(
             &wal,
-            &[BindGroupDescription {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            &[
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.light_uniform),
+                    ),
                 },
-                count: None,
-                resources: buffers_to_binding_resources(&buffers.light_uniform),
-            }],
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    resources: ResourceType::PushConstant,
+                },
+            ],
             &[ShaderStage {
                 stage: ShaderStages::VERTEX,
                 code: shaders::get_wgsl("lightmap_models.vert").unwrap(),
@@ -176,13 +208,18 @@ impl<'window> InternalRendererWebGPU<'window> {
             PrimitiveTopology::TriangleList,
             vec![],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            Some(PushConstantDescription {
+                size: (std::mem::size_of::<quat>() + std::mem::size_of::<vec4>()) as u32,
+                max_count: 16 * 1024,
+                stages: ShaderStages::VERTEX_FRAGMENT,
+            }),
             Some("Lightmap Models Pipe"),
         );
         let raygen_blocks_pipe = Wal::create_raster_pipe(
@@ -191,32 +228,30 @@ impl<'window> InternalRendererWebGPU<'window> {
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.uniform),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
-                    binding: 1,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::PushConstant,
                 },
                 BindGroupDescription {
                     binding: 2,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_nearest.as_ref().unwrap(),
+                    visibility: ShaderStages::FRAGMENT,
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.origin_block_palette),
                     ),
                 },
             ],
@@ -241,33 +276,56 @@ impl<'window> InternalRendererWebGPU<'window> {
             }],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: MATNORM_FORMAT,
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            Some(PushConstantDescription {
+                size: (std::mem::size_of::<ivec4>() + std::mem::size_of::<u32>()) as u32, // TODO as u32:
+                max_count: 16 * 1024,
+                stages: ShaderStages::VERTEX,
+            }),
             Some("Raygen Blocks Pipe"),
         );
+
         let raygen_models_pipe = Wal::create_raster_pipe(
             &wal,
-            &[BindGroupDescription {
-                binding: 0,
-                visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            &[
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
-                count: None,
-                resources: buffers_to_binding_resources(&buffers.uniform),
-            }],
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::PushConstant,
+                },
+                BindGroupDescription {
+                    binding: 0, // group 1
+                    visibility: ShaderStages::FRAGMENT,
+                    resources: ResourceType::Dynamic(BindingType::Texture {
+                        sample_type: TextureSampleType::Sint,
+                        view_dimension: TextureViewDimension::D3,
+                        multisampled: false,
+                    }), // aka push descriptor sets in vk
+                },
+            ],
             &[
                 ShaderStage {
                     stage: ShaderStages::VERTEX,
@@ -289,56 +347,65 @@ impl<'window> InternalRendererWebGPU<'window> {
             }],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: MATNORM_FORMAT,
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            Some(PushConstantDescription {
+                size: (std::mem::size_of::<vec4>() * 3) as u32,
+                max_count: 16 * 1024,
+                stages: ShaderStages::VERTEX_FRAGMENT,
+            }),
             Some("Raygen Models Pipe"),
         );
+
         let raygen_particles_pipe = Wal::create_raster_pipe(
             &wal,
             &[
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.uniform),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
-                BindGroupDescription {
-                    binding: 1,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::R32Uint,
-                        view_dimension: TextureViewDimension::D3,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.world),
-                },
-                BindGroupDescription {
-                    binding: 2,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::R32Uint,
-                        view_dimension: TextureViewDimension::D3,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
-                },
+                // BindGroupDescription {
+                //     binding: 1,
+                //     visibility: ShaderStages::VERTEX_FRAGMENT,
+                //     resources: ResourceType::Static(
+                //         BindingType::StorageTexture {
+                //             access: StorageTextureAccess::WriteOnly,
+                //             format: TextureFormat::R32Uint,
+                //             view_dimension: TextureViewDimension::D3,
+                //         },
+                //         images_to_binding_resources(&iimages.world),
+                //     ),
+                // },
+                // BindGroupDescription {
+                //     binding: 2,
+                //     visibility: ShaderStages::VERTEX_FRAGMENT,
+                //     resources: ResourceType::Static(
+                //         BindingType::StorageTexture {
+                //             access: StorageTextureAccess::ReadWrite,
+                //             format: TextureFormat::R32Uint,
+                //             view_dimension: TextureViewDimension::D3,
+                //         },
+                //         images_to_binding_resources(&iimages.origin_block_palette),
+                //     ),
+                // },
             ],
             &[
                 ShaderStage {
@@ -378,18 +445,19 @@ impl<'window> InternalRendererWebGPU<'window> {
             }],
             PrimitiveTopology::PointList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: MATNORM_FORMAT,
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            None, // no push constants
             Some("Raygen Particles Pipe"),
         );
         let raygen_water_pipe = Wal::create_raster_pipe(
@@ -397,34 +465,40 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[
                 BindGroupDescription {
                     binding: 0,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.uniform),
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.water_state),
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.water_state),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 2,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.linear_sampler_tiled.as_ref().unwrap(),
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::Filtering),
+                        sampler_to_binding_resources(samplers.linear_sampler.as_ref().unwrap()),
                     ),
+                },
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::PushConstant,
                 },
             ],
             &[
@@ -440,60 +514,25 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             PrimitiveTopology::TriangleStrip,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: MATNORM_FORMAT,
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            Some(PushConstantDescription {
+                // 2 int padding
+                size: (std::mem::size_of::<vec4>() + (std::mem::size_of::<ivec4>())) as u32,
+                max_count: 16 * 1024,
+                stages: ShaderStages::VERTEX_FRAGMENT,
+            }),
             Some("Raygen Water Pipe"),
-        );
-        let raygen_foliage_pipe_example = Wal::create_raster_pipe(
-            &wal,
-            &[ /* Bindings: The Vulkan code doesn't show a 'process' call specifically for foliage pipes inside the loop.
-          Assuming it might reuse bindings from raygen_blocks/models or have its own setup elsewhere.
-          Leaving empty for now, requires clarification on descriptor setup for foliage. */
-    ],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("foliage").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("grass.frag").unwrap(),
-                },
-            ],
-            &[VertexBufferLayout {
-                array_stride: size_of::<PackedVoxelCircuit>() as u64,
-                step_mode: VertexStepMode::Vertex,
-                attributes: &[VertexAttribute {
-                    format: VertexFormat::Uint8x4,
-                    offset: offset_of!(PackedVoxelCircuit, pos) as u64,
-                    shader_location: 0,
-                }],
-            }],
-            PrimitiveTopology::TriangleList,
-            vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
-                blend: None,
-                write_mask: ColorWrites::ALL,
-            })],
-            Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::Less,
-                stencil: StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            None,
-            Some("Raygen Foliage Pipe"),
         );
         let diffuse_pipe = Wal::create_raster_pipe(
             &wal,
@@ -501,94 +540,97 @@ impl<'window> InternalRendererWebGPU<'window> {
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.uniform),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Uint,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.highres_mat_norm),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 2,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Depth,
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.highres_depth_stencil),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Depth,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.highres_depth_stencil),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 3,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D2Array,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.material_palette),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.material_palette),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 4,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
                     ),
                 },
                 BindGroupDescription {
                     binding: 5,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.radiance_cache),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.radiance_cache),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 6,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_linear.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::Filtering),
+                        sampler_to_binding_resources(samplers.unnorm_linear.as_ref().unwrap()),
                     ),
                 },
                 BindGroupDescription {
                     binding: 7,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.lightmap),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Depth,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.lightmap),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 8,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Comparison),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.shadow_sampler.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::Comparison),
+                        sampler_to_binding_resources(samplers.shadow_sampler.as_ref().unwrap()),
                     ),
                 },
             ],
@@ -605,68 +647,82 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: FRAME_FORMAT,
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
             None,
             None,
+            // Some(
+            //     PushConstantDescription {
+            //     size: (std::mem::size_of::<ivec4>()
+            //         + (std::mem::size_of::<vec4>() * 4)
+            //         + std::mem::size_of::<mat4>()) as u32 as u32,
+            //     max_count: 16 * 1024,
+            //     stages: ShaderStages::VERTEX_FRAGMENT,
+            // }),
+            None,
             Some("Diffuse Pipe"),
         );
+        // darkens certain areas on the frame image depending on screen-space normal variation of pixels
+        // this is achieved by mixing black with current frame
         let ao_pipe = Wal::create_raster_pipe(
             &wal,
             &[
                 BindGroupDescription {
                     binding: 0,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.uniform),
+                    visibility: ShaderStages::FRAGMENT,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.ao_lut_uniform),
+                    visibility: ShaderStages::FRAGMENT,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.ao_lut_uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 2,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Uint,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.highres_mat_norm),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 3,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Depth,
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.highres_depth_stencil),
+                    visibility: ShaderStages::FRAGMENT,
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Depth,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.highres_depth_stencil),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 4,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
+                    visibility: ShaderStages::FRAGMENT,
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
                     ),
                 },
             ],
@@ -683,12 +739,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: FRAME_FORMAT,
                 blend: Some(BlendState::ALPHA_BLENDING),
                 write_mask: ColorWrites::ALL,
             })],
             None,
             None,
+            None, // no push constants
             Some("Ambient Occlusion Pipe"),
         );
         let fill_stencil_glossy_pipe = Wal::create_raster_pipe(
@@ -697,34 +754,35 @@ impl<'window> InternalRendererWebGPU<'window> {
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Uint,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.highres_mat_norm),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D2Array,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.material_palette),
-                },
-                BindGroupDescription {
-                    binding: 2,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.material_palette),
                     ),
                 },
+                // BindGroupDescription {
+                //     binding: 2,
+                //     visibility: ShaderStages::FRAGMENT,
+                //     resources: ResourceType::Static(
+                //         BindingType::Sampler(SamplerBindingType::NonFiltering),
+                //         sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
+                //     ),
+                // },
             ],
             &[
                 ShaderStage {
@@ -738,13 +796,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             ],
             &[],
             PrimitiveTopology::TriangleList,
-            vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
-                blend: None,
-                write_mask: ColorWrites::ALL,
-            })],
+            vec![],
             Some(DepthStencilState {
-                format: TextureFormat::Depth24PlusStencil8,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState {
@@ -761,21 +815,30 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Fill Stencil+Glossy Pipe"),
+            None,
+            Some("Fill Stencil for Glossy Pipe"),
         );
         let fill_stencil_smoke_pipe = Wal::create_raster_pipe(
             &wal,
-            &[BindGroupDescription {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            &[
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
-                count: None,
-                resources: buffers_to_binding_resources(&buffers.uniform),
-            }],
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    resources: ResourceType::PushConstant,
+                },
+            ],
             &[
                 ShaderStage {
                     stage: ShaderStages::VERTEX,
@@ -788,9 +851,10 @@ impl<'window> InternalRendererWebGPU<'window> {
             ],
             &[],
             PrimitiveTopology::TriangleList,
+            // these are emulating depth in a single pass
             vec![
                 Some(ColorTargetState {
-                    format: TextureFormat::Rg16Float,
+                    format: TextureFormat::R16Float,
                     blend: Some(BlendState {
                         color: BlendComponent {
                             src_factor: BlendFactor::One,
@@ -815,7 +879,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 }),
             ],
             Some(DepthStencilState {
-                format: TextureFormat::Depth24PlusStencil8,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState {
@@ -832,6 +896,14 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            // we pass smoke pos as pc cause why not? Not much volumetrics on scene, changes every frame
+            Some(PushConstantDescription {
+                size: (std::mem::size_of::<vec3>()
+                    + std::mem::size_of::<i32>()
+                    + std::mem::size_of::<vec4>()) as u32,
+                max_count: 16 * 1024,
+                stages: ShaderStages::VERTEX_FRAGMENT,
+            }),
             Some("Fill Stencil for Smoke Pipe"),
         );
         let glossy_pipe = Wal::create_raster_pipe(
@@ -840,132 +912,133 @@ impl<'window> InternalRendererWebGPU<'window> {
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.uniform),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Uint,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.highres_mat_norm),
+                    ),
                 },
+                // BindGroupDescription {
+                //     binding: 2,
+                //     visibility: ShaderStages::FRAGMENT,
+                //     resources: ResourceType::Static(
+                //         BindingType::Sampler(SamplerBindingType::NonFiltering),
+                //         sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
+                //     ),
+                // },
                 BindGroupDescription {
                     binding: 2,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Depth,
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.highres_depth_stencil),
                     ),
                 },
                 BindGroupDescription {
                     binding: 3,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Depth,
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.highres_depth_stencil),
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 4,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.world),
                     ),
                 },
+                // BindGroupDescription {
+                //     binding: 5,
+                //     visibility: ShaderStages::FRAGMENT,
+                //     resources: ResourceType::Static(
+                //         BindingType::Sampler(SamplerBindingType::NonFiltering),
+                //         sampler_to_binding_resources(samplers.unnorm_nearest.as_ref().unwrap()),
+                //     ),
+                // },
                 BindGroupDescription {
                     binding: 5,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.world),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.origin_block_palette),
+                    ),
                 },
+                // BindGroupDescription {
+                //     binding: 7,
+                //     visibility: ShaderStages::FRAGMENT,
+                //     resources: ResourceType::Static(
+                //         BindingType::Sampler(SamplerBindingType::NonFiltering),
+                //         sampler_to_binding_resources(samplers.unnorm_nearest.as_ref().unwrap()),
+                //     ),
+                // },
                 BindGroupDescription {
                     binding: 6,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_nearest.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.material_palette),
                     ),
                 },
+                // BindGroupDescription {
+                //     binding: 9,
+                //     visibility: ShaderStages::FRAGMENT,
+                //     resources: ResourceType::Static(
+                //         BindingType::Sampler(SamplerBindingType::NonFiltering),
+                //         sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
+                //     ),
+                // },
                 BindGroupDescription {
                     binding: 7,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.radiance_cache),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 8,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_nearest.as_ref().unwrap(),
-                    ),
-                },
-                BindGroupDescription {
-                    binding: 9,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D2Array,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.material_palette),
-                },
-                BindGroupDescription {
-                    binding: 10,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
-                    ),
-                },
-                BindGroupDescription {
-                    binding: 11,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.radiance_cache),
-                },
-                BindGroupDescription {
-                    binding: 12,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_linear.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::Filtering),
+                        sampler_to_binding_resources(samplers.unnorm_linear.as_ref().unwrap()),
                     ),
                 },
             ],
@@ -982,12 +1055,12 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: FRAME_FORMAT,
                 blend: Some(BlendState::ALPHA_BLENDING),
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth24PlusStencil8,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState {
@@ -1004,73 +1077,86 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            Some(PushConstantDescription {
+                size: (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32,
+                max_count: 16 * 1024,
+                stages: ShaderStages::VERTEX_FRAGMENT,
+            }),
             Some("Glossy Pipe"),
         );
+
+        // Like AO, Volumetrics are just blending into frame with their color.
         let smoke_pipe = Wal::create_raster_pipe(
             &wal,
             &[
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.uniform),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Depth,
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.far_depth),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.far_depth),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 2,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Depth,
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&dimages.near_depth),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&dimages.near_depth),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 3,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::Rgba16Float,
-                        view_dimension: TextureViewDimension::D3,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.radiance_cache),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.radiance_cache),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 4,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.perlin_noise3d),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.perlin_noise3d),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 5,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.linear_sampler_tiled.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::Filtering),
+                        sampler_to_binding_resources(
+                            samplers.linear_sampler_tiled.as_ref().unwrap(),
+                        ),
                     ),
                 },
             ],
@@ -1087,12 +1173,12 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: FRAME_FORMAT,
                 blend: Some(BlendState::ALPHA_BLENDING),
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth24PlusStencil8,
+                format: TextureFormat::Depth32FloatStencil8,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState {
@@ -1109,20 +1195,25 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
+            None, // no pc
             Some("Smoke Pipe"),
         );
+
+        // Tonemap Pipe is also responsible for putting frame image into swapchain. It does some... well, tonemapping as well as any simple other color filters. TODO: LUT?
         let tonemap_pipe = Wal::create_raster_pipe(
             &wal,
             &[BindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-                resources: images_to_binding_resources(&dimages.highres_frame),
+                resources: ResourceType::Static(
+                    BindingType::Texture {
+                        // sampling unorm returns float
+                        sample_type: TextureSampleType::Float { filterable: false },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    images_to_binding_resources(&dimages.highres_frame),
+                ),
             }],
             &[
                 ShaderStage {
@@ -1137,12 +1228,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: TextureFormat::R8Unorm,
+                format: SWAPCHAIN_FORMAT.unwrap(),
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
             None,
             None,
+            None, // no pc
             Some("Tonemap Pipe"),
         );
         let radiance_pipe = Wal::create_compute_pipe(
@@ -1151,144 +1243,152 @@ impl<'window> InternalRendererWebGPU<'window> {
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.world),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_nearest.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.world),
                     ),
                 },
                 BindGroupDescription {
                     binding: 2,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.origin_block_palette),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 3,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_nearest.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.material_palette),
                     ),
                 },
                 BindGroupDescription {
                     binding: 4,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Uint,
-                        view_dimension: TextureViewDimension::D2Array,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.material_palette),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        // reading old one to make a new one
+                        images_to_binding_resources_previous(&iimages.radiance_cache),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 5,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::StorageTexture {
+                            access: StorageTextureAccess::WriteOnly,
+                            format: TextureFormat::Rgba16Float,
+                            view_dimension: TextureViewDimension::D3,
+                        },
+                        images_to_binding_resources(&iimages.radiance_cache),
                     ),
                 },
                 BindGroupDescription {
                     binding: 6,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.radiance_cache),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.gpu_radiance_updates),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 7,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_linear.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::Filtering),
+                        sampler_to_binding_resources(&samplers.linear_sampler.as_ref().unwrap()),
                     ),
-                },
-                BindGroupDescription {
-                    binding: 8,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::Rgba16Float,
-                        view_dimension: TextureViewDimension::D3,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.radiance_cache),
-                },
-                BindGroupDescription {
-                    binding: 9,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                    resources: buffers_to_binding_resources(&buffers.gpu_radiance_updates),
                 },
             ],
             &ShaderStage {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("radiance.comp").unwrap(),
             },
+            None,
             Some("Radiance Pipe"),
         );
         let update_grass_pipe = Wal::create_compute_pipe(
             &wal,
             &[
+                // stuff that was previously in pc is now in ubo
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::Rg16Float,
-                        view_dimension: TextureViewDimension::D2,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.grass_state),
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.perlin_noise2d),
+                    resources: ResourceType::Static(
+                        BindingType::StorageTexture {
+                            access: StorageTextureAccess::WriteOnly,
+                            format: TextureFormat::Rg32Float,
+                            view_dimension: TextureViewDimension::D2,
+                        },
+                        images_to_binding_resources(&iimages.grass_state),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 2,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                    resources: sampler_to_binding_resources(
-                        samplers.linear_sampler_tiled.as_ref().unwrap(),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.perlin_noise2d),
+                    ),
+                },
+                BindGroupDescription {
+                    binding: 3,
+                    visibility: ShaderStages::COMPUTE,
+                    resources: ResourceType::Static(
+                        BindingType::Sampler(SamplerBindingType::Filtering),
+                        sampler_to_binding_resources(
+                            samplers.linear_sampler_tiled.as_ref().unwrap(),
+                        ),
                     ),
                 },
             ],
@@ -1296,25 +1396,43 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("update_grass.comp").unwrap(),
             },
+            None, // no pc
             Some("Update Grass Pipe"),
         );
         let update_water_pipe = Wal::create_compute_pipe(
             &wal,
-            &[BindGroupDescription {
-                binding: 0,
-                visibility: ShaderStages::COMPUTE,
-                ty: BindingType::StorageTexture {
-                    access: StorageTextureAccess::ReadWrite,
-                    format: TextureFormat::Rg16Float,
-                    view_dimension: TextureViewDimension::D2,
+            &[
+                // stuff that was previously in pc is now in ubo
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    resources: ResourceType::Static(
+                        BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        buffers_to_binding_resources(&buffers.uniform),
+                    ),
                 },
-                count: None,
-                resources: images_to_binding_resources(&iimages.water_state),
-            }],
+                BindGroupDescription {
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    resources: ResourceType::Static(
+                        BindingType::StorageTexture {
+                            access: StorageTextureAccess::WriteOnly,
+                            format: TextureFormat::Rg32Float,
+                            view_dimension: TextureViewDimension::D2,
+                        },
+                        images_to_binding_resources(&iimages.water_state),
+                    ),
+                },
+            ],
             &ShaderStage {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("update_water.comp").unwrap(),
             },
+            None, // no pc
             Some("Water Updates Pipe"),
         );
         let gen_perlin2d_pipe = Wal::create_compute_pipe(
@@ -1322,18 +1440,20 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[BindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::COMPUTE,
-                ty: BindingType::StorageTexture {
-                    access: StorageTextureAccess::WriteOnly,
-                    format: TextureFormat::Rg8Unorm,
-                    view_dimension: TextureViewDimension::D2,
-                },
-                count: None,
-                resources: images_to_binding_resources(&iimages.perlin_noise2d),
+                resources: ResourceType::Static(
+                    BindingType::StorageTexture {
+                        access: StorageTextureAccess::WriteOnly,
+                        format: TextureFormat::Rg32Float,
+                        view_dimension: TextureViewDimension::D2,
+                    },
+                    images_to_binding_resources(&iimages.perlin_noise2d),
+                ),
             }],
             &ShaderStage {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("perlin2.comp").unwrap(),
             },
+            None, // no pc
             Some("Gen Perlin 2D Pipe"),
         );
         let gen_perlin3d_pipe = Wal::create_compute_pipe(
@@ -1341,18 +1461,20 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[BindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::COMPUTE,
-                ty: BindingType::StorageTexture {
-                    access: StorageTextureAccess::WriteOnly,
-                    format: TextureFormat::R8Unorm,
-                    view_dimension: TextureViewDimension::D3,
-                },
-                count: None,
-                resources: images_to_binding_resources(&iimages.perlin_noise3d),
+                resources: ResourceType::Static(
+                    BindingType::StorageTexture {
+                        access: StorageTextureAccess::WriteOnly,
+                        format: TextureFormat::Rgba32Float,
+                        view_dimension: TextureViewDimension::D3,
+                    },
+                    images_to_binding_resources(&iimages.perlin_noise3d),
+                ),
             }],
             &ShaderStage {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("perlin3.comp").unwrap(),
             },
+            None, // no pc
             Some("Gen Perlin 3D Pipe"),
         );
         let map_pipe = Wal::create_compute_pipe(
@@ -1361,32 +1483,138 @@ impl<'window> InternalRendererWebGPU<'window> {
                 BindGroupDescription {
                     binding: 0,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::R32Uint,
-                        view_dimension: TextureViewDimension::D3,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.world),
+                    resources: ResourceType::Static(
+                        BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        images_to_binding_resources(&iimages.world),
+                    ),
                 },
                 BindGroupDescription {
                     binding: 1,
                     visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::R32Uint,
+                    resources: ResourceType::Static(
+                        BindingType::StorageTexture {
+                            // copy model voxels to block data in block palette
+                            access: StorageTextureAccess::WriteOnly,
+                            format: TextureFormat::R32Sint,
+                            view_dimension: TextureViewDimension::D3,
+                        },
+                        images_to_binding_resources(&iimages.origin_block_palette),
+                    ),
+                },
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    resources: ResourceType::PushConstant,
+                },
+                // aka push descriptor (group 1 bind 0) for model voxels
+                // however, its really just another bind group
+                BindGroupDescription {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    resources: ResourceType::Dynamic(BindingType::Texture {
+                        sample_type: TextureSampleType::Sint,
                         view_dimension: TextureViewDimension::D3,
-                    },
-                    count: None,
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                        multisampled: false,
+                    }),
                 },
             ],
             &ShaderStage {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("map.comp").unwrap(),
             },
+            Some(PushConstantDescription {
+                size: (std::mem::size_of::<mat4>() + std::mem::size_of::<ivec4>()) as u32,
+                max_count: 16 * 1024,
+                stages: ShaderStages::COMPUTE,
+            }),
             Some("Mapping Models Voxels Pipe"),
         );
+
+        let raygen_foliage_pipes = foliage_descriptions
+            .iter()
+            .map(|foliage_description| {
+                Wal::create_raster_pipe(
+                    &wal,
+                    &[
+                        BindGroupDescription {
+                            binding: 0,
+                            visibility: ShaderStages::VERTEX,
+                            resources: ResourceType::Static(
+                                BindingType::Buffer {
+                                    ty: BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                buffers_to_binding_resources(&buffers.uniform),
+                            ),
+                        },
+                        BindGroupDescription {
+                            binding: 1,
+                            visibility: ShaderStages::VERTEX,
+                            resources: ResourceType::Static(
+                                BindingType::Texture {
+                                    sample_type: TextureSampleType::Float { filterable: true },
+                                    view_dimension: TextureViewDimension::D2,
+                                    multisampled: false,
+                                },
+                                images_to_binding_resources(&iimages.grass_state),
+                            ),
+                        },
+                        BindGroupDescription {
+                            binding: 2,
+                            visibility: ShaderStages::VERTEX,
+                            resources: ResourceType::Static(
+                                BindingType::Sampler(SamplerBindingType::Filtering),
+                                sampler_to_binding_resources(
+                                    &samplers.linear_sampler.as_ref().unwrap(),
+                                ),
+                            ),
+                        },
+                        BindGroupDescription {
+                            binding: 0,
+                            visibility: ShaderStages::VERTEX,
+                            resources: ResourceType::PushConstant,
+                        },
+                    ],
+                    &[
+                        ShaderStage {
+                            stage: ShaderStages::VERTEX,
+                            code: foliage_description.code,
+                        },
+                        ShaderStage {
+                            stage: ShaderStages::FRAGMENT,
+                            code: shaders::get_wgsl("grass.frag").unwrap(),
+                        },
+                    ],
+                    &[], // no vertex buffers
+                    PrimitiveTopology::TriangleList,
+                    vec![Some(ColorTargetState {
+                        format: MATNORM_FORMAT,
+                        blend: None,
+                        write_mask: ColorWrites::ALL,
+                    })],
+                    Some(DepthStencilState {
+                        format: TextureFormat::Depth32FloatStencil8,
+                        depth_write_enabled: true,
+                        depth_compare: CompareFunction::Less,
+                        stencil: StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    None,
+                    Some(PushConstantDescription {
+                        size: (std::mem::size_of::<vec4>() + std::mem::size_of::<i32>() * 4) as u32,
+                        max_count: 16 * 1024,
+                        stages: ShaderStages::VERTEX_FRAGMENT,
+                    }),
+                    Some("foliage pipe"),
+                )
+            })
+            .collect();
+
         AllPipes {
             lightmap_blocks_pipe,
             lightmap_models_pipe,
@@ -1407,8 +1635,8 @@ impl<'window> InternalRendererWebGPU<'window> {
             update_water_pipe,
             gen_perlin2d_pipe,
             gen_perlin3d_pipe,
-            raygen_foliage_pipes: todo!(),
-            overlay_pipe: todo!(),
+            raygen_foliage_pipes,
+            // overlay_pipe: todo!(),
         }
     }
 }

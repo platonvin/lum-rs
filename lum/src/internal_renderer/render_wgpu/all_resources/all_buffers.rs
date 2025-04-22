@@ -1,5 +1,7 @@
 use std::mem;
 
+use wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+
 use crate::{
     internal_renderer::{
         render_wgpu::{wal::Wal, AllBuffers, InternalRendererWebGPU},
@@ -7,6 +9,8 @@ use crate::{
     },
     types::{i8vec4, ivec4, mat4, AoLut, BlockId, Particle},
 };
+
+use super::all_types::UboData;
 // use internal_renderer::{InternalRendererVulkan, *};
 
 impl<'window> InternalRendererWebGPU<'window> {
@@ -17,13 +21,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::VERTEX,
             (lum_settings.max_particle_count as usize) * mem::size_of::<Particle>(),
-            true,
+            false,
         );
         let uniform = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            220,   // pre-calculated size of UBO. No way i write it with mem::size_of::<
-            false, // if should be visible to CPU
+            size_of::<UboData>(), // pre-calculated size of UBO. No way i write it with mem::size_of::<
+            false,                // if should be visible to CPU
         );
         let light_uniform = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
@@ -56,15 +60,29 @@ impl<'window> InternalRendererWebGPU<'window> {
             true,
         ); // TODO test extra mem
 
+        let padded_x_size =
+            lum_settings.world_size.x.next_multiple_of(
+                COPY_BYTES_PER_ROW_ALIGNMENT / std::mem::size_of::<BlockId>() as u32,
+            ) as usize;
+        let padded_staging_world_size = padded_x_size
+            * lum_settings.world_size.y as usize
+            * lum_settings.world_size.z as usize
+            * std::mem::size_of::<BlockId>();
+
         let staging_world = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::COPY_SRC,
-            (lum_settings.world_size.x as usize)
-                * (lum_settings.world_size.y as usize)
-                * (lum_settings.world_size.z as usize)
-                * mem::size_of::<BlockId>(),
+            padded_staging_world_size,
             true,
         );
+
+        let gpu_particles_staged = wal.create_buffer_rings(
+            wal.config.desired_maximum_frame_latency as usize,
+            wgpu::BufferUsages::COPY_SRC,
+            (lum_settings.max_particle_count as usize) * mem::size_of::<Particle>(),
+            true,
+        );
+
         AllBuffers {
             staging_world: staging_world,
             light_uniform: light_uniform,
@@ -73,6 +91,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             gpu_radiance_updates: gpu_radiance_updates,
             staging_radiance_updates: staging_radiance_updates,
             gpu_particles: gpu_particles,
+            gpu_particles_staged: gpu_particles_staged,
         }
     }
 

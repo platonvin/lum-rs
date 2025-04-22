@@ -11,56 +11,36 @@ struct UboData {
     global_light_dir: vec4<f32>,
     lightmap_proj: mat4x4<f32>,
     frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
     timeseed: i32,
+    delta_time: f32,
 };
 
-@group(0) @binding(0) var<uniform> ubo: UboData;
 
 // --- AO Look-Up Table (LUT) Structure and Binding ---
 struct AoLutEntry {
     world_shift: vec3<f32>,
-    // GLSL struct used 16 bytes: vec3f + f + vec2f + vec2f(padding)
-    // WGSL needs explicit padding or careful packing if std140/std430 alignment matters cross-language.
-    // Assuming std430 layout: vec3 pads to 16 bytes, f32 is 4 bytes, vec2f is 8 bytes.
-    // This layout matches std430 implicitly in WGSL for vec3 followed by f32.
     weight_normalized: f32, // Normalized weight [0, ~0.7]
     screen_shift: vec2<f32>, // Precomputed screen space UV offset
-    // No explicit padding needed here if following vec3+f32+vec2f = 16+4+8=28 bytes.
-    // If strict std430 array stride is required (32 bytes for vec3+f+vec2), add padding:
-    // @size(4) padding1: f32, // Pad vec2f up to 16 bytes if needed
-    // @size(8) padding2: vec2<f32>, // Pad struct to 32 bytes if needed
 };
 
-// Define the LUT buffer using a storage buffer (read-only)
-// Assuming std430 layout is compatible or handled by the buffer creation.
-@group(0) @binding(1) var<storage, read> lut_buffer: array<AoLutEntry, 8>; // Matches lut.lut[8]
-
-// --- Texture Bindings ---
-// Input Attachment treated as Texture
-@group(0) @binding(2) var matNorm_tex: texture_2d<f32>; // usubpassInput matNorm (Assuming RGBA format)
-
-// Depth Buffer Texture & Sampler
+@group(0) @binding(0) var<uniform> ubo: UboData;
+@group(0) @binding(1) var<uniform> lut_buffer: array<AoLutEntry, 8>; 
+@group(0) @binding(2) var matNorm_tex: texture_2d<u32>; // usubpassInput matNorm (Assuming RGBA format)
 @group(0) @binding(3) var depthBuffer_tex: texture_depth_2d; // sampler2D depthBuffer
 @group(0) @binding(4) var depth_samp: sampler;           // Sampler for depthBuffer
 
-// --- Constants ---
 const COLOR_ENCODE_VALUE: f32 = 8.0;
 const SAMPLE_COUNT: i32 = 8;
 
-// --- Fragment Output Structure ---
 struct FragmentOutput {
     @location(0) frame_color: vec4<f32>,
 };
 
-// --- Helper Functions ---
-
-// Loads normal from matNorm texture (assuming RGBA8 unorm or similar)
 fn load_norm(frag_coord_xy: vec2<i32>) -> vec3<f32> {
-    // Load from texture bound at binding 2
-    let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0); // LOD 0
-    // Decode GBA components from [0,1] to [-1,1], assuming stored in GBA
-    let norm = (loaded_val.gba * 2.0) - 1.0;
-    return normalize(norm); // Ensure normalized
+    let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0);
+    let norm = (vec3f(loaded_val.gba) * 2.0) - 1.0;
+    return normalize(norm);
 }
 
 // Loads material ID (unused in this shader, but kept for consistency if needed)
@@ -69,12 +49,9 @@ fn load_norm(frag_coord_xy: vec2<i32>) -> vec3<f32> {
 //     return i32(loaded_val.x); // Assuming mat ID is in X component
 // }
 
-// Loads depth using normalized UV coordinates
 fn load_depth(uv: vec2<f32>) -> f32 {
-    // Use textureSampleLevel with depth texture, sampler, UVs, and LOD 0
-    let depth_encoded = textureSampleLevel(depthBuffer_tex, depth_samp, uv, 0.0);
-    // Apply same scaling as GLSL
-    return depth_encoded * 1000.0;
+    let depth_encoded = textureSampleLevel(depthBuffer_tex, depth_samp, uv, 0);
+    return f32(depth_encoded * 1000.0);
 }
 
 // Color encoding
@@ -122,7 +99,7 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> FragmentOutput {
 
         // Avoid division by zero if relative_pos is zero vector
         var direction = vec3(0.0);
-        if (length(relative_pos) > 1e-6) {
+        if (length(relative_pos) > 1e-6) { 
             direction = normalize(relative_pos);
         }
 
