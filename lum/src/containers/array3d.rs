@@ -5,7 +5,7 @@ use std::{
     slice::{Iter, IterMut},
 };
 
-use crate::types::{i8vec3, i8vec4, ivec3, ivec4};
+use crate::renderer::types::{i8vec3, i8vec4, ivec3, ivec4};
 
 // You should index into it in this order
 //  for z in 0..z_size {

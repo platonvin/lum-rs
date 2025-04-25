@@ -127,4 +127,14 @@ move volumetrics to forward for perfomance and quality (when projections overlap
 
 more settings to comptime via types - e.g. typed images
 
-wgpu vk write_buffer in cmdbuffer for small sizes
+wgpu vk write_buffer in cmdbuffer for small sizes VS mapped
+how to use mapped 
+less queue.submits
+
+docs
+names
+move magic to consts
+less unsafe (maybe some crate?)
+merge vector libs
+less deps
+feature deps

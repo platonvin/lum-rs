@@ -111,18 +111,3 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
     out.frame_color = vec4<f32>(color, 1.0);
     return out;
 }
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var pos = vec2<f32>(0.0);
-    if (vertexIndex == 0u) {
-        pos = vec2<f32>(-1.0, -1.0);
-    } else if (vertexIndex == 1u) {
-        pos = vec2<f32>(3.0, -1.0);
-    } else {
-        pos = vec2<f32>(-1.0, 3.0);
-    }
-    var out: VertexOutput;
-    out.position = vec4<f32>(pos, 0.0, 1.0);
-    return out;
-}

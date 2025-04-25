@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     assert_unreachable,
-    types::{mat4, u8vec4, vec3},
+    renderer::types::{mat4, u8vec4, vec3},
 };
 
 // omg i should include binary instead i think

@@ -2,12 +2,14 @@ use std::mem;
 
 use wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
 
-use crate::{
-    internal_renderer::{
-        render_wgpu::{wal::Wal, AllBuffers, InternalRendererWebGPU},
-        Settings,
+use crate::renderer::{
+    types::{i8vec4, ivec4, mat4, AoLut},
+    webgpu::{
+        types::{BlockId, Particle},
+        wal::Wal,
+        AllBuffers, InternalRendererWebGPU,
     },
-    types::{i8vec4, ivec4, mat4, AoLut, BlockId, Particle},
+    Settings,
 };
 
 use super::all_types::UboData;
@@ -22,24 +24,28 @@ impl<'window> InternalRendererWebGPU<'window> {
             wgpu::BufferUsages::VERTEX,
             (lum_settings.max_particle_count as usize) * mem::size_of::<Particle>(),
             false,
+            Some("Particles"),
         );
         let uniform = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             size_of::<UboData>(), // pre-calculated size of UBO. No way i write it with mem::size_of::<
             false,                // if should be visible to CPU
+            Some("Uniform"),
         );
         let light_uniform = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mem::size_of::<mat4>(),
             false,
+            Some("Light Uniform"),
         );
         let ao_lut_uniform = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mem::size_of::<AoLut>() * 8,
             false,
+            Some("AO LUT Uniform"),
         ); // TODO DYNAMIC AO SAMPLE COUNT
         let gpu_radiance_updates = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
@@ -49,15 +55,17 @@ impl<'window> InternalRendererWebGPU<'window> {
                 * (lum_settings.world_size.y as usize)
                 * (lum_settings.world_size.z as usize),
             false,
+            Some("Radiance Updates"),
         ); // TODO test extra mem
         let staging_radiance_updates = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
-            wgpu::BufferUsages::COPY_SRC,
+            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
             mem::size_of::<ivec4>()
                 * (lum_settings.world_size.x as usize)
                 * (lum_settings.world_size.y as usize)
                 * (lum_settings.world_size.z as usize),
-            true,
+            false,
+            Some("Staging Radiance Updates"),
         ); // TODO test extra mem
 
         let padded_x_size =
@@ -71,27 +79,29 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         let staging_world = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
-            wgpu::BufferUsages::COPY_SRC,
+            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
             padded_staging_world_size,
-            true,
+            false,
+            Some("Staging World"),
         );
 
         let gpu_particles_staged = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
-            wgpu::BufferUsages::COPY_SRC,
+            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
             (lum_settings.max_particle_count as usize) * mem::size_of::<Particle>(),
-            true,
+            false,
+            Some("Particles Staged"),
         );
 
         AllBuffers {
-            staging_world: staging_world,
-            light_uniform: light_uniform,
+            staging_world,
+            light_uniform,
             uniform: uniform,
-            ao_lut_uniform: ao_lut_uniform,
-            gpu_radiance_updates: gpu_radiance_updates,
-            staging_radiance_updates: staging_radiance_updates,
-            gpu_particles: gpu_particles,
-            gpu_particles_staged: gpu_particles_staged,
+            ao_lut_uniform,
+            gpu_radiance_updates,
+            staging_radiance_updates,
+            gpu_particles,
+            gpu_particles_staged,
         }
     }
 

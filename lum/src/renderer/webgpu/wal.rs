@@ -115,7 +115,7 @@ impl<'window> Wal<'window> {
         let size = window.inner_size();
         // 1) Create instance
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
 
@@ -200,13 +200,14 @@ impl<'window> Wal<'window> {
         mut usage: wgpu::BufferUsages,
         size: usize,
         host_visible: bool,
+        label: Option<&str>,
     ) -> wgpu::Buffer {
         if host_visible {
             usage |= wgpu::BufferUsages::MAP_WRITE;
         }
 
         self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Buffer"),
+            label,
             size: size as u64,
             usage,
             // For host buffers, we initialize mapped_at_creation=true so that the memory is available.
@@ -221,9 +222,10 @@ impl<'window> Wal<'window> {
         usage: wgpu::BufferUsages,
         buffer_size: usize,
         host_visible: bool,
+        label: Option<&str>,
     ) -> Ring<wgpu::Buffer> {
         (0..ring_size)
-            .map(|_| self.create_buffer(usage, buffer_size, host_visible))
+            .map(|_| self.create_buffer(usage, buffer_size, host_visible, label))
             .collect()
     }
 
@@ -904,11 +906,11 @@ impl<'window> Wal<'window> {
             let padded_pc_size = pc_data.len().next_multiple_of(256);
             let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
             let buffer = pc_buffers.current();
-            // self.queue.write_buffer(
-            //     buffer,
-            //     (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
-            //     pc_data,
-            // );
+            self.queue.write_buffer(
+                buffer,
+                (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
+                pc_data,
+            );
             pipe.current_pc_offset += 1;
         }
 
@@ -951,11 +953,11 @@ impl<'window> Wal<'window> {
             let padded_pc_size = pc_data.len().next_multiple_of(256);
             let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
             let buffer = pc_buffers.current();
-            // self.queue.write_buffer(
-            //     buffer,
-            //     (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
-            //     pc_data,
-            // );
+            self.queue.write_buffer(
+                buffer,
+                (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
+                pc_data,
+            );
             pipe.current_pc_offset += 1;
         }
 
@@ -998,11 +1000,11 @@ impl<'window> Wal<'window> {
             let padded_pc_size = pc_data.len().next_multiple_of(256);
             let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
             let buffer = pc_buffers.current();
-            // self.queue.write_buffer(
-            //     buffer,
-            //     (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
-            //     pc_data,
-            // );
+            self.queue.write_buffer(
+                buffer,
+                (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
+                pc_data,
+            );
             pipe.current_pc_offset += 1;
         }
 

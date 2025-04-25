@@ -1,5 +1,5 @@
-use crate::internal_renderer::{
-    render_vk::{
+use crate::renderer::{
+    vulkan::{
         AllIndependentImages, AllPipes, AllRenderPasses, AllSwapchainDependentImages,
         InternalRendererVulkan,
     },

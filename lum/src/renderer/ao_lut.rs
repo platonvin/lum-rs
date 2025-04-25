@@ -1,9 +1,8 @@
 use std::f32::consts::PI;
 
 // use internal_renderer::InternalRenderer;
+use super::types::*;
 use qvek::vec2;
-
-use crate::{types::*, *};
 
 // impl InternalRenderer {
 fn get_world_shift_from_clip_shift(

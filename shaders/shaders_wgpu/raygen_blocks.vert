@@ -25,13 +25,13 @@ struct Constants {
 // @group(0) @binding(2) var blockPalette: texture_3d<i32>;
 
 struct VertexInput {
-    @location(0) posIn: vec3<u32>,
+    @location(0) posIn: vec4<u32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) sample_point: vec3<f32>,
-    @location(1) bunorm: u32,
+    @location(0) @interpolate(linear) sample_point: vec3<f32>,
+    @location(1) @interpolate(flat) bunorm: u32,
 };
 
 fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
@@ -40,16 +40,16 @@ fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
 
 @vertex
 fn main(in: VertexInput) -> VertexOutput {
-    let upos = vec3<i32>(in.posIn);
+    let upos = vec3<i32>(in.posIn.xyz);
     let normal_encoded = pco.FUCKWEB_unorm;
     let block = pco.block;
     let shift = vec3<i32>(pco.shift_x, pco.shift_y, pco.shift_z);
 
-    let s = (normal_encoded >> 7u) & 0x1u; // 0 if position 1 if negative
+    let s = (normal_encoded & (1<<7))>>7; // 0 if position 1 if negative
     let axis = vec3<i32>(
-        i32((normal_encoded >> 0u) & 0x1u),
-        i32((normal_encoded >> 1u) & 0x1u),
-        i32((normal_encoded >> 2u) & 0x1u),
+        i32((normal_encoded & (1<<0))>>0),
+        i32((normal_encoded & (1<<1))>>1),
+        i32((normal_encoded & (1<<2))>>2)
     );
     let inorm = axis * (1 - i32(s) * 2);
     let fnorm = vec3<f32>(inorm);

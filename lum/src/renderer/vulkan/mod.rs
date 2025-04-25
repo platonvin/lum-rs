@@ -2,15 +2,19 @@ pub mod all_resources;
 pub mod gen_perlin_noise;
 pub mod load;
 pub mod render;
+pub mod types;
 
 // use crate::internal_renderer::vk::Extent2D;
 
 use super::{Camera, SunLight};
+use crate::renderer::vulkan::types::*;
 use lumal::vk;
 use lumal::{ring::Ring, trace, RasterPipe};
+use render::MeshFoliageDescription;
 use winit::window::Window;
 
-use crate::{containers::Array3D, types::*};
+use crate::containers::Array3D;
+use crate::renderer::types::*;
 
 use super::Settings;
 
@@ -136,7 +140,7 @@ pub struct InternalRendererVulkan {
 
     // fields called LumThings are just grouped Vulkan objects needed by renderer
     pipes: AllPipes,
-    foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+    foliage_descriptions: Vec<MeshFoliageDescription>,
     dependent_images: AllSwapchainDependentImages,
     rpasses: AllRenderPasses,
     independent_images: AllIndependentImages,
@@ -189,7 +193,7 @@ pub struct InternalRendererVulkan {
     has_palette: bool,
     // CPU side material palette in vector (not in image like on GPU)
     material_palette: Vec<Material>, // its fixed size but its fine
-    block_palette_voxels: Vec<BlockVoxels>, // its fixed size but its fine
+    block_palette_voxels: Vec<BlockVoxels<Voxel>>, // its fixed size but its fine
     block_palette_meshes: Vec<InternalMeshBlock<lumal::Buffer>>, // its fixed size but its fine
 }
 const DEPTH_FORMAT_SPARE: vk::Format = vk::Format::D24_UNORM_S8_UINT; // TODO somehow D32 faster than vk::Format::D24_UNORM_S8_UINT on low-end
@@ -206,7 +210,7 @@ impl InternalRendererVulkan {
         lum_settings: &Settings,
         window: &Window,
         // event_loop: &winit::event_loop::EventLoop<()>,
-        foliage_descriptions: Vec<InternalMeshFoliageDesc>,
+        foliage_descriptions: Vec<MeshFoliageDescription>,
     ) -> InternalRendererVulkan {
         let mut lumal_settings = lumal::LumalSettings::create_default();
         if cfg!(debug_assertions) {
@@ -400,7 +404,7 @@ impl InternalRendererVulkan {
 fn create_dependent(
     lumal: &mut lumal::Renderer,
     lum_settings: &Settings,
-    foliage_descriptions: &Vec<InternalMeshFoliageDesc>,
+    foliage_descriptions: &Vec<MeshFoliageDescription>,
     lumal_settings: &lumal::LumalSettings,
     independent_images: &AllIndependentImages,
     buffers: &AllBuffers,

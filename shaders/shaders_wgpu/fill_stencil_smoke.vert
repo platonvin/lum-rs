@@ -4,10 +4,12 @@ struct UboData {
     camdir: vec4<f32>,
     horizline_scaled: vec4<f32>,
     vertiline_scaled: vec4<f32>,
-    global_light_dir: vec4<f32>, 
+    global_light_dir: vec4<f32>,
     lightmap_proj: mat4x4<f32>,
     frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
     timeseed: i32,
+    delta_time: f32,
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;

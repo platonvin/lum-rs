@@ -9,5 +9,4 @@
     shaders = { path = "../shaders" } # Dependency on shaders crate (just compiles all of them)
     winit = "0.30.8"
     anyhow = "1"
-    pollster = { version = "0.4.0", features = ["macro"] }
     flame = "0.2.2"

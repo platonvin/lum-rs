@@ -2,16 +2,21 @@ pub mod all_resources;
 pub mod gen_perlin_noise;
 pub mod load;
 pub mod render;
+pub mod types;
 pub mod wal;
 
+use std::future::IntoFuture;
+
 use super::{Camera, SunLight};
+use futures::executor;
 use lumal::ring::Ring;
 use wal::{ComputePipe, Image, RasterPipe, Wal};
 use wgpu::{Extent3d, TextureFormat};
 use winit::window::Window;
 
 use super::Settings;
-use crate::{containers::Array3D, types::*};
+use crate::renderer::types::*;
+use crate::{containers::Array3D, renderer::webgpu::types::*};
 
 const FRAME_FORMAT: TextureFormat = TextureFormat::Rgb10a2Unorm;
 const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth32Float;
@@ -27,21 +32,6 @@ const DEPTH_FORMAT_PREFERED: wgpu::TextureFormat = wgpu::TextureFormat::Depth32F
 static mut CHOSEN_DEPTH_FORMAT: Option<wgpu::TextureFormat> =
     Some(TextureFormat::Depth32FloatStencil8); // TODO:
 static mut SWAPCHAIN_FORMAT: Option<wgpu::TextureFormat> = None;
-
-#[derive(Debug, Clone, Default)]
-pub struct MeshFoliageDesc {
-    // shader, compiled into spirv
-    // owned by description for siplicity
-    pub code: &'static str,
-
-    // Stored separately cause im fell in love with ecs
-    // pub pipe: lumal::RasterPipe,
-
-    // how many vertices will be in per-blade drawcall
-    pub vertices: u32,
-    // how many blades is there in a block (linear)
-    pub density: u32,
-}
 
 #[derive(Default)]
 pub struct AllPipes {
@@ -160,7 +150,7 @@ pub struct InternalRendererWebGPU<'window> {
 
     has_palette: bool,
     material_palette: Vec<Material>,
-    block_palette_voxels: Vec<BlockVoxels>,
+    block_palette_voxels: Vec<BlockVoxels<Voxel>>,
     block_palette_meshes: Vec<InternalMeshBlock<Option<wgpu::Buffer>>>, // Adjust buffer type
 }
 
@@ -169,13 +159,13 @@ impl<'window> InternalRendererWebGPU<'window> {
     ///
     /// The idea is similar to Vulkan version: we initialize a Wal instance,
     /// create our independent and dependent resources, and then fill our render‑state.
-    pub async fn create(
+    pub fn new(
         lum_settings: &Settings,
         window: Window,
         foliage_descriptions: Vec<MeshFoliageDesc>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
-        let mut wal = wal::Wal::new(window).await;
+        let mut wal = executor::block_on(wal::Wal::new(window));
 
         // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
         let lightmap_extent = Extent3d {

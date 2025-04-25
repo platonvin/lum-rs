@@ -1,7 +1,7 @@
 use wgpu::{AddressMode, FilterMode, Sampler, SamplerDescriptor};
 
-use crate::internal_renderer::{
-    render_wgpu::{wal::Wal, AllSamplers, InternalRendererWebGPU},
+use crate::renderer::{
+    webgpu::{wal::Wal, AllSamplers, InternalRendererWebGPU},
     Settings,
 };
 

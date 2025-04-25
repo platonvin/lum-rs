@@ -132,21 +132,22 @@ fn load_depth(frag_coord_xy: vec2<i32>) -> f32 {
     // Load from depth texture bound at binding 2
     let depth_encoded = textureLoad(depthBuffer_tex, frag_coord_xy, 0); // LOD 0
     // Depth values are typically [0, 1], scale as needed. GLSL scaled by 1000.
-    return depth_encoded * 1000.0;
+    return depth_encoded * 1000;
 }
 
-fn GetMat(voxel: i32) -> Material {
+fn GetMat(voxel:i32) -> Material {
     var mat: Material;
-    let ivec_voxel = vec2<i32>(0, voxel); // Coordinate for texelFetch
+
+    var v = voxel; 
 
     // Use textureLoad instead of texelFetch, needs texture and integer coords
     // Assuming voxelPalette_tex format allows direct loading (e.g., R32Float)
-    mat.color.r = textureLoad(voxelPalette_tex, vec2<i32>(0, voxel), 0).r;
-    mat.color.g = textureLoad(voxelPalette_tex, vec2<i32>(1, voxel), 0).r;
-    mat.color.b = textureLoad(voxelPalette_tex, vec2<i32>(2, voxel), 0).r;
+    mat.color.r = textureLoad(voxelPalette_tex, vec2<i32>(0, v), 0).r;
+    mat.color.g = textureLoad(voxelPalette_tex, vec2<i32>(1, v), 0).r;
+    mat.color.b = textureLoad(voxelPalette_tex, vec2<i32>(2, v), 0).r;
     // mat.transparancy = 1.0 - textureLoad(voxelPalette_tex, vec2<i32>(3, voxel), 0).r; // Was commented out
-    mat.emmitance = textureLoad(voxelPalette_tex, vec2<i32>(4, voxel), 0).r;
-    mat.roughness = textureLoad(voxelPalette_tex, vec2<i32>(5, voxel), 0).r;
+    mat.emmitance = textureLoad(voxelPalette_tex, vec2<i32>(4, v), 0).r;
+    mat.roughness = textureLoad(voxelPalette_tex, vec2<i32>(5, v), 0).r;
     mat.transparancy = 0.0; // Initialize explicitly if needed
 
     return mat;
@@ -264,7 +265,10 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> FragmentOutput {
 
     // Combine lighting and material properties
     // Factor 2.0 applied to incoming_light as in GLSL
-    let final_color = (2.0 * incoming_light + stored_mat.emmitance + sunlight) * stored_mat.color;
+    var final_color = (2.0 * incoming_light + stored_mat.emmitance + sunlight) * stored_mat.color;
+    // final_color = vec3<f32>(vec2<f32>(frag_coord_xy) / ubo.frame_size, 0.0); 
+    final_color = vec3<f32>(stored_mat.color); 
+    // final_color = vec3<f32>(mat_id); 
 
     // Encode and set output color
     output.frame_color = vec4<f32>(encode_color(final_color), 1.0);

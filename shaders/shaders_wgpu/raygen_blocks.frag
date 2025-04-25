@@ -18,8 +18,8 @@ struct UboData {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) sample_point: vec3<f32>,
-    @location(1) bunorm: u32,
+    @location(0) @interpolate(linear) sample_point: vec3<f32>,
+    @location(1) @interpolate(flat) bunorm: u32,
 };
 
 struct FragmentOutput {
@@ -32,12 +32,6 @@ fn voxel_in_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
     let block_x = block_id % BLOCK_PALETTE_SIZE_X;
     let block_y = block_id / BLOCK_PALETTE_SIZE_X;
     return relative_voxel_pos + vec3<i32>(16 * block_x, 16 * block_y, 0);
-}
-
-fn voxel_in_bit_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
-    let block_x = block_id % BLOCK_PALETTE_SIZE_X;
-    let block_y = block_id / BLOCK_PALETTE_SIZE_X;
-    return relative_voxel_pos + vec3<i32>(0 + 2 * block_x, 0 + 16 * block_y, 0);
 }
 
 fn GetVoxel(block_id: i32, relative_voxel_pos: vec3<i32>) -> u32 {
@@ -60,7 +54,7 @@ fn main(in: VertexOutput) -> FragmentOutput {
     let inorm = axis * _sign;
     let normal_encoded_out = vec3<u32>((inorm + 1) * 255 / 2);
 
-    let ipos = vec3<i32>(floor(in.sample_point));
+    let ipos = vec3<i32>(in.sample_point);
 
     var out: FragmentOutput;
     let voxel = GetVoxel(i32(sample_block), ipos);

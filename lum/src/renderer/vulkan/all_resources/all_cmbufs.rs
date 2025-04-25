@@ -1,5 +1,5 @@
-use crate::internal_renderer::{
-    render_vk::{AllCommandBuffers, InternalRendererVulkan},
+use crate::renderer::{
+    vulkan::{AllCommandBuffers, InternalRendererVulkan},
     Settings,
 };
 // use internal_renderer::{InternalRendererVulkan, *};

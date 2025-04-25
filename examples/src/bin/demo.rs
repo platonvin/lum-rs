@@ -1,16 +1,24 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
-
+#![feature(inherent_associated_types)]
 use std::{
     fs::File,
     io::{self, Read},
     path::Path,
 };
 
-use lum::{
-    internal_renderer::Settings,
-    renderer::{atrace, MeshFoliage, MeshLiquid, MeshModel, MeshVolumetric, Renderer},
-    types::{u8vec3, uvec3, vec3, BlockId, MeshTransform},
+// we import types directly so we can use them like BlockId
+// it is more "correct" to do <Renderer as RendererInterface>::BlockId
+// however, its basically unreadable
+// use lum::internal_renderer::render_wgpu::render::RendererWebGPU as Renderer;
+// use lum::internal_renderer::render_wgpu::types::*;
+use lum::renderer::vulkan::render::RendererVulkan;
+use lum::renderer::vulkan::types::*;
+use lum::renderer::{
+    load_interface::LoadInterface,
+    render_interface::{FoliageDescriptionBuilder, RendererInterface},
+    types::{u8vec3, uvec3, vec3, MeshTransform},
+    Settings,
 };
 use winit::{
     application::ApplicationHandler,
@@ -18,6 +26,7 @@ use winit::{
     event_loop::{ActiveEventLoop, EventLoop},
     window::{Window, WindowId},
 };
+
 // i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityTypeEnum -> LumMeshModel
 // #[derive(Default)]
 struct AllMeshes {
@@ -42,7 +51,7 @@ struct AllTransforms {
 }
 
 impl AllMeshes {
-    fn new(lum: &mut Renderer, grass: MeshFoliage) -> Self {
+    fn new(lum: &mut RendererVulkan, grass: MeshFoliage) -> Self {
         let tank = lum.load_model("assets/tank_body.vox");
         Self {
             tank_body: tank,
@@ -57,7 +66,7 @@ impl AllMeshes {
         }
     }
 
-    fn unload(self, lum: &mut Renderer) {
+    fn unload(self, lum: &mut RendererVulkan) {
         lum.unload_model(self.tank_body);
         lum.unload_model(self.tank_head);
         lum.unload_model(self.tank_rf_leg);
@@ -70,33 +79,32 @@ impl AllMeshes {
     }
 }
 
-struct AppState<'renderer> {
+struct AppState {
     // window: &'renderer Window,
-    lum: lum::renderer::Renderer<'renderer>,
+    lum: RendererVulkan,
     meshes: AllMeshes,
     transforms: AllTransforms,
     about_to_close: bool,
 }
-impl<'renderer> AppState<'renderer> {
-    async fn new(window: Window, event_loop: &EventLoop<()>) -> Self {
+impl AppState {
+    type FoliageDescription = <RendererVulkan as RendererInterface>::FoliageDescription;
+
+    fn new(window: Window, event_loop: &EventLoop<()>) -> Self {
         let settings = Settings {
             static_block_palette_size: 15,
             ..Settings::default()
         };
 
-        let mut pre_init_lum = Renderer::create();
-        let grass = pre_init_lum.load_foliage(
-            // this is compiled by lum. But you should compile such shaders yourself
-            // "shaders" is sub-crate that embeds some shaders into binary for simplicity
-            // i can make it work fine without this, but only for local build, and distribution then becomes a problem
-            // so embedding just makes you never care about where are shaders
-            // shaders::get_shader("grass.vert.spv").unwrap(),
-            shaders::get_wgsl("grass.vert").unwrap(),
-            13,
-            100,
-        );
+        let mut foliage_desc_builder =
+            <RendererVulkan as RendererInterface>::FoliageDescriptionBuilder::new();
+        let grass = foliage_desc_builder.load_foliage(Self::FoliageDescription {
+            // code: shaders::get_wgsl("grass.vert").unwrap(),
+            spirv_code: shaders::get_shader("grass.vert.spv").unwrap().to_vec(),
+            vertices: 13,
+            density: 100,
+        });
 
-        let mut lum = pre_init_lum.init(&settings, window, &event_loop).await;
+        let mut lum = RendererVulkan::new(&settings, window, &foliage_desc_builder.build());
 
         let meshes = AllMeshes::new(&mut lum, grass);
 
@@ -115,8 +123,8 @@ impl<'renderer> AppState<'renderer> {
         lum.load_block(13, "assets/wood.vox");
         lum.load_block(14, "assets/planks.vox");
 
-        // lum.renderer.update_block_palette_to_gpu();
-        // lum.renderer.update_material_palette_to_gpu();
+        lum.renderer.update_block_palette_to_gpu();
+        lum.renderer.update_material_palette_to_gpu();
 
         Self {
             // window,
@@ -240,7 +248,7 @@ impl<'renderer> AppState<'renderer> {
     }
 }
 
-impl<'renderer> ApplicationHandler for AppState<'renderer> {
+impl ApplicationHandler for AppState {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         println!("Resumed")
     }
@@ -311,8 +319,7 @@ impl<'renderer> ApplicationHandler for AppState<'renderer> {
         let _ = event_loop;
     }
 }
-#[pollster::main]
-async fn main() {
+fn main() {
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let window_attributes = Window::default_attributes()
@@ -323,7 +330,7 @@ async fn main() {
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();
 
-    let mut state = AppState::new(window, &event_loop).await;
+    let mut state = AppState::new(window, &event_loop);
 
     state.load_scene("assets/scene").unwrap();
 

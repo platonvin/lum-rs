@@ -1,42 +1,21 @@
-use lumal::vk::{self, Extent2D};
-use qvek::vek::FrustumPlanes;
-use qvek::{vec2, vec3, vec4};
+use super::types::*;
+use crate::{
+    assert_assume,
+    containers::{Array3D, BitArray3d},
+};
+use std::mem::transmute;
 
-use crate::types::*;
+use super::aabb::{get_shift, iAABB};
+use as_u8_slice_derive::AsU8Slice;
+use lumal::vk;
+use qvek::{
+    i16vec3, i16vec4, i8vec4, ivec3, ivec4, uvec2, uvec3, vec3, vec4,
+    vek::{Clamp, FrustumPlanes},
+};
+use winit::window::Window;
 
-pub mod aabb;
-pub mod ao_lut;
-pub mod load_interface;
-pub mod ogt_vox;
-#[cfg(feature = "gl_backend")]
-pub mod render_gl;
-pub mod render_interface;
-// #[cfg(feature = "vk_backend")]
-pub mod render_vk;
-#[cfg(feature = "wgpu_backend")]
-pub mod render_wgpu;
-
-#[derive(Clone, Copy)]
-pub struct Settings {
-    pub world_size: uvec3,
-    pub static_block_palette_size: u32,
-    pub max_particle_count: u32,
-    pub lightmap_extent: vk::Extent2D,
-}
-
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            world_size: uvec3::new(48, 48, 16),
-            static_block_palette_size: 15,
-            max_particle_count: 8128,
-            lightmap_extent: Extent2D {
-                width: 1024,
-                height: 1024,
-            },
-        }
-    }
-}
+// i am clearly trash with managing division into files
+// if someone has a good idea on how to do it, message me (or just make a PR)
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
@@ -74,8 +53,8 @@ impl Default for Camera {
 
 #[derive(Debug, Clone, Copy)]
 pub struct SunLight {
-    pub light_transform: mat4,
-    pub light_dir: vec3,
+    light_transform: mat4,
+    light_dir: vec3,
 }
 impl Default for SunLight {
     fn default() -> Self {
@@ -130,4 +109,75 @@ impl SunLight {
         });
         self.light_transform = projection * view;
     }
+}
+
+pub trait FoliageDescriptionBuilder<FoliageDescType, MeshFoliageType> {
+    fn new() -> Self;
+    fn load_foliage(&mut self, foliage_desc: FoliageDescType) -> MeshFoliageType;
+    fn build(self) -> Vec<FoliageDescType>;
+}
+
+// not over Vulkan, but over Lum needs
+// this is sync, async is automatically implemented by Rust
+pub trait RendererInterface {
+    type FoliageDescription;
+
+    type MeshFoliage;
+    type MeshVolumetric;
+    type MeshLiquid;
+    type MeshModel;
+    type MeshBlock;
+    type BlockId;
+    type MatId;
+    type Voxel;
+    type FoliageDescriptionBuilder: FoliageDescriptionBuilder<
+        Self::FoliageDescription,
+        Self::MeshFoliage,
+    >;
+    // type
+
+    fn new(
+        settings: &super::Settings,
+        window: Window,
+        foliage: &[Self::FoliageDescription],
+    ) -> Self;
+    // fn destroy(&mut self);
+
+    fn load_model(&mut self, path: &str) -> Self::MeshModel;
+    fn unload_model(&mut self, model: Self::MeshModel);
+    fn get_model_size(&self, model: Self::MeshModel) -> uvec3;
+
+    fn load_block(&mut self, block: Self::BlockId, path: &str);
+    fn unload_block(&mut self, block: Self::BlockId);
+
+    fn load_volumetric(
+        &mut self,
+        max_density: f32,
+        dencity_variation: f32,
+        color: u8vec3,
+    ) -> Self::MeshVolumetric;
+    fn unload_volumetric(&mut self, volumetric: Self::MeshVolumetric);
+
+    fn load_liquid(&mut self, main_mat: Self::MatId, foam_mat: Self::MatId) -> Self::MeshLiquid;
+    fn unload_liquid(&mut self, liquid: Self::MeshLiquid);
+
+    // fn load foliage
+    fn unload_foliage(&mut self, foliage: Self::MeshFoliage);
+
+    fn start_frame(&mut self);
+    fn prepare_frame(&mut self);
+    fn end_frame(&mut self);
+
+    fn is_block_visible(&self, pos: vec3) -> bool;
+    fn is_model_visible(&self, model_size: &uvec3, trans: &MeshTransform) -> bool;
+
+    fn draw_world(&mut self);
+    fn draw_block(&mut self, block: Self::BlockId, block_pos: &i16vec3);
+    fn draw_model(&mut self, model: &Self::MeshModel, trans: &MeshTransform);
+    fn draw_foliage(&mut self, foliage: &Self::MeshFoliage, pos: &vec3);
+    fn draw_liquid(&mut self, liquid: &Self::MeshLiquid, pos: &vec3);
+    fn draw_volumetric(&mut self, volumetric: &Self::MeshVolumetric, pos: &vec3);
+
+    fn get_world_blocks(&self) -> &Array3D<Self::BlockId>;
+    fn get_world_blocks_mut(&mut self) -> &mut Array3D<Self::BlockId>;
 }

@@ -1,16 +1,17 @@
-use internal_renderer::*;
+use block_mesh::{greedy_quads, GreedyQuadsBuffer};
+use renderer::*;
 use lumal::{vk::MappedMemoryRange, BufferDeletion, ImageDeletion};
 use qvek::vec3;
 // use rand::Rng;
 use crate::{
     containers::Array3D,
-    internal_renderer::{
+    renderer::{
         load_interface::LoadInterface,
-        render_vk::{BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, FRAMES_IN_FLIGHT},
+        vulkan::{types::*, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, FRAMES_IN_FLIGHT},
     },
-    types::*,
     *,
 };
+use renderer::types::*;
 use lumal::vk;
 
 use super::InternalRendererVulkan;
@@ -25,6 +26,9 @@ impl super::InternalRendererVulkan {
 impl LoadInterface for InternalRendererVulkan {
     type BufferType = lumal::Buffer;
     type ImageType = lumal::Image;
+    type BlockId = BlockId;
+    type MatId = MatId;
+    type Voxel = Voxel;
 
     // Palette on CPU side is (should) be represented as a POD array
     // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is
@@ -152,7 +156,7 @@ impl LoadInterface for InternalRendererVulkan {
             z: model.size_z,
         };
 
-        let mut padded_voxel_data = Array3D::<VoxelForContour>::new(
+        let mut padded_voxel_data = Array3D::<VoxelForContour<Voxel>>::new(
             // +2 cause padding of 1 from each side
             (size.x + 2) as usize,
             (size.y + 2) as usize,
@@ -192,8 +196,8 @@ impl LoadInterface for InternalRendererVulkan {
             triangles,
             voxels,
             total_size: size,
-            voxels_bind_group_compute: todo!("REFACTOR THIS BULLSHIT"),
-            voxels_bind_group_fragment: todo!("REFACTOR THIS BULLSHIT"),
+            voxels_bind_group_compute: None,
+            voxels_bind_group_fragment: None,
             // sprites: vec![],
         }
     }
@@ -308,24 +312,6 @@ impl LoadInterface for InternalRendererVulkan {
 
     #[cold]
     #[optimize(size)]
-    fn create_and_upload_contour_buffers(
-        &mut self,
-        verts: &[PackedVoxelCircuit],
-        indices: &[u16],
-    ) -> (lumal::Buffer, lumal::Buffer) {
-        let vertexes = self.lumal.create_and_upload_buffer::<PackedVoxelCircuit>(
-            verts,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
-        );
-        let indices = self.lumal.create_and_upload_buffer::<u16>(
-            indices,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
-        );
-        (vertexes, indices)
-    }
-
-    #[cold]
-    #[optimize(size)]
     fn free_mesh(&mut self, mesh: InternalMeshModel<Self::BufferType, Self::ImageType>) {
         assert!(mesh.triangles.vertexes.buffer != vk::Buffer::null());
         assert!(mesh.triangles.indices.buffer != vk::Buffer::null());
@@ -347,6 +333,157 @@ impl LoadInterface for InternalRendererVulkan {
             mip_views: mesh.voxels.mip_views,
             lifetime: FRAMES_IN_FLIGHT as i32,
         });
+    }
+
+    #[cold]
+    #[optimize(size)]
+    fn make_contour_vertices(
+        &mut self,
+        // real size. TODO: do i need this?
+        size: uvec3,
+        // 3d array with 1 padding
+        padded_voxel_data: Array3D<VoxelForContour<Voxel>>,
+    ) -> FaceBuffers<Self::BufferType> {
+        let mut buffer = GreedyQuadsBuffer::new(padded_voxel_data.data.len());
+
+        // TODO: issue on block_mesh bad readme example
+        let chunk_shape =
+            block_mesh::ndshape::RuntimeShape::<u32, 3>::new([size.x + 2, size.y + 2, size.z + 2]);
+
+        let faces = block_mesh::RIGHT_HANDED_Y_UP_CONFIG.faces;
+        greedy_quads(
+            padded_voxel_data.data.as_slice(),
+            &chunk_shape,
+            [0; 3],
+            [size.x + 1, size.y + 1, size.z + 1],
+            &faces,
+            &mut buffer,
+        );
+
+        assert!(buffer.quads.num_quads() > 0);
+
+        let num_indices = buffer.quads.num_quads() * 6;
+        let num_vertices = buffer.quads.num_quads() * 4;
+        // [0,1,2] [1,2,3] - indices of vertices in vertex array
+        // each sequential three indices form a (single)triangle
+        // triangles are made by mesher (block_mesh) from voxels
+        let mut indices = Vec::with_capacity(num_indices);
+        let mut positions = Vec::with_capacity(num_vertices);
+        let mut normals = Vec::with_capacity(num_vertices);
+
+        // problem with block_mesh is that even tho it is voxel, values are still in
+        // floats so for now we repack & convert them
+        // TODO: fork, fix and optimize
+        for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
+            for quad in group.into_iter() {
+                indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
+                positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
+                normals.extend_from_slice(&face.quad_mesh_normals());
+            }
+        }
+
+        assert!(positions.len() == normals.len());
+        // positions only!
+        // normals are passed as push constants and defined in high-level (look down
+        // below)
+        let mut circ_verts = vec![PackedVoxelCircuit::default(); positions.len()];
+        for i in 0..positions.len() {
+            let u8pos = u8vec3::new(
+                // substract 1 cause contour 1 padding
+                positions[i][0] as u8 - 1,
+                positions[i][1] as u8 - 1,
+                positions[i][2] as u8 - 1,
+            );
+            circ_verts[i].pos = u8pos;
+        }
+
+        #[allow(non_snake_case)]
+        let mut verts_idxs_Pzz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_Nzz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zPz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zNz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zzP = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zzN = Vec::with_capacity(positions.len());
+
+        // TODO: how to return a ref to local_but_higher_scope variable?
+        #[rustfmt::skip]
+        let mut push_index_to_corresponding_vec = |normal: vec3, index: u16| {
+            match normal {
+                vec3 {x:  1.0, y:  0.0, z:  0.0} => {verts_idxs_Pzz.push(index);},
+                vec3 {x: -1.0, y:  0.0, z:  0.0} => {verts_idxs_Nzz.push(index);},
+                vec3 {x:  0.0, y:  1.0, z:  0.0} => {verts_idxs_zPz.push(index);},
+                vec3 {x:  0.0, y: -1.0, z:  0.0} => {verts_idxs_zNz.push(index);},
+                vec3 {x:  0.0, y:  0.0, z:  1.0} => {verts_idxs_zzP.push(index);},
+                vec3 {x:  0.0, y:  0.0, z: -1.0} => {verts_idxs_zzN.push(index);},
+                _ => {
+                    panic!("Unknown normal: {:?}", normal);
+                },
+            }
+        };
+        // dbg!(&indices);
+        for i in 0..indices.len() {
+            let index = indices[i];
+            // the first one in triangle. This is the one that points to vertex that is the
+            // Provoking Vertex (google it) which means that when all 3 pass
+            // some some value to fragment shader with flat qualifier (no interpolation),
+            // Provoking Vertex's one is used
+            let provoking_index = indices[(i / 3) * 3];
+            // TODO: should i checks that they all actualyl have same normal?
+            let norm = normals[provoking_index as usize];
+            push_index_to_corresponding_vec(norm.into(), index as u16);
+        }
+
+        assert!(!verts_idxs_Pzz.is_empty());
+        assert!(!verts_idxs_Nzz.is_empty());
+        assert!(!verts_idxs_zPz.is_empty());
+        assert!(!verts_idxs_zNz.is_empty());
+        assert!(!verts_idxs_zzP.is_empty());
+        assert!(!verts_idxs_zzN.is_empty());
+
+        let mut all_indices = vec![];
+        let mut offset_and_insert = |vec: &mut Vec<u16>, section: &mut IndexedVertices| {
+            // starts at current length
+            section.offset = all_indices.len() as u32;
+            // continues for length of verts_idxs vec
+            section.icount = vec.len() as u32;
+            all_indices.extend_from_slice(vec.as_slice());
+        };
+
+        #[allow(non_snake_case)]
+        {
+            let mut triangles_Pzz = IndexedVertices::default();
+            let mut triangles_Nzz = IndexedVertices::default();
+            let mut triangles_zPz = IndexedVertices::default();
+            let mut triangles_zNz = IndexedVertices::default();
+            let mut triangles_zzP = IndexedVertices::default();
+            let mut triangles_zzN = IndexedVertices::default();
+
+            offset_and_insert(&mut verts_idxs_Pzz, &mut triangles_Pzz);
+            offset_and_insert(&mut verts_idxs_Nzz, &mut triangles_Nzz);
+            offset_and_insert(&mut verts_idxs_zPz, &mut triangles_zPz);
+            offset_and_insert(&mut verts_idxs_zNz, &mut triangles_zNz);
+            offset_and_insert(&mut verts_idxs_zzP, &mut triangles_zzP);
+            offset_and_insert(&mut verts_idxs_zzN, &mut triangles_zzN);
+
+            let (vertexes, indices) =
+                self.create_and_upload_contour_buffers(&circ_verts, &all_indices);
+
+            FaceBuffers::<Self::BufferType> {
+                Pzz: triangles_Pzz,
+                Nzz: triangles_Nzz,
+                zPz: triangles_zPz,
+                zNz: triangles_zNz,
+                zzP: triangles_zzP,
+                zzN: triangles_zzN,
+                vertexes,
+                indices,
+            }
+        }
     }
 
     fn has_palette(&self) -> bool {
@@ -376,5 +513,25 @@ impl LoadInterface for InternalRendererVulkan {
 
     fn get_block_palette_mesh(&self, block_id: BlockId) -> &InternalMeshBlock<Self::BufferType> {
         &self.block_palette_meshes[block_id as usize]
+    }
+}
+
+impl InternalRendererVulkan {
+    #[cold]
+    #[optimize(size)]
+    fn create_and_upload_contour_buffers(
+        &mut self,
+        verts: &[PackedVoxelCircuit],
+        indices: &[u16],
+    ) -> (lumal::Buffer, lumal::Buffer) {
+        let vertexes = self.lumal.create_and_upload_buffer::<PackedVoxelCircuit>(
+            verts,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+        );
+        let indices = self.lumal.create_and_upload_buffer::<u16>(
+            indices,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+        );
+        (vertexes, indices)
     }
 }

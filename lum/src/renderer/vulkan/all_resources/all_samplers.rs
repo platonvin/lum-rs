@@ -1,5 +1,5 @@
-use crate::internal_renderer::{
-    render_vk::{AllSamplers, InternalRendererVulkan},
+use crate::renderer::{
+    vulkan::{AllSamplers, InternalRendererVulkan},
     Settings,
 };
 use lumal::vk;

@@ -5,14 +5,9 @@
 #![allow(unused)]
 // This is a glue-file
 // files that start with "all_" are initializing / destroying resources (packed in structs)
-// internal_renderer is where all the gpu commands are submitted
-// renderer is a wrapper around internal_renderer that is more stable and easier to use
 
-// pub mod consts;
 pub mod containers;
-pub mod internal_renderer;
 pub mod renderer;
-pub mod types;
 
 // this is basically safier version of assert! that is checked in debug mode
 // in release mode opens into just assume!

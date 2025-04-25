@@ -1,15 +1,18 @@
 use std::mem::offset_of;
 
+use crate::renderer::types::*;
 use crate::{
-    internal_renderer::{
-        render_vk::{
+    renderer::vulkan,
+    renderer::vulkan::types::*,
+    renderer::{
+        vulkan::{
             AllBuffers, AllIndependentImages, AllPipes, AllSamplers, AllSwapchainDependentImages,
             InternalRendererVulkan,
         },
         Settings,
     },
-    types::*,
 };
+
 // use internal_renderer::{InternalRendererVulkan, *};
 use lumal::{
     descriptors::RelativeDescriptorPos::{Current, First},
@@ -32,7 +35,7 @@ impl InternalRendererVulkan {
         dimages: &AllSwapchainDependentImages,
         samplers: &AllSamplers,
         pipes: &mut AllPipes,
-        foliage_descriptions: &[InternalMeshFoliageDesc],
+        foliage_descriptions: &[vulkan::render::MeshFoliageDescription],
     ) {
         // they are seperate because they are actually secondary layouts - used for descriptor_push
         // this is a big TODO: - get rid of descriptor_push

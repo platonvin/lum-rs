@@ -12,15 +12,14 @@ struct UboData {
     delta_time: f32,
 };
 
-
-struct Constants {
-    rot: vec4<f32>,
-    shift: vec4<f32>,
-    fnormal: vec4<f32>, // not encoded
-};
+// struct Constants {
+//     rot: vec4<f32>,
+//     shift: vec4<f32>,
+//     fnormal: vec4<f32>, // not encoded
+// };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(1) @binding(0) var<uniform> pco: Constants;
+// @group(1) @binding(0) var<uniform> pco: Constants;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,

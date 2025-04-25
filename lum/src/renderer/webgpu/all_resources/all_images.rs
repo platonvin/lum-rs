@@ -1,5 +1,5 @@
-use crate::internal_renderer::{
-    render_wgpu::{
+use crate::renderer::{
+    webgpu::{
         wal::Wal, AllIndependentImages, AllSwapchainDependentImages, InternalRendererWebGPU,
         BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, CHOSEN_DEPTH_FORMAT, FRAME_FORMAT,
         LIGHTMAPS_FORMAT, MATNORM_FORMAT, RADIANCE_FORMAT, SECONDARY_DEPTH_FORMAT,

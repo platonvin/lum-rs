@@ -1,7 +1,9 @@
+use crate::renderer::types::*;
 use crate::{
-    internal_renderer::{
+    renderer::webgpu::types::*,
+    renderer::{
         self,
-        render_wgpu::{
+        webgpu::{
             wal::{
                 BindGroupDescription, Image, PushConstantDescription, ResourceType, ShaderStage,
                 Wal,
@@ -12,7 +14,6 @@ use crate::{
         },
         Settings,
     },
-    types::*,
 };
 use lumal::ring::Ring;
 use std::mem::offset_of;
@@ -222,6 +223,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             }),
             Some("Lightmap Models Pipe"),
         );
+
         let raygen_blocks_pipe = Wal::create_raster_pipe(
             &wal,
             &[
@@ -290,7 +292,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             None,
             Some(PushConstantDescription {
                 size: (std::mem::size_of::<ivec4>() + std::mem::size_of::<u32>()) as u32, // TODO as u32:
-                max_count: 16 * 1024,
+                max_count: 16 * 16 * 1024,
                 stages: ShaderStages::VERTEX,
             }),
             Some("Raygen Blocks Pipe"),

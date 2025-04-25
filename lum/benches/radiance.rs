@@ -8,7 +8,7 @@ use lum::{
     assert_assume,
     containers::{Array3D, BitArray3d, Multiprocessor},
     for_zyx,
-    types::{i8vec4, uvec3},
+    renderer::types::{i8vec4, uvec3},
 };
 use qvek::i8vec4;
 

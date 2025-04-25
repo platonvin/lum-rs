@@ -1,7 +1,7 @@
 use block_mesh::{greedy_quads, ilattice::extent, GreedyQuadsBuffer, VoxelVisibility};
-use internal_renderer::*;
 use lumal::atrace;
 use qvek::{vec3, vek::Vec3};
+use renderer::*;
 use wgpu::{
     naga::valid::TypeFlags, util::DeviceExt, BindGroupDescriptor, BindGroupEntry,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Extent3d, Origin3d,
@@ -9,15 +9,22 @@ use wgpu::{
     TextureSampleType, TextureViewDimension,
 };
 // use rand::Rng;
+use crate::renderer::types::*;
 use crate::{
     containers::Array3D,
-    internal_renderer::{
+    renderer::webgpu::types::*,
+    renderer::{
         load_interface::LoadInterface,
-        render_wgpu::{BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, BLOCK_SIZE, FRAMES_IN_FLIGHT},
+        webgpu::{BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, BLOCK_SIZE, FRAMES_IN_FLIGHT},
     },
-    types::*,
     *,
 };
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PackedVoxelCircuit {
+    pub pos: u8vec4,
+}
 
 use super::{
     wal::{self, Image},
@@ -29,6 +36,9 @@ use super::{
 impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
     type BufferType = Option<wgpu::Buffer>;
     type ImageType = Option<wal::Image>;
+    type BlockId = BlockId;
+    type MatId = MatId;
+    type Voxel = Voxel;
 
     // Palette on CPU side is (should) be represented as a POD array
     // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is
@@ -92,6 +102,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                     depth_or_array_layers: BLOCK_SIZE,
                 },
             );
+            self.wal.queue.submit([]);
         }
     }
 
@@ -99,15 +110,19 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
         // we do not write it to intermediate buffer cuz its already in right layout - 6
         // float rows one by one 256 total
         assert!(!self.material_palette.is_empty());
-        // dbg!(&self.material_palette);
+        assert_eq!(self.material_palette.len(), 256);
+
+        const _: () = assert!(size_of::<Material>() == size_of::<f32>() * 6);
+
         dbg!(&self.material_palette.len());
         let buffer_count = self.material_palette.len();
+        // let buffer_count = 256;
         let buffer_size = buffer_count * std::mem::size_of::<Material>();
 
         let data_u8 = unsafe {
             std::slice::from_raw_parts(self.material_palette.as_ptr() as *const u8, buffer_size)
         };
-        for bp in self.independent_images.origin_block_palette.iter() {
+        for bp in self.independent_images.material_palette.iter() {
             self.wal.queue.write_texture(
                 TexelCopyTextureInfo {
                     texture: &bp.texture,
@@ -118,8 +133,8 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                 data_u8,
                 TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(6 * size_of::<Material>() as u32),
-                    rows_per_image: Some(256),
+                    bytes_per_row: Some(size_of::<Material>() as u32),
+                    rows_per_image: None,
                 },
                 Extent3d {
                     width: 6,
@@ -127,7 +142,9 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                     depth_or_array_layers: 1,
                 },
             );
+            self.wal.queue.submit([]);
         }
+        // self.wal.queue.submit([]);
     }
 
     #[cold]
@@ -143,7 +160,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
             z: model.size_z,
         };
 
-        let mut padded_voxel_data = Array3D::<VoxelForContour>::new(
+        let mut padded_voxel_data = Array3D::<VoxelForContour<Voxel>>::new(
             // +2 cause padding of 1 from each side
             (size.x + 2) as usize,
             (size.y + 2) as usize,
@@ -322,16 +339,154 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
 
     #[cold]
     #[optimize(size)]
-    fn create_and_upload_contour_buffers(
+    fn make_contour_vertices(
         &mut self,
-        verts: &[PackedVoxelCircuit],
-        indices: &[u16],
-    ) -> (Option<wgpu::Buffer>, Option<wgpu::Buffer>) {
-        let vertexes = self
-            .wal
-            .create_and_upload_buffer::<PackedVoxelCircuit>(verts, wgpu::BufferUsages::VERTEX);
-        let indices = self.wal.create_and_upload_buffer::<u16>(indices, wgpu::BufferUsages::INDEX);
-        (Some(vertexes), Some(indices))
+        // real size. TODO: do i need this?
+        size: uvec3,
+        // 3d array with 1 padding
+        padded_voxel_data: Array3D<VoxelForContour<Voxel>>,
+    ) -> FaceBuffers<Self::BufferType> {
+        let mut buffer = GreedyQuadsBuffer::new(padded_voxel_data.data.len());
+
+        // TODO: issue on block_mesh bad readme example
+        let chunk_shape =
+            block_mesh::ndshape::RuntimeShape::<u32, 3>::new([size.x + 2, size.y + 2, size.z + 2]);
+
+        let faces = block_mesh::RIGHT_HANDED_Y_UP_CONFIG.faces;
+        greedy_quads(
+            padded_voxel_data.data.as_slice(),
+            &chunk_shape,
+            [0; 3],
+            [size.x + 1, size.y + 1, size.z + 1],
+            &faces,
+            &mut buffer,
+        );
+
+        assert!(buffer.quads.num_quads() > 0);
+
+        let num_indices = buffer.quads.num_quads() * 6;
+        let num_vertices = buffer.quads.num_quads() * 4;
+        // [0,1,2] [1,2,3] - indices of vertices in vertex array
+        // each sequential three indices form a (single)triangle
+        // triangles are made by mesher (block_mesh) from voxels
+        let mut indices = Vec::with_capacity(num_indices);
+        let mut positions = Vec::with_capacity(num_vertices);
+        let mut normals = Vec::with_capacity(num_vertices);
+
+        // problem with block_mesh is that even tho it is voxel, values are still in
+        // floats so for now we repack & convert them
+        // TODO: fork, fix and optimize
+        for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
+            for quad in group.into_iter() {
+                indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
+                positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
+                normals.extend_from_slice(&face.quad_mesh_normals());
+            }
+        }
+
+        assert!(positions.len() == normals.len());
+        // positions only!
+        // normals are passed as push constants and defined in high-level (look down
+        // below)
+        let mut circ_verts = vec![PackedVoxelCircuit::default(); positions.len()];
+        for i in 0..positions.len() {
+            let u8pos = u8vec4::new(
+                // substract 1 cause contour 1 padding
+                positions[i][0] as u8 - 1,
+                positions[i][1] as u8 - 1,
+                positions[i][2] as u8 - 1,
+                0,
+            );
+            circ_verts[i].pos = u8pos;
+        }
+
+        #[allow(non_snake_case)]
+        let mut verts_idxs_Pzz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_Nzz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zPz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zNz = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zzP = Vec::with_capacity(positions.len());
+        #[allow(non_snake_case)]
+        let mut verts_idxs_zzN = Vec::with_capacity(positions.len());
+
+        // TODO: how to return a ref to local_but_higher_scope variable?
+        #[rustfmt::skip]
+        let mut push_index_to_corresponding_vec = |normal: vec3, index: u16| {
+            match normal {
+                vec3 {x:  1.0, y:  0.0, z:  0.0} => {verts_idxs_Pzz.push(index);},
+                vec3 {x: -1.0, y:  0.0, z:  0.0} => {verts_idxs_Nzz.push(index);},
+                vec3 {x:  0.0, y:  1.0, z:  0.0} => {verts_idxs_zPz.push(index);},
+                vec3 {x:  0.0, y: -1.0, z:  0.0} => {verts_idxs_zNz.push(index);},
+                vec3 {x:  0.0, y:  0.0, z:  1.0} => {verts_idxs_zzP.push(index);},
+                vec3 {x:  0.0, y:  0.0, z: -1.0} => {verts_idxs_zzN.push(index);},
+                _ => {
+                    panic!("Unknown normal: {:?}", normal);
+                },
+            }
+        };
+        // dbg!(&indices);
+        for i in 0..indices.len() {
+            let index = indices[i];
+            // the first one in triangle. This is the one that points to vertex that is the
+            // Provoking Vertex (google it) which means that when all 3 pass
+            // some some value to fragment shader with flat qualifier (no interpolation),
+            // Provoking Vertex's one is used
+            let provoking_index = indices[(i / 3) * 3];
+            // TODO: should i checks that they all actualyl have same normal?
+            let norm = normals[provoking_index as usize];
+            push_index_to_corresponding_vec(norm.into(), index as u16);
+        }
+
+        assert!(!verts_idxs_Pzz.is_empty());
+        assert!(!verts_idxs_Nzz.is_empty());
+        assert!(!verts_idxs_zPz.is_empty());
+        assert!(!verts_idxs_zNz.is_empty());
+        assert!(!verts_idxs_zzP.is_empty());
+        assert!(!verts_idxs_zzN.is_empty());
+
+        let mut all_indices = vec![];
+        let mut offset_and_insert = |vec: &mut Vec<u16>, section: &mut IndexedVertices| {
+            // starts at current length
+            section.offset = all_indices.len() as u32;
+            // continues for length of verts_idxs vec
+            section.icount = vec.len() as u32;
+            all_indices.extend_from_slice(vec.as_slice());
+        };
+
+        #[allow(non_snake_case)]
+        {
+            let mut triangles_Pzz = IndexedVertices::default();
+            let mut triangles_Nzz = IndexedVertices::default();
+            let mut triangles_zPz = IndexedVertices::default();
+            let mut triangles_zNz = IndexedVertices::default();
+            let mut triangles_zzP = IndexedVertices::default();
+            let mut triangles_zzN = IndexedVertices::default();
+
+            offset_and_insert(&mut verts_idxs_Pzz, &mut triangles_Pzz);
+            offset_and_insert(&mut verts_idxs_Nzz, &mut triangles_Nzz);
+            offset_and_insert(&mut verts_idxs_zPz, &mut triangles_zPz);
+            offset_and_insert(&mut verts_idxs_zNz, &mut triangles_zNz);
+            offset_and_insert(&mut verts_idxs_zzP, &mut triangles_zzP);
+            offset_and_insert(&mut verts_idxs_zzN, &mut triangles_zzN);
+
+            let (vertexes, indices) =
+                self.create_and_upload_contour_buffers(&circ_verts, &all_indices);
+
+            FaceBuffers::<Self::BufferType> {
+                Pzz: triangles_Pzz,
+                Nzz: triangles_Nzz,
+                zPz: triangles_zPz,
+                zNz: triangles_zNz,
+                zzP: triangles_zzP,
+                zzN: triangles_zzN,
+                vertexes,
+                indices,
+            }
+        }
     }
 
     #[cold]
@@ -369,30 +524,31 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
         &self.block_palette_meshes[block_id as usize]
     }
 
-    fn load_meshes_from_file(
-        &mut self,
-        meshes_file: &str,
-        _make_vertices: bool,
-        extrude_palette: bool,
-    ) -> Vec<InternalMeshModel<Self::BufferType, Self::ImageType>> {
-        let scene = ogt_vox::read_scene_from_file(meshes_file).unwrap();
+    // fn load_meshes_from_file(
+    //     &mut self,
+    //     meshes_file: &str,
+    //     _make_vertices: bool,
+    //     extrude_palette: bool,
+    // ) -> Vec<InternalMeshModel<Self::BufferType, Self::ImageType>> {
+    //     let scene = ogt_vox::read_scene_from_file(meshes_file).unwrap();
 
-        if extrude_palette && !self.has_palette() {
-            std::println!("Extruding palette");
-            self.extract_palette_from_scene(&scene);
-            self.set_has_palette(true);
-        }
+    //     if extrude_palette && !self.has_palette() {
+    //         std::println!("Extruding palette_");
+    //         self.extract_palette_from_scene(&scene);
+    //         std::println!("Extruded palette");
+    //         self.set_has_palette(true);
+    //     }
 
-        scene
-            .models
-            .iter()
-            .map(|model| {
-                assert!(model.size_x > 0 && model.size_y > 0 && model.size_z > 0);
+    //     scene
+    //         .models
+    //         .iter()
+    //         .map(|model| {
+    //             assert!(model.size_x > 0 && model.size_y > 0 && model.size_z > 0);
 
-                self.load_mesh_from_memory(model, true)
-            })
-            .collect()
-    }
+    //             self.load_mesh_from_memory(model, true)
+    //         })
+    //         .collect()
+    // }
 
     fn load_block_from_file(&mut self, block: BlockId, path: &str) {
         let scene = ogt_vox::read_scene_from_file(path).unwrap();
@@ -406,7 +562,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
     fn load_block_from_memory(&mut self, block_id: BlockId, model: &ogt_vox::VoxModel) {
         let size = uvec3::new(model.size_x, model.size_y, model.size_z);
 
-        let mut padded_voxel_data = Array3D::<VoxelForContour>::new(
+        let mut padded_voxel_data = Array3D::<VoxelForContour<Voxel>>::new(
             // +2 cause padding of 1 from each side
             (size.x + 2) as usize,
             (size.y + 2) as usize,
@@ -444,152 +600,20 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
 
         self.set_block_palette_mesh(block_id, InternalMeshBlock { triangles });
     }
+}
 
-    // fn make_contour_vertices(
-    //     &mut self,
-    //     // real size. TODO: do i need this?
-    //     size: uvec3,
-    //     // 3d array with 1 padding
-    //     padded_voxel_data: Array3D<VoxelForContour>,
-    // ) -> FaceBuffers<Self::BufferType> {
-    //     let mut buffer = GreedyQuadsBuffer::new(padded_voxel_data.data.len());
-
-    //     // TODO: issue on block_mesh bad readme example
-    //     let chunk_shape =
-    //         block_mesh::ndshape::RuntimeShape::<u32, 3>::new([size.x + 2, size.y + 2, size.z + 2]);
-
-    //     let faces = block_mesh::RIGHT_HANDED_Y_UP_CONFIG.faces;
-    //     greedy_quads(
-    //         padded_voxel_data.data.as_slice(),
-    //         &chunk_shape,
-    //         [0; 3],
-    //         [size.x + 1, size.y + 1, size.z + 1],
-    //         &faces,
-    //         &mut buffer,
-    //     );
-
-    //     assert!(buffer.quads.num_quads() > 0);
-
-    //     let num_indices = buffer.quads.num_quads() * 6;
-    //     let num_vertices = buffer.quads.num_quads() * 4;
-    //     // [0,1,2] [1,2,3] - indices of vertices in vertex array
-    //     // each sequential three indices form a (single)triangle
-    //     // triangles are made by mesher (block_mesh) from voxels
-    //     let mut indices = Vec::with_capacity(num_indices);
-    //     let mut positions = Vec::with_capacity(num_vertices);
-    //     let mut normals = Vec::with_capacity(num_vertices);
-
-    //     // problem with block_mesh is that even tho it is voxel, values are still in
-    //     // floats so for now we repack & convert them
-    //     // TODO: fork, fix and optimize
-    //     for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
-    //         for quad in group.into_iter() {
-    //             indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
-    //             positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
-    //             normals.extend_from_slice(&face.quad_mesh_normals());
-    //         }
-    //     }
-
-    //     assert!(positions.len() == normals.len());
-    //     // positions only!
-    //     // normals are passed as push constants and defined in high-level (look down
-    //     // below)
-    //     let mut circ_verts = std::vec![PackedVoxelCircuit::default(); positions.len()];
-    //     for i in 0..positions.len() {
-    //         let u8pos = u8vec3::new(
-    //             // substract 1 cause contour 1 padding
-    //             positions[i][0] as u8 - 1,
-    //             positions[i][1] as u8 - 1,
-    //             positions[i][2] as u8 - 1,
-    //         );
-    //         circ_verts[i].pos = u8pos;
-    //     }
-
-    //     #[allow(non_snake_case)]
-    //     let mut verts_idxs_Pzz = Vec::with_capacity(positions.len());
-    //     #[allow(non_snake_case)]
-    //     let mut verts_idxs_Nzz = Vec::with_capacity(positions.len());
-    //     #[allow(non_snake_case)]
-    //     let mut verts_idxs_zPz = Vec::with_capacity(positions.len());
-    //     #[allow(non_snake_case)]
-    //     let mut verts_idxs_zNz = Vec::with_capacity(positions.len());
-    //     #[allow(non_snake_case)]
-    //     let mut verts_idxs_zzP = Vec::with_capacity(positions.len());
-    //     #[allow(non_snake_case)]
-    //     let mut verts_idxs_zzN = Vec::with_capacity(positions.len());
-
-    //     // TODO: how to return a ref to local_but_higher_scope variable?
-    //     #[rustfmt::skip]
-    //     let mut push_index_to_corresponding_vec = |normal: vec3, index: u16| {
-    //         match normal {
-    //             vec3 {x:  1.0, y:  0.0, z:  0.0} => {verts_idxs_Pzz.push(index);},
-    //             vec3 {x: -1.0, y:  0.0, z:  0.0} => {verts_idxs_Nzz.push(index);},
-    //             vec3 {x:  0.0, y:  1.0, z:  0.0} => {verts_idxs_zPz.push(index);},
-    //             vec3 {x:  0.0, y: -1.0, z:  0.0} => {verts_idxs_zNz.push(index);},
-    //             vec3 {x:  0.0, y:  0.0, z:  1.0} => {verts_idxs_zzP.push(index);},
-    //             vec3 {x:  0.0, y:  0.0, z: -1.0} => {verts_idxs_zzN.push(index);},
-    //             _ => {
-    //                 std::panic!("Unknown normal: {:?}", normal);
-    //             },
-    //         }
-    //     };
-    //     // dbg!(&indices);
-    //     for i in 0..indices.len() {
-    //         let index = indices[i];
-    //         // the first one in triangle. This is the one that points to vertex that is the
-    //         // Provoking Vertex (google it) which means that when all 3 pass
-    //         // some some value to fragment shader with flat qualifier (no interpolation),
-    //         // Provoking Vertex's one is used
-    //         let provoking_index = indices[(i / 3) * 3];
-    //         // TODO: should i checks that they all actualyl have same normal?
-    //         let norm = normals[provoking_index as usize];
-    //         push_index_to_corresponding_vec(norm.into(), index as u16);
-    //     }
-
-    //     assert!(!verts_idxs_Pzz.is_empty());
-    //     assert!(!verts_idxs_Nzz.is_empty());
-    //     assert!(!verts_idxs_zPz.is_empty());
-    //     assert!(!verts_idxs_zNz.is_empty());
-    //     assert!(!verts_idxs_zzP.is_empty());
-    //     assert!(!verts_idxs_zzN.is_empty());
-
-    //     let mut all_indices = std::vec![];
-    //     let mut offset_and_insert = |vec: &mut Vec<u16>, section: &mut IndexedVertices| {
-    //         // starts at current length
-    //         section.offset = all_indices.len() as u32;
-    //         // continues for length of verts_idxs vec
-    //         section.icount = std::vec.len() as u32;
-    //         all_indices.extend_from_slice(std::vec.as_slice());
-    //     };
-
-    //     #[allow(non_snake_case)]
-    //     {
-    //         let mut triangles_Pzz = IndexedVertices::default();
-    //         let mut triangles_Nzz = IndexedVertices::default();
-    //         let mut triangles_zPz = IndexedVertices::default();
-    //         let mut triangles_zNz = IndexedVertices::default();
-    //         let mut triangles_zzP = IndexedVertices::default();
-    //         let mut triangles_zzN = IndexedVertices::default();
-
-    //         offset_and_insert(&mut verts_idxs_Pzz, &mut triangles_Pzz);
-    //         offset_and_insert(&mut verts_idxs_Nzz, &mut triangles_Nzz);
-    //         offset_and_insert(&mut verts_idxs_zPz, &mut triangles_zPz);
-    //         offset_and_insert(&mut verts_idxs_zNz, &mut triangles_zNz);
-    //         offset_and_insert(&mut verts_idxs_zzP, &mut triangles_zzP);
-    //         offset_and_insert(&mut verts_idxs_zzN, &mut triangles_zzN);
-
-    //         let (vertexes, indices) =
-    //             self.create_and_upload_contour_buffers(&circ_verts, &all_indices);
-    //         FaceBuffers::<Self::BufferType> {
-    //             Pzz: triangles_Pzz,
-    //             Nzz: triangles_Nzz,
-    //             zPz: triangles_zPz,
-    //             zNz: triangles_zNz,
-    //             zzP: triangles_zzP,
-    //             zzN: triangles_zzN,
-    //             vertexes,
-    //             indices,
-    //         }
-    //     }
-    // }
+impl InternalRendererWebGPU<'_> {
+    #[cold]
+    #[optimize(size)]
+    fn create_and_upload_contour_buffers(
+        &mut self,
+        verts: &[PackedVoxelCircuit],
+        indices: &[u16],
+    ) -> (Option<wgpu::Buffer>, Option<wgpu::Buffer>) {
+        let vertexes = self
+            .wal
+            .create_and_upload_buffer::<PackedVoxelCircuit>(verts, wgpu::BufferUsages::VERTEX);
+        let indices = self.wal.create_and_upload_buffer::<u16>(indices, wgpu::BufferUsages::INDEX);
+        (Some(vertexes), Some(indices))
+    }
 }

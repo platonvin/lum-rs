@@ -1,6 +1,6 @@
 use lumal::vk;
 
-use crate::{internal_renderer::render_vk::FRAMES_IN_FLIGHT, *};
+use crate::{renderer::vulkan::FRAMES_IN_FLIGHT, *};
 
 impl super::InternalRendererVulkan {
     #[cold]

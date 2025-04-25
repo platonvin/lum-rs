@@ -1,11 +1,12 @@
 use std::mem;
 
-use crate::{
-    internal_renderer::{
-        render_vk::{AllBuffers, InternalRendererVulkan},
-        Settings,
+use crate::renderer::{
+    vulkan::{
+        types::{BlockId, Particle},
+        AllBuffers, InternalRendererVulkan,
     },
-    types::{i8vec4, ivec4, mat4, AoLut, BlockId, Particle},
+    types::{i8vec4, ivec4, mat4, AoLut},
+    Settings,
 };
 // use internal_renderer::{InternalRendererVulkan, *};
 use lumal::vk;
