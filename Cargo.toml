@@ -4,6 +4,7 @@ cargo-features = ["profile-rustflags"]
     resolver = "3"
     members = [
         "lum",
+        "lumal",
         "shaders",
         "examples",
         "as_u8_slice_derive",
