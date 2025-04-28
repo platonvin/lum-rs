@@ -2096,7 +2096,7 @@ struct RendererStorage<BufferType, ImageType> {
 
 // initialized fully working Renderer that can be used to draw voxels on screen
 #[pub_fields::pub_fields]
-pub struct RendererVulkan {
+pub struct RendererVulkan<'a> {
     renderer: InternalRendererVulkan,
     window: Window,
     // foliages: Vec<InternalMeshFoliage>,
@@ -2107,6 +2107,7 @@ pub struct RendererVulkan {
     volumetric_que: Vec<VolumetricRenderRequest>,
     storage: RendererStorage<lumal::Buffer, lumal::Image>,
     radiance_shift: ivec3,
+    phantom: std::marker::PhantomData<&'a ()>,
 }
 
 // not accessed directly by user, instead indexed
@@ -2149,7 +2150,7 @@ impl render_interface::FoliageDescriptionBuilder<MeshFoliageDescription, MeshFol
     }
 }
 
-impl RendererVulkan {
+impl RendererVulkan<'_> {
     // creates a CPU-side struct for foliage
     // this is not foliage mesh itself yet, but a blank used to register foliage for future creation*
     // Foliage in lum is not a controlled simulation with a mesh. Instead, it is a (vertex) shader
@@ -2185,7 +2186,7 @@ impl RendererVulkan {
     // pub fn
 }
 
-impl RendererInterface for RendererVulkan {
+impl RendererInterface for RendererVulkan<'_> {
     type FoliageDescription = MeshFoliageDescription;
     type MeshFoliage = MeshFoliage;
     type MeshVolumetric = MeshVolumetric;
@@ -2214,6 +2215,7 @@ impl RendererInterface for RendererVulkan {
             model_que: vec![],
             storage: RendererStorage::default(),
             radiance_shift: ivec3::zero(),
+            phantom: std::marker::PhantomData,
         }
     }
 

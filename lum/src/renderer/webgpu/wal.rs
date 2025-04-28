@@ -134,15 +134,11 @@ impl<'window> Wal<'window> {
 
         // 4) Request device + queue
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Device"),
-                    required_features: Features::DEPTH32FLOAT_STENCIL8
-                        | Features::FLOAT32_FILTERABLE,
-                    ..Default::default()
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Device"),
+                required_features: Features::DEPTH32FLOAT_STENCIL8 | Features::FLOAT32_FILTERABLE,
+                ..Default::default()
+            })
             .await
             .unwrap();
         unsafe { SWAPCHAIN_FORMAT = Some(surface.get_capabilities(&adapter).formats[0]) };

@@ -261,7 +261,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     /// Called when the window is resized. This method recreates dependent resources.
     pub fn recreate_window(&mut self, window: &Window) {
         // poll the device to make sure work is finished:
-        self.wal.device.poll(wgpu::Maintain::Wait);
+        self.wal.device.poll(wgpu::MaintainBase::Wait);
 
         // 2. Reconfigure the surface (swapchain) using our Wal's resize method.
         self.wal.resize(window.inner_size());

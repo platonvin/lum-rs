@@ -8,12 +8,14 @@ use std::{
 };
 
 // we import types directly so we can use them like BlockId
-// it is more "correct" to do <Renderer as RendererInterface>::BlockId
-// however, its basically unreadable
-// use lum::internal_renderer::render_wgpu::render::RendererWebGPU as Renderer;
-// use lum::internal_renderer::render_wgpu::types::*;
-use lum::renderer::vulkan::render::RendererVulkan;
-use lum::renderer::vulkan::types::*;
+// it is more correct to do <Renderer as RendererInterface>::BlockId
+// so what i do here is relying on fact they have the same name
+// and correct approach is not relying on this
+
+use lum::renderer::webgpu::render::RendererWgpu as Renderer;
+use lum::renderer::webgpu::types::*;
+// use lum::renderer::vulkan::render::RendererVulkan as Renderer;
+// use lum::renderer::vulkan::types::*;
 use lum::renderer::{
     load_interface::LoadInterface,
     render_interface::{FoliageDescriptionBuilder, RendererInterface},
@@ -51,7 +53,7 @@ struct AllTransforms {
 }
 
 impl AllMeshes {
-    fn new(lum: &mut RendererVulkan, grass: MeshFoliage) -> Self {
+    fn new(lum: &mut Renderer, grass: MeshFoliage) -> Self {
         let tank = lum.load_model("assets/tank_body.vox");
         Self {
             tank_body: tank,
@@ -66,7 +68,7 @@ impl AllMeshes {
         }
     }
 
-    fn unload(self, lum: &mut RendererVulkan) {
+    fn unload(self, lum: &mut Renderer) {
         lum.unload_model(self.tank_body);
         lum.unload_model(self.tank_head);
         lum.unload_model(self.tank_rf_leg);
@@ -79,15 +81,15 @@ impl AllMeshes {
     }
 }
 
-struct AppState {
+struct AppState<'renderer> {
     // window: &'renderer Window,
-    lum: RendererVulkan,
+    lum: Renderer<'renderer>,
     meshes: AllMeshes,
     transforms: AllTransforms,
     about_to_close: bool,
 }
-impl AppState {
-    type FoliageDescription = <RendererVulkan as RendererInterface>::FoliageDescription;
+impl<'renderer> AppState<'renderer> {
+    type FoliageDescription = <Renderer<'renderer> as RendererInterface>::FoliageDescription;
 
     fn new(window: Window, event_loop: &EventLoop<()>) -> Self {
         let settings = Settings {
@@ -96,15 +98,15 @@ impl AppState {
         };
 
         let mut foliage_desc_builder =
-            <RendererVulkan as RendererInterface>::FoliageDescriptionBuilder::new();
+            <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
         let grass = foliage_desc_builder.load_foliage(Self::FoliageDescription {
-            // code: shaders::get_wgsl("grass.vert").unwrap(),
-            spirv_code: shaders::get_shader("grass.vert.spv").unwrap().to_vec(),
+            code: shaders::get_wgsl("grass.vert").unwrap(),
+            // spirv_code: shaders::get_shader("grass.vert.spv").unwrap().to_vec(),
             vertices: 13,
             density: 100,
         });
 
-        let mut lum = RendererVulkan::new(&settings, window, &foliage_desc_builder.build());
+        let mut lum = Renderer::new(&settings, window, &foliage_desc_builder.build());
 
         let meshes = AllMeshes::new(&mut lum, grass);
 
@@ -248,7 +250,7 @@ impl AppState {
     }
 }
 
-impl ApplicationHandler for AppState {
+impl<'renderer> ApplicationHandler for AppState<'renderer> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         println!("Resumed")
     }

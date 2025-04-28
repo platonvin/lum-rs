@@ -682,7 +682,7 @@ struct RendererStorage<BufferType, ImageType> {
 
 // initialized fully working Renderer that can be used to draw voxels on screen
 #[pub_fields::pub_fields]
-pub struct Rendererwgpu<'window> {
+pub struct RendererWgpu<'window> {
     renderer: InternalRendererWebGPU<'window>,
     block_que: Vec<BlockRenderRequest>,
     model_que: Vec<ModelRenderRequest>,
@@ -693,7 +693,7 @@ pub struct Rendererwgpu<'window> {
     radiance_shift: ivec3,
 }
 
-impl<'window> Rendererwgpu<'window> {
+impl<'window> RendererWgpu<'window> {
     pub fn destroy(self) {
         // unsafe { self.renderer.destroy() };
     }
@@ -2472,7 +2472,7 @@ impl<'window> Rendererwgpu<'window> {
     }
 }
 
-impl Drop for Rendererwgpu<'_> {
+impl Drop for RendererWgpu<'_> {
     fn drop(&mut self) {
         // unsafe { self.renderer.destroy() };
     }
@@ -2508,7 +2508,7 @@ impl FoliageDescriptionBuilder<MeshFoliageDesc, MeshFoliage> for SimpleFoliageDe
 // * done this way for simplicity (aka pre-counting size)
 // **: Lum is not trying to be general-purpose engine at all. Some very basic parts that are expected from game engine
 // are and will forever be missing. You cant make fast abstraction on top of everything.
-impl<'window> RendererInterface for Rendererwgpu<'window> {
+impl<'window> RendererInterface for RendererWgpu<'window> {
     type FoliageDescription = MeshFoliageDesc;
     type MeshFoliage = MeshFoliage;
     type MeshVolumetric = MeshVolumetric;

@@ -1,4 +1,3 @@
-#![feature(core_intrinsics)]
 #![feature(portable_simd)]
 // damn am i really forcing nighly?
 // how are you supposed to use simd without nightly?
@@ -281,7 +280,7 @@ fn update_radiance_separated(world: &Array3D<BlockId>, size: uvec3) -> Vec<i8vec
                             let z = (zz as isize + dz).max(0).min(size.z as isize - 1);
                             let block = world.get(x as usize, y as usize, z as usize);
 
-                            unsafe { std::intrinsics::assume((block > 0) == (block != 0)) };
+                            assert_assume!((block > 0) == (block != 0));
 
                             if block > 0 {
                                 included.set(xx, yy, zz, true);
