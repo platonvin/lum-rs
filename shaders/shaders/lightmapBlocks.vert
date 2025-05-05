@@ -7,7 +7,7 @@ precision highp float;
 
 #extension GL_GOOGLE_include_directive : require
 #include "common/ext.glsl"
-#include "common/ubo.glsl"
+// #include "common/ubo.glsl"
 #include "common/consts.glsl"
 
 layout(location = 0) in lowp uvec3 posIn;
@@ -15,6 +15,10 @@ layout(location = 0) in lowp uvec3 posIn;
 layout(push_constant) uniform restrict readonly constants{
     i16vec4 shift;
 } pco;
+
+layout(binding = 0, set = 0) uniform restrict readonly UniformBufferObject {
+    mat4 trans_w2s;
+} ubo;
 
 vec3 qtransform( vec4 q, vec3 v ){ 
 	return v + 2.0*cross(cross(v, -q.xyz ) + q.w*v, -q.xyz);

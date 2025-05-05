@@ -133,7 +133,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
-                        buffers_to_binding_resources(&buffers.light_uniform),
+                        buffers_to_binding_resources(&buffers.uniform),
                     ),
                 },
                 BindGroupDescription {
@@ -158,7 +158,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             PrimitiveTopology::TriangleList,
             vec![],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
@@ -209,7 +209,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             PrimitiveTopology::TriangleList,
             vec![],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
@@ -631,7 +631,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     binding: 8,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
                     resources: ResourceType::Static(
-                        BindingType::Sampler(SamplerBindingType::Comparison),
+                        BindingType::Sampler(SamplerBindingType::Filtering),
                         sampler_to_binding_resources(samplers.shadow_sampler.as_ref().unwrap()),
                     ),
                 },

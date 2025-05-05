@@ -67,11 +67,11 @@ impl<'frame> FrameContext<'frame> {
 // if someone has a good idea on how to do it, message me (or just make a PR)
 impl<'window> InternalRendererWebGPU<'window> {
     pub fn update_camera(&mut self) {
-        self.camera.update_camera();
+        self.camera.update_camera(true);
     }
 
     pub fn update_light_transform(&mut self) {
-        self.light.update_light_transform(self.settings.world_size);
+        self.light.update_light_transform(self.settings.world_size, false);
         // let horizon =
     }
 
@@ -2032,79 +2032,67 @@ impl<'window> RendererWgpu<'window> {
             timestamp_writes: None,
             occlusion_query_set: None,
         };
+
         let mut rpass = self
             .renderer
             .current_encoder
             .as_mut()
             .unwrap()
             .begin_render_pass(&render_pass_desc);
+
+        self.renderer
+            .wal
+            .bind_raster_pipeline(&mut rpass, &self.renderer.pipes.lightmap_blocks_pipe);
+
         for brr in &self.block_que {
             let ipos = ivec3!(brr.pos);
-            {
-                let block_id = brr.block;
-                let shift = ipos;
+            let block_id = brr.block;
 
-                let block_mesh = &self.renderer.block_palette_meshes[block_id as usize];
+            let block_mesh = &self.renderer.block_palette_meshes[brr.block as usize];
 
-                rpass.set_vertex_buffer(
-                    0,
-                    block_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
-                );
-                rpass.set_index_buffer(
-                    block_mesh.triangles.indices.as_ref().unwrap().slice(..),
-                    wgpu::IndexFormat::Uint16,
-                );
+            rpass.set_vertex_buffer(0, block_mesh.triangles.vertexes.as_ref().unwrap().slice(..));
+            rpass.set_index_buffer(
+                block_mesh.triangles.indices.as_ref().unwrap().slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
 
-                /*
-                    int16_t block;
-                    i16vec3 shift;
-                    i8vec4 inorm;
-                */
-                #[repr(C)] // for push constants
-                #[derive(AsU8Slice)] // allow cast to &[u8]
+            #[repr(C)] // for push constants
+            #[derive(AsU8Slice)] // allow cast to &[u8]
+            struct PushConstant {
+                shift: ivec4,
+            }
+            let push_constant = PushConstant {
+                shift: ivec4!(ipos, 0),
+            };
 
-                struct PushConstant {
-                    shift: i16vec4,
-                }
-                let push_constant = PushConstant {
-                    shift: i16vec4!(shift, 0),
-                };
-                // rpass.set_push_constants(
-                //     wgpu::ShaderStages::VERTEX,
-                //     0,
-                //     push_constant.as_u8_slice(),
-                // );
+            macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
+                ($__normal:expr, $__face:ident) => {
+                    let fnorm =
+                        vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
+                    if is_face_visible(fnorm, self.renderer.camera.camera_dir) {
+                        {
+                            let buff: &IndexedVertices = &block_mesh.triangles.$__face;
 
-                macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
-                    ($__normal:expr, $__face:ident) => {
-                        let fnorm = vec3!((i8vec3::new(1, 0, 0)));
-                        let inorm = ivec3!((i8vec3::new(1, 0, 0)));
-                        let is_visible = {
-                            let camera_dir = self.renderer.camera.camera_dir;
-                            fnorm.dot(camera_dir) < 0.0
-                        };
-                        if is_visible {
-                            {
-                                let _normal = inorm;
-                                let buff: &IndexedVertices = &block_mesh.triangles.Pzz;
-                                let _block_id = block_id;
-                                rpass.draw_indexed(
-                                    buff.offset..buff.offset + buff.icount,
-                                    0 as i32,
-                                    0..1,
-                                );
-                            };
+                            self.renderer.wal.draw_indexed_with_params(
+                                &mut rpass,
+                                &mut self.renderer.pipes.lightmap_blocks_pipe,
+                                None,
+                                Some(push_constant.as_u8_slice()),
+                                buff.offset..buff.offset + buff.icount,
+                                0,
+                                0..1,
+                            );
                         };
                     };
-                }
+                };
+            }
 
-                CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
-                CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
-                CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
-                CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
-                CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
-                CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
-            };
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
         }
     }
 
@@ -2197,13 +2185,7 @@ impl<'window> RendererWgpu<'window> {
                         wgpu::IndexFormat::Uint16,
                     );
 
-                    // rpass.set_push_constants(
-                    //     wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    //     0,
-                    //     push_constant.as_u8_slice(),
-                    // );
-
-                    // loving macros. IDK if C is better, i am not nearly as good in Rust as i am in C, but still cool
+                    // TODO: how do i make functions used in macro visible to rust-analyzer?
                     macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
                         ($__normal:expr, $__face:ident) => {
                             let fnorm = vec3::new(
@@ -2249,16 +2231,16 @@ impl<'window> RendererWgpu<'window> {
 
         let buffer_patch = UboData {
             trans_w2s: self.renderer.camera.camera_transform,
-            campos: vec4!(self.renderer.camera.camera_pos, 0.0),
-            camdir: vec4!(self.renderer.camera.camera_dir, 0.0),
-            horizline_scaled: vec4!(horizline_scaled, 0.0),
-            vertiline_scaled: vec4!(vertiline_scaled, 0.0),
-            global_light_dir: vec4!(self.renderer.light.light_dir, 0.0),
+            campos: vec4!(self.renderer.camera.camera_pos, 0),
+            camdir: vec4!(self.renderer.camera.camera_dir, 0),
+            horizline_scaled: vec4!(horizline_scaled, 0),
+            vertiline_scaled: vec4!(vertiline_scaled, 0),
+            global_light_dir: vec4!(self.renderer.light.light_dir, 0),
             lightmap_proj: self.renderer.light.light_transform,
             timeseed: 666,
             frame_size: vec2!(
-                self.renderer.wal.config.height,
-                self.renderer.wal.config.width
+                self.renderer.wal.config.width,
+                self.renderer.wal.config.height
             ),
             wind_direction: Default::default(),
             delta_time: 1.0,
@@ -2389,25 +2371,6 @@ impl<'window> RendererWgpu<'window> {
                 wgpu::IndexFormat::Uint16,
             );
 
-            #[repr(C)] // for push constants
-            #[derive(AsU8Slice)] // allow cast to &[u8]
-            struct PushConstant {
-                rot: quat,
-                shift: vec4,
-                // fnormal: vec4,
-            }
-            let push_constant = PushConstant {
-                rot: model_trans.rotation,
-                shift: vec4!(model_trans.translation, 0),
-                // fnormal: vec4::new(normal.x, normal.y, normal.z, 0.0),
-            };
-
-            // rpass.set_push_constants(
-            //     wgpu::ShaderStages::VERTEX_FRAGMENT,
-            //     0,
-            //     push_constant.as_u8_slice(),
-            // );
-
             // Update the model voxels bind group if needed
             // This would replace the Vulkan descriptor set update
             // For now, we'll assume the bind group is already set up correctly
@@ -2423,6 +2386,8 @@ impl<'window> RendererWgpu<'window> {
                         Self::raygen_model_face(
                             &mut self.renderer.wal,
                             &mut self.renderer.pipes.raygen_models_pipe,
+                            &model_trans.rotation,
+                            &model_trans.translation,
                             model_mesh.voxels_bind_group_fragment.as_ref().unwrap(),
                             &mut rpass,
                             fnorm,
@@ -2445,6 +2410,8 @@ impl<'window> RendererWgpu<'window> {
     fn raygen_model_face(
         wal: &mut Wal,
         pipe: &mut RasterPipe,
+        rot: &quat,
+        shift: &vec3,
         model_voxels_bg: &BindGroup,
         rpass: &mut wgpu::RenderPass<'_>,
         normal: vec3,
@@ -2453,9 +2420,13 @@ impl<'window> RendererWgpu<'window> {
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
         struct PushConstant {
+            rot: quat,
+            shift: vec4,
             fnormal: vec4,
         }
         let push_constant = PushConstant {
+            rot: *rot,
+            shift: vec4!(*shift, 0),
             fnormal: vec4!(normal, 0.0),
         };
 
@@ -2799,13 +2770,13 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         // here we can se divergence between wgpu and vulkan. Wgpu is too complicated for my small brain so i do everything in a single scope
         self.map_meshes();
 
-        self.update_light_ubo();
-        // self.lightmap_blocks();
+        // self.update_light_ubo();
+        self.lightmap_blocks();
         // self.lightmap_models();
 
         self.update_ao_ubo();
         self.raygen_blocks();
-        // self.raygen_models();
+        self.raygen_models();
 
         // self.update_raygen_particles();
 

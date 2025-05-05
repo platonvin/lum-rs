@@ -44,16 +44,12 @@ fn main(input: VertexInput) -> VertexOutput {
     let world_pos = vec4<f32>(local_pos_f32 + vec3<f32>(pco.shift.xyz), 1.0);
 
     // Transform to homogeneous clip space using UBO matrix
-    let clip_pos_h = ubo.trans_w2s * world_pos;
+    var clip_pos = ubo.lightmap_proj * world_pos;
 
-    // Apply Z offset as in GLSL (clip_coords.z = 1 + clip_coords.z)
-    // Need to do this in homogeneous coordinates before perspective divide
-    // Equivalent to adding 'w' to 'z': z' = z + w
-    var final_clip_pos = clip_pos_h;
-    final_clip_pos.z = final_clip_pos.z + final_clip_pos.w;
+    clip_pos.z = 1.0 + clip_pos.z;
 
     // Assign final position
-    output.clip_position = final_clip_pos;
+    output.clip_position = clip_pos;
 
     return output;
 }

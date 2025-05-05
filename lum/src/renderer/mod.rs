@@ -87,16 +87,18 @@ impl Default for SunLight {
 }
 
 impl Camera {
-    fn update_camera(&mut self) {
+    fn update_camera(&mut self, y_flip: bool) {
         let up = vec3!(0, 0, 1); // Up vector
         self.view_size = self.origin_view_size / self.pixels_in_voxel;
         // RIGHT HANDED MATH EVERYWHERE
         let view = mat4::look_at_rh(self.camera_pos, self.camera_pos + self.camera_dir, up);
+
+        let flipper = if y_flip { -1.0 } else { 1.0 };
         let projection = mat4::orthographic_rh_no(FrustumPlanes {
             left: -self.view_size.x / 2.0,
             right: self.view_size.x / 2.0,
-            bottom: self.view_size.y / 2.0,
-            top: -self.view_size.y / 2.0,
+            bottom: self.view_size.y / 2.0 * flipper,
+            top: -self.view_size.y / 2.0 * flipper,
             near: -0.0,
             far: 2000.0,
         }); // => *(2000.0/2) for decoding
@@ -111,7 +113,7 @@ impl Camera {
 }
 
 impl SunLight {
-    fn update_light_transform(&mut self, world_size: uvec3) {
+    fn update_light_transform(&mut self, world_size: uvec3, y_flip: bool) {
         let _horizon = vec3!(1, 0, 0).normalized();
         let up = vec3!(0, 0, 1).normalized();
         let light_pos = vec3!(world_size.xy() * 16, 0) / 2.0 - (1.0 * 16.0 * self.light_dir);
@@ -120,11 +122,14 @@ impl SunLight {
         let voxel_in_pixels = 5.0;
         let view_width_in_voxels = 3000.0 / voxel_in_pixels;
         let view_height_in_voxels = 3000.0 / voxel_in_pixels;
+
+        let flipper = if y_flip { -1.0 } else { 1.0 };
+
         let projection = mat4::orthographic_rh_no(FrustumPlanes {
             left: -view_width_in_voxels / 2.0,
             right: view_width_in_voxels / 2.0,
-            bottom: view_height_in_voxels / 2.0,
-            top: -view_height_in_voxels / 2.0,
+            bottom: view_height_in_voxels / 2.0 * flipper,
+            top: -view_height_in_voxels / 2.0 * flipper,
             near: -512.0,
             far: 1024.0,
         });

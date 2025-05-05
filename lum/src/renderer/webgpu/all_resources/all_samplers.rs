@@ -1,4 +1,4 @@
-use wgpu::{AddressMode, FilterMode, Sampler, SamplerDescriptor};
+use wgpu::{AddressMode, FilterMode, Sampler, SamplerBorderColor, SamplerDescriptor};
 
 use crate::renderer::{
     webgpu::{wal::Wal, AllSamplers, InternalRendererWebGPU},
@@ -116,8 +116,8 @@ impl<'window> InternalRendererWebGPU<'window> {
             address_mode_w: AddressMode::MirrorRepeat,
             mag_filter: FilterMode::Nearest,
             min_filter: FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::Less),
-            // WGPU has no border color option; we ignore border_color.
+            // compare: Some(wgpu::CompareFunction::LessEqual),
+            border_color: Some(SamplerBorderColor::OpaqueBlack),
             ..base_sampler_desc.clone()
         };
         let shadow_sampler = create_sampler(shadow_sampler_desc);

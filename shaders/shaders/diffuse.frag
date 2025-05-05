@@ -163,13 +163,11 @@ float sample_lightmap_with_shift(int xx, int yy, vec2 base_uv, float test_depth)
 float sample_lightmap(vec3 world_pos, vec3 normal){
     // float b = (float((dot(normal, ubo.globalLightDir.xyz) < 0.0))*2.0 - 1.0);
     vec3 biased_pos = world_pos;
-    float bias;
+
     if(dot(normal, ubo.globalLightDir.xyz) > 0.0){
         biased_pos -= normal*.9;
-        bias = -0.002;
     } else {
         biased_pos += normal*.9;
-        bias = +0.002;
     }
 
     vec3 light_clip = (ubo.lightmap_proj* vec4(biased_pos,1)).xyz; //move up
@@ -245,6 +243,11 @@ void main(void){
     float sunlight = sample_lightmap(origin, stored_normal);
 
     final_color = (2.0*incoming_light+stored_mat.emmitance + sunlight) * stored_mat.color;
+
+    // final_color = origin / 1000.0;
+    // final_color = vec3(clip_pos, 0.0);
+    final_color = vec3(load_depth()/1000.0);
+    
     frame_color = vec4(encode_color(final_color),1);
 
     // frame_color = vec4(vec3(load_mat() != 0),.5);

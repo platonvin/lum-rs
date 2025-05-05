@@ -35,11 +35,11 @@ impl InternalRendererVulkan {
     }
 
     fn update_camera(&mut self) {
-        self.camera.update_camera();
+        self.camera.update_camera(false);
     }
 
     fn update_light_transform(&mut self) {
-        self.light.update_light_transform(self.settings.world_size);
+        self.light.update_light_transform(self.settings.world_size, false);
         // let horizon =
     }
 
