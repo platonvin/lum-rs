@@ -2037,16 +2037,6 @@ impl InternalRendererVulkan {
     }
 }
 
-use crate::containers::Arena;
-
-use crate::{
-    containers::Array3D,
-    renderer::types::{
-        i16vec3, mat4, u8vec3, vec3, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel,
-        InternalMeshVolumetric, MeshTransform,
-    },
-};
-
 pub struct ModelRenderRequest {
     pub cam_dist: f32,
     pub mesh: MeshModel,
@@ -2058,9 +2048,11 @@ pub struct BlockRenderRequest {
     // snapped to voxel grid
     pub pos: i16vec3,
 }
+
 pub struct FoliageRenderRequest {
     pub cam_dist: f32,
     pub mesh: MeshFoliage,
+
     //TODO: pub size: vec2
     pub pos: vec3,
 }
@@ -2534,6 +2526,7 @@ impl RendererInterface for RendererVulkan<'_> {
         // flame::start("glossy");
         self.renderer.glossy();
         // flame::end("glossy");
+
         // flame::start("smoke");
         self.renderer.smoke();
         // flame::end("smoke");
@@ -2587,15 +2580,19 @@ impl RendererInterface for RendererVulkan<'_> {
         }
 
         // none corners are in NDC range
+
         false
     }
 
     fn is_model_visible(&self, model_size: &uvec3, trans: &MeshTransform) -> bool {
         let min_corner = vec3::zero();
+
         let max_corner = vec3!(*model_size);
 
         // Transform the corners
+
         let mut transformed_corners = [vec3::default(); 8];
+
         for x in 0..=1 {
             for y in 0..=1 {
                 for z in 0..=1 {
@@ -2618,6 +2615,7 @@ impl RendererInterface for RendererVulkan<'_> {
             // Check if the point lies within the NDC range
             // i guess i can use GLM for simd but its not bottleneck for now
             // TODO: asm view to imrpove every fun
+
             if (clip.x >= -1.0)
                 && (clip.y >= -1.0)
                 && (clip.z >= -1.0)

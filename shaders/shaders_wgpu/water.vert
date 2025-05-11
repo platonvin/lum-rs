@@ -1,124 +1,156 @@
+// --- UBO Structure ---
 struct UboData {
-    trans_w2s: mat4x4<f32>,
-    campos: vec4<f32>,
-    camdir: vec4<f32>,
-    horizline_scaled: vec4<f32>,
-    vertiline_scaled: vec4<f32>,
-    global_light_dir: vec4<f32>,
-    lightmap_proj: mat4x4<f32>,
-    frame_size: vec2<f32>,
-    wind_direction: vec2<f32>,
-    timeseed: i32,
-    delta_time: f32,
-};
+    trans_w2s: mat4x4<f32>, // World to screen transformation matrix.
+    campos: vec4<f32>, // Camera position in world space.
+    camdir: vec4<f32>, // Camera direction vector.
+    horizline_scaled: vec4<f32>, // Horizon line data.
+    vertiline_scaled: vec4<f32>, // Vertical line data.
+    global_light_dir: vec4<f32>, // Global light direction.
+    lightmap_proj: mat4x4<f32>, // Lightmap projection matrix.
+    frame_size: vec2<f32>, // Size of the frame/viewport.
+    wind_direction: vec2<f32>, // Global wind direction.
+    timeseed: i32, // Time-based seed for procedural generation.
+    delta_time: f32, // Time elapsed since the last frame.
+}
 
+// --- Push Constants Structure ---
+// Matches GLSL push constants block
 struct Constants {
-    shift: vec4<f32>,
-    time: i32,
-    size: i32,
-};
+    shift: vec4<f32>, // Positional offset for the current batch, also contains world Z for water level.
+    time_size: vec4<i32>,
+}
 
+// --- Vertex Output Structure ---
 struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) orig: vec3<f32>,
-};
+    @builtin(position) position: vec4<f32>, // Clip space position.
+    @location(0) orig: vec3<f32>, // Original world position (for fragment shader).
+}
 
+// --- Bindings ---
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(0) @binding(1) var state: texture_2d<f32>;
-@group(0) @binding(2) var linear_samp: sampler;
+@group(0) @binding(1) var state: texture_2d<f32>; // Texture with wave data (e.g., Gerstner wave displacements or height components).
+@group(0) @binding(2) var linear_samp_tiled: sampler; // Sampler for the state texture.
 
-@group(1) @binding(0) var<uniform> pco: Constants;
+@group(1) @binding(0) var<uniform> pco: Constants; // Push constants.
 
-const BLOCK_PALETTE_SIZE_X: i32 = 64;
-const STATIC_BLOCK_COUNT: i32 = 15;
-const PI: f32 = 3.1415926535;
-const LODS: i32 = 6;
-const BLADES_PER_INSTANCE: i32 = 1;
-const VERTICES_PER_BLADE: i32 = 11;
-const MAX_HEIGHT: f32 = 5.0;
-
+// Simple pseudo-random number generator.
 fn rand(co: vec2<f32>) -> f32 {
     return fract(sin(dot(co, vec2<f32>(12.9898, 78.233))) * 43758.5453);
 }
 
+// Samples height from the state texture by combining different scaled UV lookups.
+// globalpos: position in world space to sample height for.
+// time: current animation time (not directly used in this version, but often is for procedural waves).
 fn get_height(globalpos: vec2<f32>, time: f32) -> f32 {
     var total_height = 0.0;
+
     let uv1 = globalpos / 13.0;
     let uv2 = globalpos / 31.0;
     let uv3 = globalpos / 35.0;
     let uv4 = globalpos / 42.0;
 
-    total_height += textureSampleLevel(state, linear_samp, uv1, 0.0).x * (13.0 / 55.0);
-    total_height += textureSampleLevel(state, linear_samp, uv2, 0.0).y * (31.0 / 55.0);
-    total_height += textureSampleLevel(state, linear_samp, uv3, 0.0).z * (35.0 / 55.0);
-    total_height += textureSampleLevel(state, linear_samp, uv4, 0.0).w * (42.0 / 55.0);
+    // Sample different channels (or the same channel if it's a heightmap) and weight them.
+    // Assumes the 'state' texture might store different wave components in its channels.
+    total_height += textureSampleLevel(state, linear_samp_tiled, uv1, 0.0).x * (13.0 / 55.0);
+    total_height += textureSampleLevel(state, linear_samp_tiled, uv2, 0.0).y * (31.0 / 55.0);
+    total_height += textureSampleLevel(state, linear_samp_tiled, uv3, 0.0).z * (35.0 / 55.0);
+    total_height += textureSampleLevel(state, linear_samp_tiled, uv4, 0.0).w * (42.0 / 55.0);
 
-    return total_height / 1.0;
+    // return 1.0;
+    return total_height; // GLSL version divides by 1.0, which is a no-op.
 }
 
-fn make_offset(globalpos: vec2<f32>, offset: vec2<i32>) -> f32 {
+// Helper function to sample the summed height at a global position with an integer pixel offset.
+// This mimics GLSL's textureOffset behavior by converting pixel offset to UV offset.
+fn make_offset(globalpos: vec2<f32>, offset_pixels: vec2<i32>) -> f32 {
     var s = 0.0;
-    let off_f = vec2<f32>(offset);
-    let texture_size = textureDimensions(state, 0);
-    let uv1 = globalpos / 13.0 + off_f / vec2<f32>(texture_size);
-    let uv2 = globalpos / 31.0 + off_f / vec2<f32>(texture_size);
-    let uv3 = globalpos / 35.0 + off_f / vec2<f32>(texture_size);
-    let uv4 = globalpos / 42.0 + off_f / vec2<f32>(texture_size);
+    let texture_dim_f = vec2<f32>(textureDimensions(state, 0u)); // Get dimensions of LOD 0.
+    let offset_uv = vec2<f32>(offset_pixels) / texture_dim_f; // Convert pixel offset to UV offset.
 
-    s += textureSampleLevel(state, linear_samp, uv1, 0.0).x * (13.0 / 55.0);
-    s += textureSampleLevel(state, linear_samp, uv2, 0.0).y * (31.0 / 55.0);
-    s += textureSampleLevel(state, linear_samp, uv3, 0.0).z * (35.0 / 55.0);
-    s += textureSampleLevel(state, linear_samp, uv4, 0.0).w * (42.0 / 55.0);
+    // Calculate base UVs
+    let base_uv1 = globalpos / 13.0;
+    let base_uv2 = globalpos / 31.0;
+    let base_uv3 = globalpos / 35.0;
+    let base_uv4 = globalpos / 42.0;
+
+    // Sample with offset applied in UV space
+    s += textureSampleLevel(state, linear_samp_tiled, base_uv1 + offset_uv, 0.0).x * (13.0 / 55.0);
+    s += textureSampleLevel(state, linear_samp_tiled, base_uv2 + offset_uv, 0.0).y * (31.0 / 55.0);
+    s += textureSampleLevel(state, linear_samp_tiled, base_uv3 + offset_uv, 0.0).z * (35.0 / 55.0);
+    s += textureSampleLevel(state, linear_samp_tiled, base_uv4 + offset_uv, 0.0).w * (42.0 / 55.0);
+
     return s;
 }
 
 fn get_normal(globalpos: vec2<f32>, time: f32) -> vec3<f32> {
-    let size = vec2<f32>(2.0, 0.0);
-    let off = array<vec2<i32>, 3>(vec2<i32>(-1, 0), vec2<i32>(1, 0), vec2<i32>(0, -1));
+    // The step size for finite differencing (distance between samples in world units,
+    // assuming 1.0 in offset corresponds to 1 pixel).
+    let sample_step_dist = 2.0; // Corresponds to GLSL's `size.x` or `size.y` in vec3 components.
 
-    let s01 = make_offset(globalpos, off[0]);
-    let s21 = make_offset(globalpos, off[1]);
-    let s10 = make_offset(globalpos, off[2]);
-    let s12 = make_offset(globalpos + vec2<f32>(0.0, 2.0), vec2<i32>(0, 0)); // Approximate s12
+    // Define 1-pixel offsets for sampling around the current point.
+    let offset_xm = vec2<i32>(-1, 0); // x-1
+    let offset_xp = vec2<i32>(1, 0); // x+1
+    let offset_ym = vec2<i32>(0, -1); // y-1
+    let offset_yp = vec2<i32>(0, 1); // y+1
 
-    let va = normalize(vec3<f32>(size.x, 0.0, s21 - s01));
-    let vb = normalize(vec3<f32>(0.0, size.x, s12 - s10));
+    // Sample heights at neighboring points.
+    let height_xm = make_offset(globalpos, offset_xm); // Height at (x-1, y)
+    let height_xp = make_offset(globalpos, offset_xp); // Height at (x+1, y)
+    let height_ym = make_offset(globalpos, offset_ym); // Height at (x, y-1)
+    let height_yp = make_offset(globalpos, offset_yp); // Height at (x, y+1)
+
+    // va: tangent along X-axis. Change in height (height_xp - height_xm) over distance sample_step_dist.
+    let va = normalize(vec3<f32>(sample_step_dist, 0.0, height_xp - height_xm));
+    // vb: tangent along Y-axis. Change in height (height_yp - height_ym) over distance sample_step_dist.
+    let vb = normalize(vec3<f32>(0.0, sample_step_dist, height_yp - height_ym));
+
     let norm = cross(va, vb);
 
-    return norm;
+    return vec3f(1, 0, 0);
 }
 
 fn wave_water_vert(pos: vec2<f32>, shift: vec2<f32>, time: f32) -> vec3<f32> {
-    let height = get_height(pos + shift, time);
-    let normal = get_normal(pos + shift, time);
-    return vec3<f32>(height, normal.xy); // Returning height and xy of normal
+    let current_global_pos = pos + shift;
+    let height = get_height(current_global_pos / 100.0, time);
+    // let normal = get_normal(current_global_pos, time);
+    return vec3<f32>(height, 0.0, 0.0);
 }
 
 fn get_water_vert(vert_index: i32, instance_index: i32, shift: vec2<f32>) -> vec3<f32> {
     var vertex = vec3<f32>(0.0);
 
-    let instance_y_shift = f32(instance_index);
-    let y_shift = f32(vert_index % 2);
-    let x_shift = f32((vert_index + 1) / 2);
-    vertex.x = (x_shift / f32(pco.size)) * 16.0;
-    vertex.y = (y_shift + instance_y_shift) / f32(pco.size) * 16.0;
+    let instance_y_offset = f32(instance_index);
+    let y_in_strip = f32(vert_index % 2);
+    let x_in_strip = f32((vert_index + 1) / 2);
 
-    let wave_data = wave_water_vert(vertex.xy, shift, f32(pco.time) / 300.0);
-    vertex.z = wave_data.x; // Height
-    // Discarding normal here as fragment shader calculates it
+    let grid_scale = 16.0;
+    vertex.x = (x_in_strip / f32(pco.time_size.y)) * grid_scale;
+    vertex.y = ((y_in_strip + instance_y_offset) / f32(pco.time_size.y)) * grid_scale;
+
+    let time_for_waves = f32(pco.time_size.x) / 300.0;
+    let wave_data = wave_water_vert(vertex.xy, shift, time_for_waves);
+    vertex.z = wave_data.x;
 
     return vertex;
 }
 
+// Main vertex shader function.
 @vertex
 fn main(@builtin(vertex_index) vert_id: u32, @builtin(instance_index) instance_id: u32) -> VertexOutput {
-    let rel2world = get_water_vert(i32(vert_id), i32(instance_id), pco.shift.xy);
-
-    let world_pos = vec4<f32>(rel2world, 1.0) + pco.shift;
-    let clip_coords = (ubo.trans_w2s * world_pos).xyz;
-
     var out: VertexOutput;
-    out.position = vec4<f32>(clip_coords, 1.0);
-    out.orig = world_pos.xyz;
+
+    let shift = pco.shift;
+    let local_pos = get_water_vert(i32(vert_id), i32(instance_id), shift.xy);
+
+    let world_pos_vec3 = local_pos + shift.xyz;
+    let world_pos = vec4<f32>(world_pos_vec3, 1.0);
+
+    var clip_pos = (ubo.trans_w2s * world_pos).xyz;
+    clip_pos.z = 1.0 + clip_pos.z;
+    out.position = vec4<f32>(clip_pos, 1.0);
+
+    // we use it for derivative so constant can be ignored
+    out.orig = local_pos;
+
     return out;
 }

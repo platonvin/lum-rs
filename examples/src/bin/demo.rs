@@ -238,6 +238,7 @@ impl<'renderer> AppState<'renderer> {
         }
 
         // literally procedural smoke placement every frame. You probably want to store it as entities in your own structures
+
         for xx in 8..10 {
             for yy in 10..13 {
                 let pos = vec3::new(xx as f32 * 16.0, yy as f32 * 16.0, 20.0);
@@ -246,6 +247,7 @@ impl<'renderer> AppState<'renderer> {
         }
 
         self.lum.prepare_frame();
+
         self.lum.end_frame();
     }
 }

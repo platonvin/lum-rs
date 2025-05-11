@@ -45,7 +45,6 @@ fn main(input: VertexInput) -> VertexOutput {
 
     // Transform to homogeneous clip space using UBO matrix
     var clip_pos = ubo.lightmap_proj * world_pos;
-
     clip_pos.z = 1.0 + clip_pos.z;
 
     // Assign final position

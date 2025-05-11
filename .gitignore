@@ -33,3 +33,4 @@ analysis.jsoncargo
 GL_CHANGES
 /webgpu_is_great
 e.bash
+rust-analyzer-check

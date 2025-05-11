@@ -38,8 +38,7 @@ fn main() {
 
     let glslc_available = Command::new("glslc").arg("--version").output().is_ok();
     if !glslc_available {
-        eprintln!("glslc not found. Shaders will not be compiled.");
-        return;
+        panic!("glslc not found. Shaders will not be compiled.");
     }
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("compiled_shaders");

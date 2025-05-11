@@ -47,22 +47,6 @@ use wgpu::{
 };
 use winit::window::Window;
 
-pub struct FrameContext<'frame> {
-    pub encoder: &'frame mut wgpu::CommandEncoder,
-    pub render_pass: Option<&'frame mut wgpu::RenderPass<'frame>>,
-    pub compute_pass: Option<&'frame mut wgpu::ComputePass<'frame>>,
-}
-
-impl<'frame> FrameContext<'frame> {
-    pub fn new(encoder: &'frame mut wgpu::CommandEncoder) -> Self {
-        Self {
-            encoder,
-            render_pass: None,
-            compute_pass: None,
-        }
-    }
-}
-
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
 impl<'window> InternalRendererWebGPU<'window> {
@@ -223,7 +207,6 @@ impl<'window> InternalRendererWebGPU<'window> {
         // only radiance updates with this offset should be processed
 
         let magic_number = 2;
-        self.counter += 1;
         let current_offset = (self.counter) % magic_number;
 
         let mut pushed_radiance_count = 0;
@@ -952,6 +935,35 @@ impl<'window> RendererWgpu<'window> {
         }
     }
 
+    fn glossy(&mut self) {
+        let mut rpass = self.renderer.current_encoder.as_mut().unwrap().begin_render_pass(
+            &wgpu::RenderPassDescriptor {
+                label: Some("Smoke Raygen Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self
+                        .renderer
+                        .dependent_images
+                        .as_ref()
+                        .unwrap()
+                        .highres_frame
+                        .current()
+                        .view,
+
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            },
+        );
+    }
+
+    fn smoke(&mut self) {}
+
     fn tonemap(&mut self) {
         let cmb = self.renderer.current_encoder.take().unwrap().finish();
         // sub all prev commands
@@ -1555,32 +1567,26 @@ impl<'window> RendererWgpu<'window> {
     }
 
     fn updade_water(&mut self) {
-        let mut encoder =
-            self.renderer
-                .wal
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Water Update Command Encoder"),
-                });
-
-        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Water Update Compute Pass"),
-            timestamp_writes: None,
-        });
+        let mut compute_pass = self.renderer.current_encoder.as_mut().unwrap().begin_compute_pass(
+            &wgpu::ComputePassDescriptor {
+                label: Some("Water Update Compute Pass"),
+                timestamp_writes: None,
+            },
+        );
 
         self.renderer
             .wal
             .bind_compute_pipeline(&mut compute_pass, &self.renderer.pipes.update_water_pipe);
 
-        // Dispatch workgroups
-        compute_pass.dispatch_workgroups(
+        self.renderer.wal.dispatch_with_params(
+            &mut compute_pass,
+            &mut self.renderer.pipes.update_water_pipe,
+            None,
+            None,
             (self.renderer.settings.world_size.x * 2).div_ceil(8),
             (self.renderer.settings.world_size.y * 2).div_ceil(8),
             1,
         );
-
-        drop(compute_pass);
-        self.renderer.wal.queue.submit(Some(encoder.finish()));
     }
 
     fn update_ao_ubo(&mut self) {
@@ -1659,26 +1665,28 @@ impl<'window> RendererWgpu<'window> {
             #[derive(AsU8Slice)] // allow cast to &[u8]
             struct PushConstant {
                 shift: vec4,
-                _size: i32,
-                _time: i32,
+                // size: i32,
+                // time: i32,
+                // pad: ivec2,
+                size_time: ivec4,
             }
 
             let push_constant = PushConstant {
                 shift: vec4!(*pos, 0),
-                _size: quality_size as i32,
-                _time: self.renderer.counter as i32,
+                size_time: ivec4!(self.renderer.counter, quality_size, 0, 0),
             };
-
-            // rpass.set_push_constants(
-            //     wgpu::ShaderStages::VERTEX_FRAGMENT,
-            //     0,
-            //     push_constant.as_u8_slice(),
-            // );
 
             let verts_per_water_tape = quality_size * 2 + 2;
             let tapes_per_block = quality_size;
 
-            rpass.draw(0..verts_per_water_tape, 0..tapes_per_block);
+            self.renderer.wal.draw_with_params(
+                &mut rpass,
+                &mut self.renderer.pipes.raygen_water_pipe,
+                None,
+                Some(push_constant.as_u8_slice()),
+                0..verts_per_water_tape,
+                0..tapes_per_block,
+            );
         }
     }
 
@@ -1723,16 +1731,16 @@ impl<'window> RendererWgpu<'window> {
 
         for frr in &self.foliage_que {
             let grass: &InternalMeshFoliage = &frr.mesh.0;
-            let pos: &vec3 = &frr.pos;
 
             let size = 10;
             let x_flip = self.renderer.camera.camera_dir.x < 0.0;
             let y_flip = self.renderer.camera.camera_dir.y < 0.0;
 
-            let pipe = &self.renderer.pipes.raygen_foliage_pipes[grass.stored_id as usize];
-            let desc = &self.renderer.foliage_descriptions[grass.stored_id as usize];
+            let pipe = &mut self.renderer.pipes.raygen_foliage_pipes[grass.stored_id as usize];
+            // FUCK FUCK FUCK WHY IS IT CACHED MY INSTRUCTIONS
+            self.renderer.wal.bind_raster_pipeline(&mut rpass, pipe);
 
-            self.renderer.wal.bind_raster_pipeline(&mut rpass, &pipe);
+            let desc = &self.renderer.foliage_descriptions[grass.stored_id as usize];
 
             #[repr(C)] // for push constants
             #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -1740,28 +1748,29 @@ impl<'window> RendererWgpu<'window> {
                 shift: vec4,
                 _size: i32,
                 _time: i32,
-                xf: i32,
-                yf: i32,
+                x_flip: i32,
+                y_flip: i32,
             }
             let push_constant = PushConstant {
-                shift: vec4!(*pos, 0),
+                shift: vec4!(frr.pos, 0),
                 _size: size as i32,
                 _time: self.renderer.counter as i32,
-                xf: x_flip as i32,
-                yf: y_flip as i32,
+                x_flip: x_flip as i32,
+                y_flip: y_flip as i32,
             };
-
-            // rpass.set_push_constants(
-            //     wgpu::ShaderStages::VERTEX_FRAGMENT,
-            //     0,
-            //     push_constant.as_u8_slice(),
-            // );
 
             let verts_per_blade = desc.vertices;
             let blade_per_instance = 1; //for triangle strip
             let instance_count = (size * size + (blade_per_instance - 1)) / blade_per_instance;
 
-            rpass.draw(0..verts_per_blade * blade_per_instance, 0..instance_count);
+            self.renderer.wal.draw_with_params(
+                &mut rpass,
+                pipe,
+                None,
+                Some(push_constant.as_u8_slice()),
+                0..verts_per_blade * blade_per_instance,
+                0..instance_count,
+            );
         }
     }
 
@@ -1922,99 +1931,83 @@ impl<'window> RendererWgpu<'window> {
     }
 
     fn lightmap_models(&mut self) {
-        {
-            // Begin the lightmap models render pass.
-
-            let render_pass_desc = wgpu::RenderPassDescriptor {
-                label: Some("Lightmap Models Render Pass"),
-                color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.renderer.independent_images.lightmap.current().view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
+        let render_pass_desc = wgpu::RenderPassDescriptor {
+            label: Some("Lightmap Models Render Pass"),
+            color_attachments: &[],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.renderer.independent_images.lightmap.current().view,
+                depth_ops: Some(wgpu::Operations {
+                    // not clear cause on top of blocks - just continuation
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
                 }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        };
+
+        let mut rpass = self
+            .renderer
+            .current_encoder
+            .as_mut()
+            .unwrap()
+            .begin_render_pass(&render_pass_desc);
+
+        self.renderer
+            .wal
+            .bind_raster_pipeline(&mut rpass, &self.renderer.pipes.lightmap_models_pipe);
+
+        for mrr in &self.model_que {
+            let model_id = mrr.mesh.0;
+            let model_mesh = &self.storage.models.get(model_id).unwrap();
+
+            rpass.set_vertex_buffer(0, model_mesh.triangles.vertexes.as_ref().unwrap().slice(..));
+            rpass.set_index_buffer(
+                model_mesh.triangles.indices.as_ref().unwrap().slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+
+            #[repr(C)] // for push constants
+            #[derive(AsU8Slice)] // allow cast to &[u8]
+            struct PushConstant {
+                rot: quat,
+                shift: vec4,
+            }
+            let push_constant = PushConstant {
+                rot: mrr.trans.rotation,
+                // 1 cause we will add 1 anyways, right?
+                shift: vec4!(mrr.trans.translation, 1),
             };
 
-            let mut rpass = self
-                .renderer
-                .current_encoder
-                .as_mut()
-                .unwrap()
-                .begin_render_pass(&render_pass_desc);
+            macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
+                ($__normal:expr, $__face:ident) => {
+                    let fnorm = vec3!($__normal);
+                    if is_face_visible(fnorm, self.renderer.camera.camera_dir) {
+                        {
+                            let buff: &IndexedVertices = &model_mesh.triangles.$__face;
 
-            for mrr in &self.model_que {
-                let ipos = ivec3!(mrr.get_pos());
-                {
-                    let model_id = mrr.mesh;
-                    let shift = ipos;
-
-                    let model_mesh = &self.storage.models.get(model_id.0).unwrap();
-
-                    rpass.set_vertex_buffer(
-                        0,
-                        model_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
-                    );
-                    rpass.set_index_buffer(
-                        model_mesh.triangles.indices.as_ref().unwrap().slice(..),
-                        wgpu::IndexFormat::Uint16,
-                    );
-
-                    /*
-                        int16_t block;
-                        i16vec3 shift;
-                        i8vec4 inorm;
-                    */
-                    #[repr(C)] // for push constants
-                    #[derive(AsU8Slice)] // allow cast to &[u8]
-
-                    struct PushConstant {
-                        shift: i16vec4,
-                    }
-                    let push_constant = PushConstant {
-                        shift: i16vec4!(shift, 0),
-                    };
-                    // rpass.set_push_constants(
-                    //     wgpu::ShaderStages::VERTEX,
-                    //     0,
-                    //     push_constant.as_u8_slice(),
-                    // );
-
-                    macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
-                        ($__normal:expr, $__face:ident) => {
-                            let fnorm = vec3!((i8vec3::new(1, 0, 0)));
-                            let inorm = ivec3!((i8vec3::new(1, 0, 0)));
-                            let is_visible = {
-                                let camera_dir = self.renderer.camera.camera_dir;
-                                fnorm.dot(camera_dir) < 0.0
-                            };
-                            if is_visible {
-                                {
-                                    let _normal = inorm;
-                                    let buff: &IndexedVertices = &model_mesh.triangles.Pzz;
-                                    rpass.draw_indexed(
-                                        buff.offset..buff.offset + buff.icount,
-                                        0 as i32,
-                                        0..1,
-                                    );
-                                };
-                            };
+                            self.renderer.wal.draw_indexed_with_params(
+                                &mut rpass,
+                                &mut self.renderer.pipes.lightmap_models_pipe,
+                                None,
+                                Some(push_constant.as_u8_slice()),
+                                buff.offset..buff.offset + buff.icount,
+                                0,
+                                0..1,
+                            );
                         };
-                    }
-
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
+                    };
                 };
             }
-        };
+
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
+            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
+        }
     }
 
     fn lightmap_blocks(&mut self) {
@@ -2024,6 +2017,7 @@ impl<'window> RendererWgpu<'window> {
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.renderer.independent_images.lightmap.current().view,
                 depth_ops: Some(wgpu::Operations {
+                    // clear cause first
                     load: wgpu::LoadOp::Clear(1.0),
                     store: wgpu::StoreOp::Store,
                 }),
@@ -2237,13 +2231,13 @@ impl<'window> RendererWgpu<'window> {
             vertiline_scaled: vec4!(vertiline_scaled, 0),
             global_light_dir: vec4!(self.renderer.light.light_dir, 0),
             lightmap_proj: self.renderer.light.light_transform,
-            timeseed: 666,
+            timeseed: self.renderer.counter as i32,
             frame_size: vec2!(
                 self.renderer.wal.config.width,
                 self.renderer.wal.config.height
             ),
-            wind_direction: Default::default(),
-            delta_time: 1.0,
+            wind_direction: vec2!(0.8, 0.2),
+            delta_time: 0.15,
             _pad_1: Default::default(),
             _pad_2: Default::default(),
         };
@@ -2742,9 +2736,10 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         let cam = self.renderer.camera.camera_transform;
         Self::calculate_and_sort_by_cam_dist(&mut self.model_que, cam);
         Self::calculate_and_sort_by_cam_dist(&mut self.block_que, cam);
-        Self::calculate_and_sort_by_cam_dist(&mut self.foliage_que, cam);
         Self::calculate_and_sort_by_cam_dist(&mut self.liquid_que, cam);
         Self::calculate_and_sort_by_cam_dist(&mut self.volumetric_que, cam);
+
+        Self::calculate_and_sort_by_cam_dist(&mut self.foliage_que, cam);
     }
 
     fn end_frame(&mut self) {
@@ -2772,7 +2767,7 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
 
         // self.update_light_ubo();
         self.lightmap_blocks();
-        // self.lightmap_models();
+        self.lightmap_models();
 
         self.update_ao_ubo();
         self.raygen_blocks();
@@ -2780,19 +2775,23 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
 
         // self.update_raygen_particles();
 
-        // self.raygen_grass();
-        // self.raygen_water();
+        self.raygen_grass();
+        self.raygen_water();
 
         // wgpu is so good that most important Vulkan feature is missing (for convinience)
-        // self.renderer.end_raygen();
+        // self. renderer.end_raygen();
 
         self.diffuse();
-        // self.ambient_occlusion();
-        // self.glossy_raygen();
-        // self.raygen_smoke();
-        self.tonemap();
+        self.ambient_occlusion();
+        self.glossy_raygen();
+        self.raygen_smoke();
 
+        self.glossy();
+        self.smoke();
+        self.tonemap();
         self.move_next();
+
+        self.renderer.counter += 1;
 
         atrace!();
     }
@@ -2800,12 +2799,13 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     fn get_world_blocks(&self) -> &Array3D<BlockId> {
         &self.renderer.current_world
     }
+
     fn get_world_blocks_mut(&mut self) -> &mut Array3D<BlockId> {
         &mut self.renderer.current_world
     }
 }
 
-// TODO: is there a simpler shorter)way to do this? I hate setters & getters
+// TODO: is there a simpler shorter way to do this? I hate setters & getters
 pub trait GetPos {
     // returns world-space pos
     fn get_pos(&self) -> vec3;

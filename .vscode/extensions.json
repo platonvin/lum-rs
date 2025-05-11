@@ -1,6 +1,5 @@
 {
     "recommendations": [
-        "yellpika.latex-input",
         "nolanderc.glsl-analyzer",
         "rust-lang.rust-analyzer",
         // There is actually a lot of good vscode extensions, like these ones, its just im unsure they need to be there

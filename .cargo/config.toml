@@ -9,7 +9,8 @@ brr = "run --release" # yes one extra r.
 [build]
     [target.x86_64-pc-windows-gnu]
     linker = "x86_64-w64-mingw32-gcc"
-
+    [target.x86_64-pc-windows-msvc]
+    linker = "rust-lld"
 
 [env]
 RUST_BACKTRACE = "short" # this is what i love in Rust
@@ -28,8 +29,6 @@ rustflags = [
 [profile.natsize.build-override]
 rustflags = [
     "-C", "target-cpu=native",
-    # "-C", "link-arg=-fuse-ld=lld",   # Use LLVM's lld linker
-    # "-Z", "threads=8"              # Use multithreaded frontend during compilation. Or is it?
     "-Zlocation-detail=none",
     "-Zfmt-debug=none",
 ]

@@ -184,7 +184,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
-                        buffers_to_binding_resources(&buffers.light_uniform),
+                        buffers_to_binding_resources(&buffers.uniform),
                     ),
                 },
                 BindGroupDescription {
@@ -494,7 +494,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                     visibility: ShaderStages::VERTEX,
                     resources: ResourceType::Static(
                         BindingType::Sampler(SamplerBindingType::Filtering),
-                        sampler_to_binding_resources(samplers.linear_sampler.as_ref().unwrap()),
+                        sampler_to_binding_resources(
+                            samplers.linear_sampler_tiled_mirrored.as_ref().unwrap(),
+                        ),
                     ),
                 },
                 BindGroupDescription {
@@ -530,12 +532,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             None,
             Some(PushConstantDescription {
                 // 2 int padding
-                size: (std::mem::size_of::<vec4>() + (std::mem::size_of::<ivec4>())) as u32,
+                size: (std::mem::size_of::<vec4>() + std::mem::size_of::<ivec4>()) as u32,
                 max_count: 16 * 1024,
-                stages: ShaderStages::VERTEX_FRAGMENT,
+                stages: ShaderStages::VERTEX,
             }),
             Some("Raygen Water Pipe"),
         );
+
         let diffuse_pipe = Wal::create_raster_pipe(
             &wal,
             &[
@@ -631,7 +634,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     binding: 8,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
                     resources: ResourceType::Static(
-                        BindingType::Sampler(SamplerBindingType::Filtering),
+                        BindingType::Sampler(SamplerBindingType::Comparison),
                         sampler_to_binding_resources(samplers.shadow_sampler.as_ref().unwrap()),
                     ),
                 },
@@ -1401,6 +1404,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             None, // no pc
             Some("Update Grass Pipe"),
         );
+
         let update_water_pipe = Wal::create_compute_pipe(
             &wal,
             &[
@@ -1423,7 +1427,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     resources: ResourceType::Static(
                         BindingType::StorageTexture {
                             access: StorageTextureAccess::WriteOnly,
-                            format: TextureFormat::Rg32Float,
+                            format: TextureFormat::Rgba32Float,
                             view_dimension: TextureViewDimension::D2,
                         },
                         images_to_binding_resources(&iimages.water_state),
@@ -1610,7 +1614,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     Some(PushConstantDescription {
                         size: (std::mem::size_of::<vec4>() + std::mem::size_of::<i32>() * 4) as u32,
                         max_count: 16 * 1024,
-                        stages: ShaderStages::VERTEX_FRAGMENT,
+                        stages: ShaderStages::VERTEX,
                     }),
                     Some("foliage pipe"),
                 )

@@ -10,10 +10,11 @@ struct UboData {
     wind_direction: vec2<f32>,
     timeseed: i32,
     delta_time: f32,
-};
+}
+;
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(0) @binding(1) var water_state: texture_storage_2d<rg32float, write>;
+@group(0) @binding(1) var water_state: texture_storage_2d<rgba32float, write>;
 
 fn calculate_height(local_pos: vec2<f32>, time: f32) -> f32 {
     var height = 0.0;
@@ -35,15 +36,19 @@ fn calculate_height(local_pos: vec2<f32>, time: f32) -> f32 {
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let pix = global_id.xy;
-    let pos = (vec2<f32>(pix) + vec2<f32>(0.5)) / (48.0 * 2.0);
+    var pos = (vec2<f32>(pix) + vec2<f32>(0.5)) * (48.0 * 2.0);
 
     var height: vec4<f32>;
-    let ftime = bitcast<f32>(ubo.timeseed);
-    let time = ftime / 300.0;
+    // let ftime = bitcast<f32>(ubo.timeseed);
+    let ftime = f32(ubo.timeseed);
+    let time = ftime / 30.0;
+
+    // pos *= 100000.0;
+
     height.x = calculate_height(pos / 1.01, time / 1.25);
     height.y = calculate_height(pos / 1.02, time / 1.5);
     height.z = calculate_height(pos / 1.03, time / 2.5);
     height.w = calculate_height(pos / 1.04, time / 3.5);
 
-    textureStore(water_state, pix, vec4<f32>(height.xy, 0.0, 0.0)); // Storing only xy as format is rg32float
+    textureStore(water_state, pix, vec4<f32>(height)); // Storing only xy as format is rg32float
 }

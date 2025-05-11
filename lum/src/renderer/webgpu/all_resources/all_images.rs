@@ -107,7 +107,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         let water_state = wal.create_image_ring(
             fif,
             wgpu::TextureDimension::D2,
-            wgpu::TextureFormat::Rg32Float,
+            wgpu::TextureFormat::Rgba32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             wgpu::Extent3d {
                 width: lum_settings.world_size.x * 2,

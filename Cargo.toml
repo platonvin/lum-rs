@@ -19,12 +19,30 @@ cargo-features = ["profile-rustflags"]
     incremental = true
     debug = true
 
+# Settings for your own packages (lum, lumal, examples)
+    # These explicitly override the general dev settings to ensure
+    # low optimization, debug info, and no inlining.
     [profile.dev.package.lum]
         opt-level = 0
+        debug = true
+        inline = "never"
     [profile.dev.package.lumal]
         opt-level = 0
+        debug = true
+        inline = "never"
     [profile.dev.package.examples]
         opt-level = 0
+        debug = true
+        inline = "never"
+    [profile.dev.package.wgpu]
+        opt-level = 1
+        debug = true
+        inline = "never"
+
+    # This wildcard applies to all packages *not* explicitly listed above.
+    [profile.dev.package."*"]
+        opt-level = 3 # Optimize dependencies highly
+        debug = false # No debug info
 
 [profile.release]
     opt-level = 3           # "s" is 5 times slower lol. TODO: investigate

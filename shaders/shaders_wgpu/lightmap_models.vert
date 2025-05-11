@@ -21,7 +21,7 @@ struct PushConstants {
 @group(1) @binding(0) var<uniform> pco: PushConstants;
 
 struct VertexInput {
-    @location(0) pos_in: vec3<u32>, // Matches layout(location = 0) in lowp uvec3 posIn;
+    @location(0) pos_in: vec4<u32>, // Matches layout(location = 0) in lowp uvec3 posIn;
 };
 
 struct VertexOutput {
@@ -38,10 +38,10 @@ fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     let u = -q_xyz; // Use u = -q.xyz for clarity
     let cross_v_u = cross(v, u);
     let term1 = cross(cross_v_u + q_w * v, u);
-    return v + 2.0 * term1;
+    // return v + 2.0 * term1;
 
     // Alternative implementation (often seen):
-    // return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
 }
 
 // --- Vertex Entry Point ---
@@ -50,24 +50,20 @@ fn main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
 
     // Convert u32 input position to f32
-    let fpos = vec3<f32>(input.pos_in);
+    let local_pos_f32 = vec3<f32>(input.pos_in.xyz);
 
     // Apply quaternion rotation from push constants
-    let rotated_pos = qtransform(pco.rot, fpos);
+    let rotated_local_pos = qtransform(pco.rot, local_pos_f32);
 
     // Apply shift from push constants
-    let world_pos = vec4<f32>(rotated_pos + pco.shift.xyz, 1.0);
+    let world_pos = vec4<f32>(rotated_local_pos + pco.shift.xyz, 1.0);
 
     // Transform to homogeneous clip space using the simplified UBO matrix
-    let clip_pos_h = ubo.trans_w2s * world_pos;
-
-    // Apply Z offset as in GLSL (clip_coords.z = 1 + clip_coords.z)
-    // Equivalent to adding 'w' to 'z': z' = z + w
-    var final_clip_pos = clip_pos_h;
-    final_clip_pos.z = final_clip_pos.z + final_clip_pos.w;
+    var clip_pos = ubo.lightmap_proj * world_pos;
+    clip_pos.z = 1.0 + clip_pos.z;
 
     // Assign final position
-    output.clip_position = final_clip_pos;
+    output.clip_position = clip_pos;
 
     return output;
 }

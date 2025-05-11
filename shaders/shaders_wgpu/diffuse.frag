@@ -33,7 +33,7 @@ struct UboData {
 @group(0) @binding(6) var linear_samp: sampler; // Sampler for radianceCache_tex
 
 @group(0) @binding(7) var lightmap_tex: texture_depth_2d; // sampler2DShadow lightmap
-@group(0) @binding(8) var lightmap_samp: sampler; // Comparison sampler for lightmap_tex
+@group(0) @binding(8) var lightmap_samp: sampler_comparison; // Comparison sampler for lightmap_tex
 
 // --- Structs ---
 struct Material {
@@ -115,7 +115,7 @@ fn load_norm(frag_coord_xy: vec2<i32>) -> vec3<f32> {
     // Assuming mat ID is in .x and normal in .gba, encoded as u8
     let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0); // LOD 0
     // Decode GBA components from [0,1] to [-1,1]
-    let norm = (vec3f(loaded_val.gba) * 2.0) - 1.0;
+    let norm = (vec3f(loaded_val.gba)/256.0 * 2.0) - 1.0;
     return norm;
 }
 
@@ -183,10 +183,7 @@ fn prev_befor_1(x: f32) -> f32 { return prev_befor(x, 1); }
 
 
 fn sample_lightmap_with_shift(base_uv: vec2<f32>, test_depth: f32, offset: vec2<f32>) -> f32 {
-     // Use textureSampleCompare: texture, sampler, uv, depth_ref
-    let tested_depth = textureSample(lightmap_tex, lightmap_samp, base_uv + offset);
-    let shadow = f32((tested_depth - test_depth) > 0.0);
-    // let shadow = textureSampleCompare(lightmap_tex, lightmap_samp, base_uv, test_depth);
+    let shadow = textureSampleCompare(lightmap_tex, lightmap_samp, base_uv + offset, test_depth);
     return shadow; // Returns 1.0 if not shadowed, 0.0 if shadowed (or potentially interpolated value)
 }
 
@@ -194,9 +191,9 @@ fn sample_lightmap(world_pos: vec3<f32>, normal: vec3<f32>) -> f32 {
     var biased_pos = world_pos;
 
     if dot(normal, ubo.global_light_dir.xyz) > 0.0 {
-        biased_pos -= normal * 0.009;
+        biased_pos -= normal * 0.9;
     } else {
-        biased_pos += normal * 0.009;
+        biased_pos += normal * 0.9;
     }
 
     var light_clip = (ubo.lightmap_proj * vec4<f32>(biased_pos, 1.0));
@@ -210,15 +207,13 @@ fn sample_lightmap(world_pos: vec3<f32>, normal: vec3<f32>) -> f32 {
     let pcfshift = vec2<f32>(1.0 / 1024.0);
     var total_light: f32 = 0.0;
 
-    // total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(-pcfshift.x, 0.0));
+    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(-pcfshift.x, 0.0));
     total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, 0.0));
-    // total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(pcfshift.x, 0.0));
-    // total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, -pcfshift.y));
-    // total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, pcfshift.y));
+    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(pcfshift.x, 0.0));
+    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, -pcfshift.y));
+    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, pcfshift.y));
 
-    return total_light;
-    
-    // return (total_light / 5.0) * 0.15;
+    return (total_light / 5.0) * 0.15;
 }
 
 fn decode_color(encoded_color: vec3<f32>) -> vec3<f32> {
@@ -263,13 +258,13 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> FragmentOutput {
 
     // Sample lighting
     // Applying normal offset before sampling radiance, as in GLSL
-    // let incoming_light = sample_radiance_directional(origin + stored_normal * 6.0, stored_normal); 
-    let incoming_light = 0.0; 
+    let probe_light = sample_radiance_directional(origin + stored_normal * 6.0, stored_normal); 
+    // cause we are humans. And for humans sun is a special thing
     let sunlight = sample_lightmap(origin, stored_normal);
 
     // Combine lighting and material properties
     // Factor 2.0 applied to incoming_light as in GLSL
-    var final_color = (2.0 * incoming_light + stored_mat.emmitance + sunlight) * stored_mat.color;
+    var final_color = (2.0 * probe_light + stored_mat.emmitance + sunlight) * stored_mat.color;
     // final_color = vec3<f32>(vec2<f32>(frag_coord_xy) / ubo.frame_size, 0.0); 
     // final_color = vec3<f32>(stored_mat.color); 
     // final_color = vec3<f32>(mat_id); 

@@ -1,4 +1,7 @@
-inherit TODO from lum++
+
+
+wgpu pipeline bound caching / at high level (array of sorted arrays)
+wgpui better pcnherit TODO from lum++
 try_into<Type>().unwrap() -> as Type 
 
 profile query
@@ -138,3 +141,8 @@ less unsafe (maybe some crate?)
 merge vector libs
 less deps
 feature deps
+
+wgpu pipeline bound caching / at high level (array of sorted arrays)
+wgpu better pc
+
+dont diffuse for full glossy
