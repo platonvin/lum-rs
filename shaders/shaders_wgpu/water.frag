@@ -42,8 +42,9 @@ const MAX_HEIGHT: f32 = 5.0;
 
 @fragment
 fn main(in: VertexOutput) -> FragmentOutput {
-    let normal = normalize(cross(dpdxFine(in.orig), dpdyFine(in.orig)));
-    let normal_encoded = vec3<u32>(((normal + 1.0) / 2.0) * 255.0 + 0.5);
+    // let normal = normalize(cross(dpdxFine(in.orig), dpdyFine(in.orig)));
+    let normal = vec3f(0, 0, 1);
+    let normal_encoded = vec3<u32>(((normal + 1.0) / 2.0) * 255.0);
 
     let water_mat_id = 30u;
 

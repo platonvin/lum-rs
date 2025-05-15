@@ -73,7 +73,6 @@ pub struct PackedVoxelQuad {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelCircuit {
     pub pos: u8vec3,
-
 }
 
 // Conversion function from UVec3 to vk::Extent3D

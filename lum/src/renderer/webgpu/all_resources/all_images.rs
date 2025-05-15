@@ -1,8 +1,8 @@
 use crate::renderer::{
     webgpu::{
         wal::Wal, AllIndependentImages, AllSwapchainDependentImages, InternalRendererWebGPU,
-        BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, CHOSEN_DEPTH_FORMAT, FRAME_FORMAT,
-        LIGHTMAPS_FORMAT, MATNORM_FORMAT, RADIANCE_FORMAT, SECONDARY_DEPTH_FORMAT,
+        BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, CHOSEN_DEPTH_FORMAT, CHOSEN_STENCIL_FORMAT,
+        FRAME_FORMAT, LIGHTMAPS_FORMAT, MATNORM_FORMAT, RADIANCE_FORMAT, SECONDARY_DEPTH_FORMAT,
     },
     Settings,
 };
@@ -186,17 +186,30 @@ impl<'window> InternalRendererWebGPU<'window> {
             Some("Highres Mat Norm"),
         );
 
-        let highres_depth_stencil = wal.create_image_ring(
+        let highres_depth = wal.create_image_ring(
             fif,
             wgpu::TextureDimension::D2,
             unsafe { CHOSEN_DEPTH_FORMAT.unwrap() },
             wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST
+                // | wgpu::TextureUsages::COPY_SRC
+                // | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             sextent,
             1,
-            Some("Highres Depth Stencil"),
+            Some("Highres Depth"),
+        );
+
+        let highres_stencil = wal.create_image_ring(
+            fif,
+            wgpu::TextureDimension::D2,
+            unsafe { CHOSEN_STENCIL_FORMAT.unwrap() },
+            wgpu::TextureUsages::TEXTURE_BINDING
+                // | wgpu::TextureUsages::COPY_SRC
+                // | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            sextent,
+            1,
+            Some("Highres Stencil"),
         );
 
         let highres_frame = wal.create_image_ring(
@@ -213,34 +226,34 @@ impl<'window> InternalRendererWebGPU<'window> {
             Some("Highres Frame"),
         );
 
-        let mut stencil_view_for_ds = Vec::with_capacity(fif);
-        let mut full_view_for_ds = Vec::with_capacity(fif);
-        for texture in &highres_depth_stencil {
-            stencil_view_for_ds.push(texture.texture.create_view(&wgpu::TextureViewDescriptor {
-                label: Some("Stencil View for DS"),
-                format: None,
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                aspect: wgpu::TextureAspect::StencilOnly,
-                base_mip_level: 0,
-                mip_level_count: Some(1),
-                base_array_layer: 0,
-                array_layer_count: Some(1),
-                usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
-            }));
-            full_view_for_ds.push(texture.texture.create_view(&wgpu::TextureViewDescriptor {
-                label: Some("Stencil View for DS"),
-                format: None,
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                mip_level_count: Some(1),
-                base_array_layer: 0,
-                array_layer_count: Some(1),
-                usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
-            }));
-        }
-        let stencil_view_for_ds = lumal::ring::Ring::from_vec(stencil_view_for_ds);
-        let full_view_for_ds = lumal::ring::Ring::from_vec(full_view_for_ds);
+        // let mut stencil_view_for_ds = Vec::with_capacity(fif);
+        // let mut full_view_for_ds = Vec::with_capacity(fif);
+        // for texture in & {
+        //     stencil_view_for_ds.push(texture.texture.create_view(&wgpu::TextureViewDescriptor {
+        //         label: Some("Stencil View for DS"),
+        //         format: None,
+        //         dimension: Some(wgpu::TextureViewDimension::D2),
+        //         aspect: wgpu::TextureAspect::StencilOnly,
+        //         base_mip_level: 0,
+        //         mip_level_count: Some(1),
+        //         base_array_layer: 0,
+        //         array_layer_count: Some(1),
+        //         usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
+        //     }));
+        //     full_view_for_ds.push(texture.texture.create_view(&wgpu::TextureViewDescriptor {
+        //         label: Some("Stencil View for DS"),
+        //         format: None,
+        //         dimension: Some(wgpu::TextureViewDimension::D2),
+        //         aspect: wgpu::TextureAspect::All,
+        //         base_mip_level: 0,
+        //         mip_level_count: Some(1),
+        //         base_array_layer: 0,
+        //         array_layer_count: Some(1),
+        //         usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
+        //     }));
+        // }
+        // let stencil_view_for_ds = lumal::ring::Ring::from_vec(stencil_view_for_ds);
+        // let full_view_for_ds = lumal::ring::Ring::from_vec(full_view_for_ds);
 
         // these are not native depth textures, they achive depth functionality via blend
         let far_depth = wal.create_image_ring(
@@ -270,10 +283,9 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         AllSwapchainDependentImages {
             highres_frame,
-            highres_depth_stencil,
+            highres_depth,
+            highres_stencil,
             highres_mat_norm,
-            stencil_view_for_ds,
-            full_view_for_ds,
             far_depth,
             near_depth,
         }

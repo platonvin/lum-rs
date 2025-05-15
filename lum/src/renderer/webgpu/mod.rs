@@ -29,8 +29,8 @@ const BLOCK_SIZE: u32 = 16;
 const FRAMES_IN_FLIGHT: usize = 2;
 const DEPTH_FORMAT_SPARE: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8; // TODO somehow D32 faster than wgpu::TextureFormat::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED: wgpu::TextureFormat = wgpu::TextureFormat::Depth32FloatStencil8;
-static mut CHOSEN_DEPTH_FORMAT: Option<wgpu::TextureFormat> =
-    Some(TextureFormat::Depth32FloatStencil8); // TODO:
+static mut CHOSEN_DEPTH_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Depth32Float); // TODO:
+static mut CHOSEN_STENCIL_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Stencil8); // TODO:
 static mut SWAPCHAIN_FORMAT: Option<wgpu::TextureFormat> = None;
 
 #[derive(Default)]
@@ -76,10 +76,11 @@ pub struct AllSamplers {
 // #[derive(Default)]
 pub struct AllSwapchainDependentImages {
     pub highres_frame: Ring<Image>, // Ring equivalent will need careful management
-    pub highres_depth_stencil: Ring<Image>,
+    pub highres_depth: Ring<Image>,
+    pub highres_stencil: Ring<Image>,
     pub highres_mat_norm: Ring<Image>,
-    pub full_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
-    pub stencil_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
+    // pub full_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
+    // pub stencil_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
     pub far_depth: Ring<Image>,
     pub near_depth: Ring<Image>,
 }

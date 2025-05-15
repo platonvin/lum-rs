@@ -283,7 +283,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
@@ -354,7 +354,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
@@ -452,7 +452,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
@@ -523,7 +523,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
@@ -575,7 +575,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                             view_dimension: TextureViewDimension::D2,
                             multisampled: false,
                         },
-                        images_to_binding_resources(&dimages.highres_depth_stencil),
+                        images_to_binding_resources(&dimages.highres_depth),
                     ),
                 },
                 BindGroupDescription {
@@ -719,7 +719,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                             view_dimension: TextureViewDimension::D2,
                             multisampled: false,
                         },
-                        images_to_binding_resources(&dimages.highres_depth_stencil),
+                        images_to_binding_resources(&dimages.highres_depth),
                     ),
                 },
                 BindGroupDescription {
@@ -803,7 +803,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             PrimitiveTopology::TriangleList,
             vec![],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Stencil8,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState {
@@ -884,9 +884,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                 }),
             ],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Stencil8,
                 depth_write_enabled: false,
-                depth_compare: CompareFunction::Less,
+                depth_compare: CompareFunction::Always,
                 stencil: StencilState {
                     front: StencilFaceState {
                         compare: CompareFunction::Always,
@@ -955,7 +955,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                             view_dimension: TextureViewDimension::D2,
                             multisampled: false,
                         },
-                        images_to_binding_resources(&dimages.highres_depth_stencil),
+                        images_to_binding_resources(&dimages.highres_depth),
                     ),
                 },
                 BindGroupDescription {
@@ -1065,7 +1065,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Stencil8,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState {
@@ -1082,11 +1082,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some(PushConstantDescription {
-                size: (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32,
-                max_count: 16 * 1024,
-                stages: ShaderStages::VERTEX_FRAGMENT,
-            }),
+            None, // no pc lol now its all in ubo
             Some("Glossy Pipe"),
         );
 
@@ -1183,7 +1179,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 write_mask: ColorWrites::ALL,
             })],
             Some(DepthStencilState {
-                format: TextureFormat::Depth32FloatStencil8,
+                format: TextureFormat::Stencil8,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState {
@@ -1604,7 +1600,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         write_mask: ColorWrites::ALL,
                     })],
                     Some(DepthStencilState {
-                        format: TextureFormat::Depth32FloatStencil8,
+                        format: TextureFormat::Depth32Float,
                         depth_write_enabled: true,
                         depth_compare: CompareFunction::Less,
                         stencil: StencilState::default(),

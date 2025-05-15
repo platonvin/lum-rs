@@ -150,7 +150,7 @@ fn main(@builtin(vertex_index) vert_id: u32, @builtin(instance_index) instance_i
     out.position = vec4<f32>(clip_pos, 1.0);
 
     // we use it for derivative so constant can be ignored
-    out.orig = local_pos;
+    out.orig = world_pos_vec3;
 
     return out;
 }

@@ -1,8 +1,4 @@
-use block_mesh::{greedy_quads, GreedyQuadsBuffer};
-use renderer::*;
-use lumal::{vk::MappedMemoryRange, BufferDeletion, ImageDeletion};
-use qvek::vec3;
-// use rand::Rng;
+use super::InternalRendererVulkan;
 use crate::{
     containers::Array3D,
     renderer::{
@@ -11,12 +7,12 @@ use crate::{
     },
     *,
 };
-use renderer::types::*;
+use block_mesh::{greedy_quads, GreedyQuadsBuffer};
 use lumal::vk;
-
-use super::InternalRendererVulkan;
-
-// impl InternalRendererVulkan {}
+use lumal::{vk::MappedMemoryRange, BufferDeletion, ImageDeletion};
+use qvek::vec3;
+use renderer::types::*;
+use renderer::*;
 
 impl super::InternalRendererVulkan {
     // TODO: runtime copies in single copy command buffer instead of per-model cmb

@@ -813,8 +813,9 @@ impl<'window> RendererWgpu<'window> {
                         .dependent_images
                         .as_ref()
                         .unwrap()
-                        .full_view_for_ds
-                        .current(),
+                        .highres_stencil
+                        .current()
+                        .view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -880,8 +881,9 @@ impl<'window> RendererWgpu<'window> {
                         .dependent_images
                         .as_ref()
                         .unwrap()
-                        .full_view_for_ds
-                        .current(),
+                        .highres_stencil
+                        .current()
+                        .view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -938,7 +940,7 @@ impl<'window> RendererWgpu<'window> {
     fn glossy(&mut self) {
         let mut rpass = self.renderer.current_encoder.as_mut().unwrap().begin_render_pass(
             &wgpu::RenderPassDescriptor {
-                label: Some("Smoke Raygen Render Pass"),
+                label: Some("Glossy Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self
                         .renderer
@@ -948,18 +950,40 @@ impl<'window> RendererWgpu<'window> {
                         .highres_frame
                         .current()
                         .view,
-
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self
+                        .renderer
+                        .dependent_images
+                        .as_ref()
+                        .unwrap()
+                        .highres_stencil
+                        .current()
+                        .view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             },
         );
+
+        self.renderer
+            .wal
+            .bind_raster_pipeline(&mut rpass, &self.renderer.pipes.glossy_pipe);
+
+        rpass.draw(0..3, 0..1);
     }
 
     fn smoke(&mut self) {}
@@ -1020,15 +1044,9 @@ impl<'window> RendererWgpu<'window> {
 
     fn move_next(&mut self) {
         self.renderer.dependent_images.as_mut().unwrap().highres_frame.move_next();
-        self.renderer
-            .dependent_images
-            .as_mut()
-            .unwrap()
-            .highres_depth_stencil
-            .move_next();
+        self.renderer.dependent_images.as_mut().unwrap().highres_depth.move_next();
+        self.renderer.dependent_images.as_mut().unwrap().highres_stencil.move_next();
         self.renderer.dependent_images.as_mut().unwrap().highres_mat_norm.move_next();
-        self.renderer.dependent_images.as_mut().unwrap().full_view_for_ds.move_next();
-        self.renderer.dependent_images.as_mut().unwrap().stencil_view_for_ds.move_next();
         self.renderer.dependent_images.as_mut().unwrap().far_depth.move_next();
         self.renderer.dependent_images.as_mut().unwrap().near_depth.move_next();
 
@@ -1639,8 +1657,9 @@ impl<'window> RendererWgpu<'window> {
                         .dependent_images
                         .as_ref()
                         .unwrap()
-                        .full_view_for_ds
-                        .current(),
+                        .highres_depth
+                        .current()
+                        .view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -1716,8 +1735,9 @@ impl<'window> RendererWgpu<'window> {
                         .dependent_images
                         .as_ref()
                         .unwrap()
-                        .full_view_for_ds
-                        .current(),
+                        .highres_depth
+                        .current()
+                        .view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -1840,7 +1860,7 @@ impl<'window> RendererWgpu<'window> {
                             .dependent_images
                             .as_ref()
                             .unwrap()
-                            .highres_depth_stencil
+                            .highres_depth
                             .current()
                             .view,
                         depth_ops: Some(wgpu::Operations {
@@ -2144,8 +2164,9 @@ impl<'window> RendererWgpu<'window> {
                             .dependent_images
                             .as_ref()
                             .unwrap()
-                            .full_view_for_ds
-                            .current(),
+                            .highres_depth
+                            .current()
+                            .view,
                         depth_ops: Some(wgpu::Operations {
                             // clear cause first
                             load: wgpu::LoadOp::Clear(1.0),
@@ -2338,8 +2359,9 @@ impl<'window> RendererWgpu<'window> {
                         .dependent_images
                         .as_ref()
                         .unwrap()
-                        .full_view_for_ds
-                        .current(),
+                        .highres_depth
+                        .current()
+                        .view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,

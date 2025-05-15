@@ -1,3 +1,5 @@
+use crate::containers::Arena;
+use crate::containers::Array3D;
 use crate::renderer::{load_interface::LoadInterface, vulkan::types::*};
 use crate::renderer::{render_interface::RendererInterface, types::*};
 use crate::{
@@ -8,10 +10,9 @@ use crate::{
         *,
     },
 };
-use std::mem::transmute;
-
 use aabb::{get_shift, iAABB};
 use as_u8_slice_derive::AsU8Slice;
+use std::mem::transmute;
 // use multiversion::multiversion;
 use lumal::vk;
 use qvek::{
@@ -1816,7 +1817,7 @@ impl InternalRendererVulkan {
             lp: mat4,
         }
         // kinda rnd source
-        let transmuted_frame = unsafe { transmute::<i32, f32>(self.lumal.frame) };
+        let transmuted_frame = unsafe { f32::from_bits(i32::cast_unsigned(self.lumal.frame)) };
         let push_constant = PushConstant {
             v1: vec4!(self.camera.camera_pos, transmuted_frame),
             v2: vec4!(self.camera.camera_dir, 0),

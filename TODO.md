@@ -146,3 +146,6 @@ wgpu pipeline bound caching / at high level (array of sorted arrays)
 wgpu better pc
 
 dont diffuse for full glossy
+
+
+rust-analyzer eats 2 characters on deleting a line with CRLF on windows. Why the fuck?
