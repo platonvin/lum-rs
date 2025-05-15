@@ -12,10 +12,16 @@ use std::{
 // so what i do here is relying on fact they have the same name
 // and correct approach is not relying on this
 
+#[cfg(feature = "wgpu_backend")]
 use lum::renderer::webgpu::render::RendererWgpu as Renderer;
+#[cfg(feature = "wgpu_backend")]
 use lum::renderer::webgpu::types::*;
-// use lum::renderer::vulkan::render::RendererVulkan as Renderer;
-// use lum::renderer::vulkan::types::*;
+
+#[cfg(feature = "vk_backend")]
+use lum::renderer::vulkan::render::RendererVulkan as Renderer;
+#[cfg(feature = "vk_backend")]
+use lum::renderer::vulkan::types::*;
+
 use lum::renderer::{
     load_interface::LoadInterface,
     render_interface::{FoliageDescriptionBuilder, RendererInterface},
@@ -100,8 +106,10 @@ impl<'renderer> AppState<'renderer> {
         let mut foliage_desc_builder =
             <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
         let grass = foliage_desc_builder.load_foliage(Self::FoliageDescription {
+            #[cfg(feature = "wgpu_backend")]
             code: shaders::get_wgsl("grass.vert").unwrap(),
-            // spirv_code: shaders::get_shader("grass.vert.spv").unwrap().to_vec(),
+            #[cfg(feature = "vk_backend")]
+            spirv_code: shaders::get_shader("grass.vert.spv").unwrap().to_vec(),
             vertices: 13,
             density: 100,
         });

@@ -4,31 +4,35 @@ t = "test"
 b = "build"
 r = "run"
 br = "build --release"
-brr = "run --release" # yes one extra r.
+brr = "run --release"                                              # yes one extra r.
+rv = "run --profile rv --package examples --features vk_backend"
+rw = "run --profile rw --package examples --features wgpu_backend"
 
 [build]
-    [target.x86_64-pc-windows-gnu]
-    linker = "x86_64-w64-mingw32-gcc"
-    [target.x86_64-pc-windows-msvc]
-    linker = "rust-lld"
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
 
 [env]
 RUST_BACKTRACE = "short" # this is what i love in Rust
-    
+
 # native is highest perfomance build
 [profile.native.build-override]
 rustflags = [
-    "-C", "target-cpu=native",
+    "-C",
+    "target-cpu=native",
     # "-C", "link-arg=-fuse-ld=lld",
     # "-Z", "threads=8"
     "-Zlocation-detail=none",
     "-Zfmt-debug=none",
 ]
-    
+
 # natsize is smallest build
 [profile.natsize.build-override]
 rustflags = [
-    "-C", "target-cpu=native",
+    "-C",
+    "target-cpu=native",
     "-Zlocation-detail=none",
     "-Zfmt-debug=none",
 ]

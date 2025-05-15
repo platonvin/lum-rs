@@ -10,7 +10,7 @@ layout(set = 0, binding = 0) uniform sampler2D ui_elem_texture;
 
 layout(location = 0) out vec4 outColor;
 
-const float COLOR_ENCODE_VALUE = 8.0;
+const float COLOR_ENCODE_VALUE = 1.0;
 vec3 decode_color(vec3 encoded_color){
     return clamp(encoded_color,0,1)*vec3(COLOR_ENCODE_VALUE);
 }

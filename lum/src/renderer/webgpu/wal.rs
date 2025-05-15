@@ -141,7 +141,11 @@ impl<'window> Wal<'window> {
             })
             .await
             .unwrap();
-        unsafe { SWAPCHAIN_FORMAT = Some(surface.get_capabilities(&adapter).formats[0]) };
+        unsafe {
+            SWAPCHAIN_FORMAT =
+                Some(surface.get_capabilities(&adapter).formats[0].remove_srgb_suffix());
+            dbg!(SWAPCHAIN_FORMAT);
+        };
 
         // 5) Configure the swapchain (surface)
         let config = wgpu::SurfaceConfiguration {

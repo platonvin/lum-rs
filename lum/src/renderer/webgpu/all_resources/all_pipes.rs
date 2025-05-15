@@ -809,9 +809,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stencil: StencilState {
                     front: StencilFaceState {
                         compare: CompareFunction::Always,
+                        pass_op: StencilOperation::Replace,
                         fail_op: StencilOperation::Replace,
                         depth_fail_op: StencilOperation::Replace,
-                        pass_op: StencilOperation::Replace,
                     },
                     back: StencilFaceState::default(),
                     read_mask: 0x00,
@@ -1071,9 +1071,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stencil: StencilState {
                     front: StencilFaceState {
                         compare: CompareFunction::Equal,
+                        pass_op: StencilOperation::Keep,
                         fail_op: StencilOperation::Keep,
                         depth_fail_op: StencilOperation::Keep,
-                        pass_op: StencilOperation::Keep,
                     },
                     back: StencilFaceState::default(),
                     read_mask: 0x01,
@@ -1311,6 +1311,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                             format: TextureFormat::Rgba16Float,
                             view_dimension: TextureViewDimension::D3,
                         },
+                        // reading old one to make a new one
                         images_to_binding_resources(&iimages.radiance_cache),
                     ),
                 },
@@ -1342,6 +1343,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             None,
             Some("Radiance Pipe"),
         );
+
         let update_grass_pipe = Wal::create_compute_pipe(
             &wal,
             &[

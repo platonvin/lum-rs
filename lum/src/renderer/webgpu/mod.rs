@@ -18,7 +18,7 @@ use super::Settings;
 use crate::renderer::types::*;
 use crate::{containers::Array3D, renderer::webgpu::types::*};
 
-const FRAME_FORMAT: TextureFormat = TextureFormat::Rgb10a2Unorm;
+const FRAME_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 const MATNORM_FORMAT: TextureFormat = TextureFormat::Rgba8Uint;
 const RADIANCE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;

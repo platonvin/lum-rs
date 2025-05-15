@@ -55,7 +55,7 @@ vec3 get_shift_from_depth(float depth_diff, vec2 clip_shift){
     return shift;
 }
 
-const float COLOR_ENCODE_VALUE = 8.0;
+const float COLOR_ENCODE_VALUE = 1.0;
 vec3 decode_color(vec3 encoded_color){
     return encoded_color*COLOR_ENCODE_VALUE;
 }

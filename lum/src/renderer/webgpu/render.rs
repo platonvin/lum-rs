@@ -309,7 +309,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     #[optimize(speed)]
     pub fn update_radiance(&mut self) {
         // separation for multiverse
-        Self::_update_radiance(self);
+        Self::internal_update_radiance(self);
     }
 
     // starts the stage where you can "request drawing" things
@@ -331,12 +331,9 @@ impl<'window> InternalRendererWebGPU<'window> {
     // #[multiversion(targets("x86_64+avx2"))]
     #[optimize(speed)]
     /// Updates the radiance field by copying staging data, dispatching compute work, and setting push constants.
-    pub fn _update_radiance(&mut self) {
+    fn internal_update_radiance(&mut self) {
         // Get the current command encoder.
-        let encoder = self
-            .current_encoder
-            .as_mut()
-            .expect("Command encoder should be created in start_frame");
+        let encoder = self.current_encoder.as_mut().unwrap();
 
         // Copy radiance_updates from CPU memory to staging buffer.
         let count_to_copy = self.radiance_updates.len();
@@ -382,6 +379,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         // Dispatch the compute work.
         let workgroup_count = count_to_copy as u32;
+        // println!("{workgroup_count}");
 
         self.wal.dispatch_with_params(
             &mut compute_pass,
@@ -443,7 +441,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         // First, copy from the current radiance cache to the previous one.
         // In WGPU, we use copy_texture_to_texture. (No explicit barriers are needed.)
         let src_copy = TexelCopyTextureInfo {
-            texture: &self.independent_images.radiance_cache.current().texture,
+            texture: &self.independent_images.radiance_cache.previous().texture,
             mip_level: 0,
             origin: Origin3d {
                 x: self_src_offset.x as u32,
@@ -453,7 +451,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             aspect: wgpu::TextureAspect::All,
         };
         let dst_copy = TexelCopyTextureInfo {
-            texture: &self.independent_images.radiance_cache.previous().texture,
+            texture: &self.independent_images.radiance_cache.current().texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
@@ -462,13 +460,13 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         // Then, copy back from the previous image to the current one with a destination offset.
         let src_back = TexelCopyTextureInfo {
-            texture: &self.independent_images.radiance_cache.previous().texture,
+            texture: &self.independent_images.radiance_cache.current().texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         };
         let dst_back = TexelCopyTextureInfo {
-            texture: &self.independent_images.radiance_cache.current().texture,
+            texture: &self.independent_images.radiance_cache.previous().texture,
             mip_level: 0,
             origin: Origin3d {
                 x: self_dst_offset.x as u32,
@@ -1011,7 +1009,8 @@ impl<'window> RendererWgpu<'window> {
         let swapchain_view = swapchain_texture.texture.create_view(&wgpu::TextureViewDescriptor {
             // Without add_srgb_suffix() the image we will be working with
             // might not be "gamma correct".
-            format: Some(self.renderer.wal.config.format.add_srgb_suffix()),
+            format: Some(self.renderer.wal.config.format),
+            // format: Some(self.renderer.wal.config.format.add_srgb_suffix()),
             ..Default::default()
         });
         {
@@ -2767,17 +2766,20 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     fn end_frame(&mut self) {
         // yes, started here cause no reason not to group
 
+        // why these two are here is explained below
         self.blockify_models();
         self.renderer.find_radiance_to_update();
+
         // you may wonder why is start_frame here, and not in the beginning
-        // this is because it contains syncronization, which im trying to delay as much as possible
-        // sadly, it does not help when you are CPU-bound (which is the case here). But still useful
+        // this is because it contains GPU-sync, which im trying to delay as much as possible
+        // sadly, it does not help when you are CPU-bound (which is the case here). But still a bit useful
         self.renderer.start_frame();
         self.update_ubo();
 
-        self.renderer.shift_radiance(self.radiance_shift);
         self.radiance_shift = ivec3::zero();
+        self.renderer.shift_radiance(self.radiance_shift);
         self.renderer.update_radiance();
+
         self.updade_grass(Default::default());
         self.updade_water();
         self.renderer.exec_copies();

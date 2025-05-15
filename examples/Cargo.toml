@@ -1,12 +1,16 @@
 [package]
-    name = "examples"
-    version = "0.1.0"
-    edition = "2021"
-    publish = false
+name = "examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+wgpu_backend = ["lum/wgpu_backend"]
+vk_backend = ["lum/vk_backend"]
 
 [dependencies]
-    lum = { path = "../lum" } # Dependency on lum crate
-    shaders = { path = "../shaders" } # Dependency on shaders crate (just compiles all of them)
-    winit = "0.30.8"
-    anyhow = "1"
-    flame = "0.2.2"
+lum = { path = "../lum" }         # Dependency on lum crate
+shaders = { path = "../shaders" } # Dependency on shaders crate (just compiles all of them)
+winit = "0.30.8"
+anyhow = "1"
+flame = "0.2.2"

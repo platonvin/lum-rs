@@ -1,11 +1,11 @@
 use std::mem;
 
 use crate::renderer::{
+    types::{i8vec4, ivec4, mat4, AoLut},
     vulkan::{
         types::{BlockId, Particle},
         AllBuffers, InternalRendererVulkan,
     },
-    types::{i8vec4, ivec4, mat4, AoLut},
     Settings,
 };
 // use internal_renderer::{InternalRendererVulkan, *};

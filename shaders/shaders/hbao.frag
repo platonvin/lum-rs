@@ -56,7 +56,7 @@ float load_depth(vec2 uv){
 //         (ubo.camdir.xyz*depth_diff);
 //     return shift;
 // }
-const float COLOR_ENCODE_VALUE = 8.0;
+const float COLOR_ENCODE_VALUE = 1.0;
 vec3 decode_color(vec3 encoded_color){
     return encoded_color*COLOR_ENCODE_VALUE;
 }
@@ -138,6 +138,6 @@ void main() {
     // obfuscation = clamp((obfuscation), 0.0, 0.7);
     // obfuscation *= 0.7;
     frame_color = (vec4(encode_color(vec3(0.0)), obfuscation));
-    // frame_color = (vec4(encode_color(vec3(obfuscation)), 1));
+    frame_color = (vec4(encode_color(vec3(obfuscation)), 0.0));
     // frame_color = (vec4(encode_color(vec3(0.0)), 0));
 } 

@@ -176,7 +176,7 @@ mat2 rotatem(float a) {
 	return m;
 }
 
-const float COLOR_ENCODE_VALUE = 8.0;
+const float COLOR_ENCODE_VALUE = 1.0;
 vec3 decode_color(vec3 encoded_color){
     return encoded_color*COLOR_ENCODE_VALUE;
 }
@@ -250,4 +250,5 @@ void main() {
     //1-I because its inverted
     float smoke_opacity = 1.0 - I;
     smoke_color = vec4(encode_color(vec3(final_light)), smoke_opacity);
+    // smoke_color = vec4(encode_color(vec3(final_light)), 0.0);
 } 

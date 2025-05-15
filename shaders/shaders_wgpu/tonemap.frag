@@ -1,10 +1,12 @@
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-};
+}
+;
 
 struct FragmentOutput {
     @location(0) frame_color: vec4<f32>,
-};
+}
+;
 
 @group(0) @binding(0) var rendered_frame: texture_2d<f32>;
 
@@ -89,7 +91,7 @@ fn adjust_contrast(color: vec3<f32>, value: f32) -> vec3<f32> {
 
 fn adjust_exposure(color: vec3<f32>, value: f32) -> vec3<f32> {
     return (1.0 + value) * color;
-}
+}   
 
 fn adjust_saturation(color: vec3<f32>, value: f32) -> vec3<f32> {
     let grayscale = luminance(color);

@@ -4,4 +4,8 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+vk_backend = []
+wgpu_backend = []
+
 [lib]

@@ -25,22 +25,23 @@ struct AoLutEntry {
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(0) @binding(1) var<uniform> lut_buffer: array<AoLutEntry, 8>; 
+@group(0) @binding(1) var<uniform> lut_buffer: array<AoLutEntry, 8>;
 @group(0) @binding(2) var matNorm_tex: texture_2d<u32>; // usubpassInput matNorm (Assuming RGBA format)
 @group(0) @binding(3) var depthBuffer_tex: texture_depth_2d; // sampler2D depthBuffer
-@group(0) @binding(4) var depth_samp: sampler;           // Sampler for depthBuffer
+@group(0) @binding(4) var depth_samp: sampler; // Sampler for depthBuffer
 
 const COLOR_ENCODE_VALUE: f32 = 8.0;
 const SAMPLE_COUNT: i32 = 8;
 
 struct FragmentOutput {
     @location(0) frame_color: vec4<f32>,
-};
+}
+;
 
 fn load_norm(frag_coord_xy: vec2<i32>) -> vec3<f32> {
-    let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0);
-    let norm = (vec3f(loaded_val.gba) * 2.0) - 1.0;
-    return normalize(norm);
+    let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0); // LOD 0
+    let norm = (vec3f(loaded_val.gba) / 256.0 * 2.0) - 1.0;
+    return norm;
 }
 
 // Loads material ID (unused in this shader, but kept for consistency if needed)
@@ -83,7 +84,7 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> FragmentOutput {
     var total_ao: f32 = 0.0;
 
     // Loop through precomputed samples in the LUT
-    for (var i: i32 = 0; i < SAMPLE_COUNT; i = i + 1) {
+    for (var i: i32 = 0; i < SAMPLE_COUNT; i++) {
         let sample_data = lut_buffer[i];
 
         // Get precomputed screen UV offset
@@ -97,11 +98,7 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> FragmentOutput {
         // world_shift accounts for (horizline*clip_x + vertiline*clip_y) part
         let relative_pos = sample_data.world_shift + (ubo.camdir.xyz * depth_shift);
 
-        // Avoid division by zero if relative_pos is zero vector
-        var direction = vec3(0.0);
-        if (length(relative_pos) > 1e-6) { 
-            direction = normalize(relative_pos);
-        }
+        let direction = normalize(relative_pos);
 
         // Calculate AO contribution: how much the direction aligns with the normal
         let ao_contribution = max(dot(direction, normal), 0.0);
@@ -109,23 +106,19 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> FragmentOutput {
         // Get precomputed weight for this sample
         var weight = sample_data.weight_normalized;
 
-        // Apply falloff based on depth difference (occlusion is weaker for closer samples)
-        // This matches the sqrt(clamp(float(8.0+(depth_shift)), 0,8)/8.0) logic
-        // Assumes depth_shift is typically negative for occluders, positive for background
-        // Clamp range [0, 8] maps depth_shift range [-8, 0] approx
         let depth_attenuation = sqrt(clamp(8.0 + depth_shift, 0.0, 8.0) / 8.0);
         weight = weight * depth_attenuation;
 
         // Accumulate weighted AO contribution
-        total_ao = total_ao + ao_contribution * weight;
+        total_ao += ao_contribution * weight;
     }
 
     // Final AO value (already weighted and summed)
-    let obfuscation = clamp(total_ao, 0.0, 1.0); // Clamp to [0, 1] range
+    let obfuscation = total_ao; // Clamp to [0, 1] range
 
     // Output AO factor in the alpha channel, color is black (encoded)
-    // Matches frame_color = (vec4(encode_color(vec3(0.0)), obfuscation));
-    output.frame_color = vec4<f32>(encode_color(vec3(0.0)), obfuscation);
+    output.frame_color = (vec4(encode_color(vec3(0.0)), obfuscation));
+    // output.frame_color = vec4<f32>(encode_color(vec3(0.0)), 0.0);
 
     return output;
 }

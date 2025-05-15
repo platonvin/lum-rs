@@ -366,7 +366,8 @@ fn main(@builtin(position) frag_coord_in: vec4<f32>) -> FragmentOutput {
     // This new origin and direction are used for the glossy ray.
     let traced_color = trace_glossy_ray(origin, direction, accumulated_light, accumulated_reflection);
 
-    output.frame_color = vec4<f32>(encode_color(traced_color), 1.0 - initial_mat.roughness);
+    // output.frame_color = vec4<f32>(encode_color(traced_color), 1.0 - initial_mat.roughness);
+    output.frame_color = vec4<f32>(encode_color(traced_color), 1.0);
 
     return output;
 }

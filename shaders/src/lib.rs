@@ -1,6 +1,7 @@
 pub fn get_shader(name: &str) -> Option<&'static [u8]> {
     // Note: `include_bytes!` happens at compile time. We need to know the exact paths
     // If anyone knows a good way to bundle files into a binary and put in target, let me know
+    #[cfg(feature = "vk_backend")]
     match name {
         "diffuse.frag.spv" => Some(include_bytes!(concat!(
             env!("COMPILED_SHADERS_PATH"),
@@ -124,6 +125,8 @@ pub fn get_shader(name: &str) -> Option<&'static [u8]> {
         ))),
         _ => None,
     }
+    #[cfg(not(feature = "vk_backend"))]
+    unreachable!()
 }
 
 // pub fn get_glsl(name: &str) -> Option<&'static str> {
@@ -292,6 +295,7 @@ pub fn get_shader(name: &str) -> Option<&'static [u8]> {
 pub fn get_wgsl(name: &str) -> Option<&'static str> {
     // unimplemented!();
 
+    #[cfg(feature = "wgpu_backend")]
     match name {
         "diffuse.frag" => Some(include_str!("../shaders_wgpu/diffuse.frag")),
         "fill_stencil_glossy.frag" => {
@@ -327,4 +331,7 @@ pub fn get_wgsl(name: &str) -> Option<&'static str> {
         "water.vert" => Some(include_str!("../shaders_wgpu/water.vert")),
         _ => None,
     }
+
+    #[cfg(not(feature = "wgpu_backend"))]
+    unreachable!()
 }

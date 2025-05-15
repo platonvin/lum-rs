@@ -432,7 +432,7 @@ bool ssr_traceRay(in vec3 origin, in vec3 direction, inout vec2 pix, inout float
     return false;
 }
 
-const float COLOR_ENCODE_VALUE = 8.0;
+const float COLOR_ENCODE_VALUE = 1.0;
 vec3 decode_color(vec3 encoded_color){
     return encoded_color*COLOR_ENCODE_VALUE;
 }
@@ -489,5 +489,6 @@ void main(void){
     vec3 traced_color = trace_glossy_ray(origin, direction, accumulated_light, accumulated_reflection);
     
     frame_color = vec4(encode_color(traced_color), 1.0-mat.roughness);
+    frame_color = vec4(encode_color(traced_color), 0.0);
     // frame_color = vec4(vec3(.1, .2, .3), 0.0);
 }

@@ -7,7 +7,7 @@ layout(location = 0) out vec4 frame_color;
 
 layout(input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput rendered_frame;
 
-const float COLOR_ENCODE_VALUE = 8.0;
+const float COLOR_ENCODE_VALUE = 1.0;
 vec3 decode_color(vec3 encoded_color){
     return encoded_color*COLOR_ENCODE_VALUE;
 }
@@ -84,10 +84,10 @@ void main() {
     // frame_color = vec4(vec3(0.5), 1);
     vec3 color = decode_color(subpassLoad(rendered_frame).xyz);
 
-    color = adjust_saturation(color, .1);
-    color = adjust_contrast(color, .1);
-    color = adjust_exposure(color, 0.5);
-    color = tonemap(color);
+    // color = adjust_saturation(color, .1);
+    // color = adjust_contrast(color, .1);
+    // color = adjust_exposure(color, 0.5);
+    // color = tonemap(color);
 
     // frame_color = vec4(vec3(non_clip_pos,0), 1);
     frame_color = vec4(color,1);

@@ -17,7 +17,8 @@ struct UboData {
     wind_direction: vec2<f32>,
     timeseed: i32,
     delta_time: f32,
-};
+}
+;
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
 
@@ -37,15 +38,17 @@ struct UboData {
 
 // --- Structs ---
 struct Material {
-    color: vec3<f32>,
-    emmitance: f32,
+    color_emmit: vec4<f32>,
+    // emmitance: f32,
     roughness: f32,
     transparancy: f32, // Note: transparancy wasn't loaded in GLSL GetMat
-};
+}
+;
 
 struct FragmentOutput {
     @location(0) frame_color: vec4<f32>,
-};
+}
+;
 
 // --- Helper Functions ---
 fn sample_probe(probe_ipos: vec3<i32>, direction: vec3<f32>) -> vec3<f32> {
@@ -88,8 +91,8 @@ fn sample_radiance_directional(position: vec3<f32>, normal: vec3<f32>) -> vec3<f
         probe_colour = sample_probe(zero_probe_ipos + offset, direction_to_probe);
 
         probe_weight = max(1e-7, probe_weight);
-        total_weight = total_weight + probe_weight;
-        total_colour = total_colour + probe_weight * probe_colour;
+        total_weight += probe_weight;
+        total_colour += probe_weight * probe_colour;
     }
 
     if total_weight < 1e-6 {
@@ -115,7 +118,7 @@ fn load_norm(frag_coord_xy: vec2<i32>) -> vec3<f32> {
     // Assuming mat ID is in .x and normal in .gba, encoded as u8
     let loaded_val = textureLoad(matNorm_tex, frag_coord_xy, 0); // LOD 0
     // Decode GBA components from [0,1] to [-1,1]
-    let norm = (vec3f(loaded_val.gba)/256.0 * 2.0) - 1.0;
+    let norm = (vec3f(loaded_val.gba) / 255.0 * 2.0) - 1.0;
     return norm;
 }
 
@@ -131,22 +134,22 @@ fn load_mat(frag_coord_xy: vec2<i32>) -> i32 {
 fn load_depth(frag_coord_xy: vec2<i32>) -> f32 {
     // Load from depth texture bound at binding 2
     var depth_encoded = textureLoad(depthBuffer_tex, frag_coord_xy, 0); // LOD 0
-    
+
     return depth_encoded * 1000.0;
 }
 
-fn GetMat(voxel:i32) -> Material {
+fn GetMat(voxel: i32) -> Material {
     var mat: Material;
 
-    var v = voxel; 
+    var v = voxel;
 
     // Use textureLoad instead of texelFetch, needs texture and integer coords
     // Assuming voxelPalette_tex format allows direct loading (e.g., R32Float)
-    mat.color.r = textureLoad(voxelPalette_tex, vec2<i32>(0, v), 0).r;
-    mat.color.g = textureLoad(voxelPalette_tex, vec2<i32>(1, v), 0).r;
-    mat.color.b = textureLoad(voxelPalette_tex, vec2<i32>(2, v), 0).r;
+    mat.color_emmit.r = textureLoad(voxelPalette_tex, vec2<i32>(0, v), 0).r;
+    mat.color_emmit.g = textureLoad(voxelPalette_tex, vec2<i32>(1, v), 0).r;
+    mat.color_emmit.b = textureLoad(voxelPalette_tex, vec2<i32>(2, v), 0).r;
     // mat.transparancy = 1.0 - textureLoad(voxelPalette_tex, vec2<i32>(3, voxel), 0).r; // Was commented out
-    mat.emmitance = textureLoad(voxelPalette_tex, vec2<i32>(4, v), 0).r;
+    mat.color_emmit.w = textureLoad(voxelPalette_tex, vec2<i32>(4, v), 0).r;
     mat.roughness = textureLoad(voxelPalette_tex, vec2<i32>(5, v), 0).r;
     mat.transparancy = 0.0; // Initialize explicitly if needed
 
@@ -154,10 +157,7 @@ fn GetMat(voxel:i32) -> Material {
 }
 
 fn get_origin_from_depth(depth: f32, clip_pos: vec2<f32>) -> vec3<f32> {
-    let origin = ubo.campos.xyz + 
-        (ubo.horizline_scaled.xyz * clip_pos.x) + 
-        (ubo.vertiline_scaled.xyz * clip_pos.y) + 
-        (ubo.camdir.xyz * depth);
+    let origin = ubo.campos.xyz + (ubo.horizline_scaled.xyz * clip_pos.x) + (ubo.vertiline_scaled.xyz * clip_pos.y) + (ubo.camdir.xyz * depth);
     return origin;
 }
 
@@ -183,7 +183,7 @@ fn prev_befor_1(x: f32) -> f32 { return prev_befor(x, 1); }
 
 
 fn sample_lightmap_with_shift(base_uv: vec2<f32>, test_depth: f32, offset: vec2<f32>) -> f32 {
-    let shadow = textureSampleCompare(lightmap_tex, lightmap_samp, base_uv + offset, test_depth);
+    var shadow = textureSampleCompare(lightmap_tex, lightmap_samp, base_uv + offset, test_depth);
     return shadow; // Returns 1.0 if not shadowed, 0.0 if shadowed (or potentially interpolated value)
 }
 
@@ -197,23 +197,24 @@ fn sample_lightmap(world_pos: vec3<f32>, normal: vec3<f32>) -> f32 {
     }
 
     var light_clip = (ubo.lightmap_proj * vec4<f32>(biased_pos, 1.0));
-        light_clip.z = 1.0 + light_clip.z; 
+    light_clip.z = 1.0 + light_clip.z;
 
     var light_uv = (light_clip.xy + 1.0) / 2.0; // Convert clip space [-1, 1] to UV [0, 1]
     light_uv.y = 1.0 - light_uv.y; // Flip V
-    
+
     let world_depth_in_light_space = light_clip.z; // Depth in light's view [0, 1] or similar range
 
     let pcfshift = vec2<f32>(1.0 / 1024.0);
     var total_light: f32 = 0.0;
 
-    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(-pcfshift.x, 0.0));
-    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, 0.0));
-    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(pcfshift.x, 0.0));
-    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, -pcfshift.y));
-    total_light = total_light + sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, pcfshift.y));
+    total_light += sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(-pcfshift.x, 0.0));
+    total_light += sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, 0.0));
+    total_light += sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(pcfshift.x, 0.0));
+    total_light += sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, -pcfshift.y));
+    total_light += sample_lightmap_with_shift(light_uv, world_depth_in_light_space, vec2<f32>(0.0, pcfshift.y));
 
-    return (total_light / 5.0) * 0.15;
+    return ((total_light / 5.0) * 0.15);
+    // return 0.5;
 }
 
 fn decode_color(encoded_color: vec3<f32>) -> vec3<f32> {
@@ -247,50 +248,23 @@ fn main(@builtin(position) frag_coord: vec4<f32>) -> FragmentOutput {
 
     var clip_pos = (frag_coord.xy / ubo.frame_size) * 2.0 - 1.0;
     // clip_pos.y = 1.0 - clip_pos.y;
-    
+
     // Reconstruct world position
     var origin = get_origin_from_depth(current_depth, clip_pos);
     // origin = abs(origin);
     // let w = vec3f(world_size) * 16.0;
     // origin = w - origin;
 
-
-
     // Sample lighting
     // Applying normal offset before sampling radiance, as in GLSL
-    let probe_light = sample_radiance_directional(origin + stored_normal * 6.0, stored_normal); 
+    let probe_light = sample_radiance_directional(origin + stored_normal * 6.0, stored_normal);
     // cause we are humans. And for humans sun is a special thing
     let sunlight = sample_lightmap(origin, stored_normal);
 
     // Combine lighting and material properties
     // Factor 2.0 applied to incoming_light as in GLSL
-    var final_color = (2.0 * probe_light + stored_mat.emmitance + sunlight) * stored_mat.color;
-    // final_color = vec3<f32>(vec2<f32>(frag_coord_xy) / ubo.frame_size, 0.0); 
-    // final_color = vec3<f32>(stored_mat.color); 
-    // final_color = vec3<f32>(mat_id); 
-    // final_color = vec3<f32>(1.0 + (ubo.lightmap_proj * vec4f(origin, 1.0)).z); 
-    // let m = modf(origin/100.0).fract;
-    // final_color = vec3<f32>(1.0 - m);
-    // final_color = vec3<f32>(origin/1000.0);
-    // final_color = vec3<f32>(clip_pos, 0.0);
-    // final_color = vec3<f32>(current_depth/1000.0);
-
-    var light_uv = (ubo.lightmap_proj * vec4f(origin, 1.0)).xy * 0.5 + 0.5; 
-    // light_uv.x = 1.0 - light_uv.x;
-    // light_uv.y = 1.0 - light_uv.y; 
-    // light_uv = light_uv.yx;
-
-    // let tested_depth = textureSample(lightmap_tex, lightmap_samp, light_uv);
-    // let depth_to_check = 1.0 + (ubo.trans_w2s * vec4f(origin, 1.0)).z;
-    // final_color = vec3<f32>(light_uv, 0.0);
-
-    // let d = textureLoad(depthBuffer_tex, frag_coord_xy, 0);
-    // let _origin = ubo.campos.xyz + 
-    //     (ubo.horizline_scaled.xyz * clip_pos.x) + 
-    //     (ubo.vertiline_scaled.xyz * clip_pos.y) + 
-    //     (ubo.camdir.xyz * d);
-    // let _d = 1.0 + (ubo.trans_w2s * vec4f(_origin, 1.0)).z;
-    // final_color = vec3<f32>(d - _d);
+    var final_color = (2.0 * probe_light + stored_mat.color_emmit.w + sunlight) * stored_mat.color_emmit.rgb;
+    // final_color = vec3f(sunlight);
 
     // Encode and set output color
     output.frame_color = vec4<f32>(encode_color(final_color), 1.0);

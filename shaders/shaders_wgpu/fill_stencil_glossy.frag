@@ -45,6 +45,8 @@ fn main(@builtin(position) frag_coord: vec4<f32>) {
     if (rough > 0.5) {
         discard; // Discard the fragment if roughness is high
     }
+    discard; // Discard the fragment if roughness is high
+
     // If not discarded, the pipeline's stencil state handles writing the stencil value.
     // No color output is needed for a stencil-only pass.
 }

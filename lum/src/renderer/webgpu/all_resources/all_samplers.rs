@@ -114,10 +114,10 @@ impl<'window> InternalRendererWebGPU<'window> {
             address_mode_u: AddressMode::MirrorRepeat,
             address_mode_v: AddressMode::MirrorRepeat,
             address_mode_w: AddressMode::MirrorRepeat,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Linear,
-            compare: Some(wgpu::CompareFunction::LessEqual),
-            border_color: Some(SamplerBorderColor::OpaqueBlack),
+            mag_filter: FilterMode::Nearest,
+            min_filter: FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::Less),
+            border_color: Some(SamplerBorderColor::OpaqueWhite),
             ..base_sampler_desc.clone()
         };
         let shadow_sampler = create_sampler(shadow_sampler_desc);

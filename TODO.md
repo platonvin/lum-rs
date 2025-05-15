@@ -1,4 +1,10 @@
-
+todoy:
+  smoke
+  docs
+  code cleanup
+  separate builds & good flags
+  wgpu push constants
+  less magic constants
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
 wgpui better pcnherit TODO from lum++
