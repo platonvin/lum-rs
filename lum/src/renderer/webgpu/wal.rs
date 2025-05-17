@@ -54,6 +54,11 @@ pub struct RasterPipe {
     pub pc_bind_groups: Option<Ring<wgpu::BindGroup>>,
 }
 
+pub struct PipePcWrite<'a> {
+    write: Option<wgpu::QueueWriteBufferView<'a>>,
+    buffers: Option<Ring<wgpu::Buffer>>,
+}
+
 #[derive(Clone, Debug)]
 pub struct AttrFormOffs {
     pub format: wgpu::VertexFormat,
@@ -821,30 +826,67 @@ impl<'window> Wal<'window> {
         }
     }
 
-    pub fn bind_raster_pipeline<'a>(
-        &self,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        pipe: &RasterPipe,
-    ) {
-        let current_frame = self.frame_index % self.config.desired_maximum_frame_latency as usize;
+    // pub fn bind_raster_pipeline(&self, render_pass: &mut wgpu::RenderPass, pipe: &RasterPipe) {
+    //     let current_frame = self.frame_index % self.config.desired_maximum_frame_latency as usize;
 
-        render_pass.set_pipeline(pipe.pipeline.as_ref().unwrap());
+    //     render_pass.set_pipeline(pipe.pipeline.as_ref().unwrap());
+
+    //     let mut bind_index = 0;
+    //     if let Some(ref static_bind_groups) = pipe.static_bind_groups {
+    //         render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+    //         bind_index += 1;
+    //     }
+
+    //     if let Some(ref pc_bind_groups) = pipe.pc_bind_groups {
+    //         let padded_pc_size = pipe.pc_size.next_multiple_of(256);
+    //         render_pass.set_bind_group(
+    //             bind_index,
+    //             pc_bind_groups.current(),
+    //             &[pipe.current_pc_offset * padded_pc_size as u32],
+    //         );
+    //         bind_index += 1;
+    //     }
+    // }
+
+    pub fn bind_raster_pipeline<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        pipeline: &'a wgpu::RenderPipeline,
+        static_bind_groups: Option<&'a Ring<wgpu::BindGroup>>,
+        pc_bind_groups: Option<&'a Ring<wgpu::BindGroup>>,
+        pc_buffers: Option<&'a Ring<wgpu::Buffer>>,
+        pc_size: u32,
+        current_pc_offset: u32,
+    ) -> Option<wgpu::QueueWriteBufferView<'a>> {
+        render_pass.set_pipeline(pipeline);
 
         let mut bind_index = 0;
-        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
+        if let Some(static_bind_groups) = static_bind_groups {
             render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
             bind_index += 1;
         }
 
-        if let Some(ref pc_bind_groups) = pipe.pc_bind_groups {
-            let padded_pc_size = pipe.pc_size.next_multiple_of(256);
+        let mut buffer_write_view = None;
+        if let Some(pc_bind_groups) = pc_bind_groups {
+            let padded_pc_size = pc_size.next_multiple_of(256);
             render_pass.set_bind_group(
                 bind_index,
                 pc_bind_groups.current(),
-                &[pipe.current_pc_offset * padded_pc_size as u32],
+                &[current_pc_offset * padded_pc_size],
             );
             bind_index += 1;
+
+            // Move the write_buffer_with call here
+            if let Some(pc_buffers) = pc_buffers {
+                buffer_write_view = self.queue.write_buffer_with(
+                    pc_buffers.current(),
+                    0,
+                    std::num::NonZero::new(pc_buffers.current().size()).unwrap(),
+                );
+            }
         }
+
+        buffer_write_view
     }
 
     pub fn bind_compute_pipeline<'a>(
@@ -871,47 +913,55 @@ impl<'window> Wal<'window> {
         }
     }
 
+    // Modified to accept individual pipe components and the mutable push constant slice
     pub fn draw_with_params<'a>(
         &self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        pipe: &mut RasterPipe,
+        pipeline: &'a wgpu::RenderPipeline, // Now passed individually
+        pc_bind_groups: Option<&'a Ring<wgpu::BindGroup>>, // Now passed individually
+        pc_size: u32,                       // Now passed individually
+        current_pc_offset: &mut u32,        // Now mutable reference
+        static_bind_groups: Option<&BindGroup>,
         dynamic_bind_group: Option<&BindGroup>,
         push_constants: Option<&[u8]>,
+        pc_write_slice: Option<&mut [u8]>, // The mutable slice for writing
         vertices: core::ops::Range<u32>,
         instances: core::ops::Range<u32>,
     ) {
+        // The pipeline is already set in bind_raster_pipeline, so no need to set it here
+        // render_pass.set_pipeline(pipeline); // Removed
+
         let mut bind_index = 0;
-        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
-            // render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+        if let Some(ref static_bind_groups) = static_bind_groups {
             bind_index += 1;
         }
 
         if let Some(pc_data) = push_constants {
-            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            let padded_pc_size = pc_size.next_multiple_of(256);
             render_pass.set_bind_group(
                 bind_index,
-                pipe.pc_bind_groups.as_ref().unwrap().current(),
-                &[pipe.current_pc_offset * padded_pc_size as u32],
+                pc_bind_groups.as_ref().unwrap().current(), // Access directly from the passed Ring
+                &[*current_pc_offset * padded_pc_size],
             );
             bind_index += 1;
+
+            // Write the push constants data to the buffer slice
+            if let Some(mut pc_write_slice) = pc_write_slice {
+                let offset = (*current_pc_offset * padded_pc_size) as usize;
+                let len = pc_data.len();
+                if offset + len <= pc_write_slice.len() {
+                    pc_write_slice[offset..offset + len].copy_from_slice(pc_data);
+                } else {
+                    panic!("Warning: Push constant data exceeds buffer slice bounds.");
+                }
+            }
+
+            *current_pc_offset += 1; // Increment the mutable reference
         }
 
         if let Some(bind_group) = dynamic_bind_group {
             render_pass.set_bind_group(bind_index, bind_group, &[]);
             bind_index += 1;
-        }
-
-        // emulate push constants with dynamically offset'ed separate buffer
-        if let Some(pc_data) = push_constants {
-            let padded_pc_size = pc_data.len().next_multiple_of(256);
-            let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
-            let buffer = pc_buffers.current();
-            self.queue.write_buffer(
-                buffer,
-                (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
-                pc_data,
-            );
-            pipe.current_pc_offset += 1;
         }
 
         render_pass.draw(vertices, instances);
@@ -920,45 +970,49 @@ impl<'window> Wal<'window> {
     pub fn draw_indexed_with_params<'a>(
         &self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        pipe: &mut RasterPipe,
+        pipeline: &'a wgpu::RenderPipeline, // Now passed individually
+        pc_bind_groups: Option<&'a Ring<wgpu::BindGroup>>, // Now passed individually
+        pc_size: u32,                       // Now passed individually
+        current_pc_offset: &mut u32,        // Now mutable reference
+        static_bind_groups: Option<&BindGroup>,
         dynamic_bind_group: Option<&BindGroup>,
         push_constants: Option<&[u8]>,
+        pc_write_slice: Option<&mut [u8]>, // The mutable slice for writing
         indices: core::ops::Range<u32>,
         base_vertex: i32,
         instances: core::ops::Range<u32>,
     ) {
         let mut bind_index = 0;
-        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
-            // render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+        if let Some(ref static_bind_groups) = static_bind_groups {
             bind_index += 1;
         }
 
         if let Some(pc_data) = push_constants {
-            let padded_pc_size = pc_data.len().next_multiple_of(256);
+            let padded_pc_size = pc_size.next_multiple_of(256);
             render_pass.set_bind_group(
                 bind_index,
-                pipe.pc_bind_groups.as_ref().unwrap().current(),
-                &[pipe.current_pc_offset * padded_pc_size as u32],
+                pc_bind_groups.as_ref().unwrap().current(), // Access directly from the passed Ring
+                &[*current_pc_offset * padded_pc_size],
             );
             bind_index += 1;
+
+            // Write the push constants data to the buffer slice
+            if let Some(mut pc_write_slice) = pc_write_slice {
+                let offset = (*current_pc_offset * padded_pc_size) as usize;
+                let len = pc_data.len();
+                if offset + len <= pc_write_slice.len() {
+                    pc_write_slice[offset..offset + len].copy_from_slice(pc_data);
+                } else {
+                    panic!("Warning: Push constant data exceeds buffer slice bounds.");
+                }
+            }
+
+            *current_pc_offset += 1; // Increment the mutable reference
         }
 
         if let Some(bind_group) = dynamic_bind_group {
             render_pass.set_bind_group(bind_index, bind_group, &[]);
             bind_index += 1;
-        }
-
-        // emulate push constants with dynamically offset'ed separate buffer
-        if let Some(pc_data) = push_constants {
-            let padded_pc_size = pc_data.len().next_multiple_of(256);
-            let pc_buffers = pipe.pc_buffers.as_ref().unwrap();
-            let buffer = pc_buffers.current();
-            self.queue.write_buffer(
-                buffer,
-                (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
-                pc_data,
-            );
-            pipe.current_pc_offset += 1;
         }
 
         render_pass.draw_indexed(indices, base_vertex, instances);
@@ -1005,11 +1059,14 @@ impl<'window> Wal<'window> {
                 (pipe.current_pc_offset * padded_pc_size as u32) as wgpu::BufferAddress,
                 pc_data,
             );
+
             pipe.current_pc_offset += 1;
         }
 
         compute_pass.dispatch_workgroups(workgroup_count_x, workgroup_count_y, workgroup_count_z);
     }
+
+    pub fn write_buffer_with() {}
 }
 
 /*

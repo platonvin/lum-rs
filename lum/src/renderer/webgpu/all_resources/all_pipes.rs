@@ -813,9 +813,14 @@ impl<'window> InternalRendererWebGPU<'window> {
                         fail_op: StencilOperation::Replace,
                         depth_fail_op: StencilOperation::Replace,
                     },
-                    back: StencilFaceState::default(),
+                    back: StencilFaceState {
+                        compare: CompareFunction::Always,
+                        pass_op: StencilOperation::Replace,
+                        fail_op: StencilOperation::Replace,
+                        depth_fail_op: StencilOperation::Replace,
+                    },
                     read_mask: 0x00,
-                    write_mask: 0x01,
+                    write_mask: 0x01, // ITS NOT THE SAME AS VULKAN????
                 },
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -823,6 +828,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             None,
             Some("Fill Stencil for Glossy Pipe"),
         );
+
         let fill_stencil_smoke_pipe = Wal::create_raster_pipe(
             &wal,
             &[
@@ -863,10 +869,14 @@ impl<'window> InternalRendererWebGPU<'window> {
                     blend: Some(BlendState {
                         color: BlendComponent {
                             src_factor: BlendFactor::One,
-                            dst_factor: BlendFactor::Zero,
-                            operation: BlendOperation::Max,
+                            dst_factor: BlendFactor::One,
+                            operation: BlendOperation::Min,
                         },
-                        alpha: BlendComponent::REPLACE,
+                        alpha: BlendComponent {
+                            src_factor: BlendFactor::One,
+                            dst_factor: BlendFactor::Zero,
+                            operation: BlendOperation::Add,
+                        },
                     }),
                     write_mask: ColorWrites::ALL,
                 }),
@@ -875,10 +885,14 @@ impl<'window> InternalRendererWebGPU<'window> {
                     blend: Some(BlendState {
                         color: BlendComponent {
                             src_factor: BlendFactor::One,
-                            dst_factor: BlendFactor::Zero,
-                            operation: BlendOperation::Min,
+                            dst_factor: BlendFactor::One,
+                            operation: BlendOperation::Max,
                         },
-                        alpha: BlendComponent::REPLACE,
+                        alpha: BlendComponent {
+                            src_factor: BlendFactor::One,
+                            dst_factor: BlendFactor::Zero,
+                            operation: BlendOperation::Add,
+                        },
                     }),
                     write_mask: ColorWrites::ALL,
                 }),
@@ -890,12 +904,19 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stencil: StencilState {
                     front: StencilFaceState {
                         compare: CompareFunction::Always,
-                        fail_op: StencilOperation::Keep,
-                        depth_fail_op: StencilOperation::Keep,
                         pass_op: StencilOperation::Replace,
+                        fail_op: StencilOperation::Replace,
+                        depth_fail_op: StencilOperation::Replace,
                     },
-                    back: StencilFaceState::default(),
+                    back: StencilFaceState {
+                        compare: CompareFunction::Always,
+                        pass_op: StencilOperation::Replace,
+                        fail_op: StencilOperation::Replace,
+                        depth_fail_op: StencilOperation::Replace,
+                    },
+                    // dont care
                     read_mask: 0x00,
+                    // mark all pixels that have a chance to see smoke to cull expensive smoke shader
                     write_mask: 0x02,
                 },
                 bias: wgpu::DepthBiasState::default(),

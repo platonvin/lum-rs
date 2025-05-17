@@ -209,7 +209,47 @@ overflow-checks = true
 # release for vk feature
 [profile.rv]
 inherits = "release"
+opt-level = 3
+lto = "off"
+codegen-units = 16
+debug = false
+panic = "unwind"
+overflow-checks = false
 
 # release for wgpu feature
 [profile.rw]
 inherits = "release"
+opt-level = 3
+lto = "off"
+codegen-units = 16
+debug = false
+panic = "unwind"
+overflow-checks = false
+
+[profile.rw.package."*"]
+opt-level = 3
+debug = false
+
+[profile.rv.package."*"]
+opt-level = 3
+debug = false
+
+# debug for vk feature
+[profile.dv]
+inherits = "dev"
+opt-level = 0
+lto = "off"
+codegen-units = 16
+debug = true
+panic = "unwind"
+overflow-checks = false
+
+# debug for wgpu feature
+[profile.dw]
+inherits = "dev"
+opt-level = 0
+lto = "off"
+codegen-units = 16
+debug = true
+panic = "unwind"
+overflow-checks = false

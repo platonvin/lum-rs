@@ -50,17 +50,15 @@ fn main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
 
     let world_pos = vec4<f32>(scaled_vertex + pco.originSize.xyz, 1.0);
 
-    let clip_pos_h = ubo.trans_w2s * world_pos;
+    var clip_pos = ubo.trans_w2s * world_pos;
 
     var calculated_depth: f32 = 0.0;
-    if (clip_pos_h.w != 0.0) {
-        calculated_depth = clip_pos_h.z / clip_pos_h.w;
-    }
     output.end_depth = calculated_depth + 1.0;
+    clip_pos.z = 1.0 + clip_pos.z;
 
 
     // Assign final homogeneous clip space position for rasterizer
-    output.clip_position = clip_pos_h;
+    output.clip_position = clip_pos;
 
     return output;
 }
