@@ -105,7 +105,7 @@ pub struct AllBuffers {
     pub ao_lut_uniform: Ring<wgpu::Buffer>,
     pub gpu_radiance_updates: Ring<wgpu::Buffer>,
     // we dont need staging buffers since thats not how WGPU works
-    pub staging_radiance_updates: Ring<wgpu::Buffer>,
+    // pub staging_radiance_updates: Ring<wgpu::Buffer>,
     pub gpu_particles_staged: Ring<wgpu::Buffer>,
     pub gpu_particles: Ring<wgpu::Buffer>,
 }

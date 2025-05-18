@@ -155,3 +155,13 @@ dont diffuse for full glossy
 
 
 rust-analyzer eats 2 characters on deleting a line with CRLF on windows. Why the fuck?
+
+why the fuck does 
+        self.buffers
+            .staging_radiance_updates
+            .current()
+            .slice(..)
+            .map_async(wgpu::MapMode::Write, move |res| ready = true);
+        self.wal.queue.submit([]);
+
+crash??? wgpu, seriously?

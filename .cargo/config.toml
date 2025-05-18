@@ -46,7 +46,7 @@ codegen-backend = true
 # rv/rw are (Release Vulkan/Wgpu), they are just "debug but fast" and separate for convinience
 [profile.dev]
 codegen-backend = "cranelift"
-[profile.rv]
+[profile.dv]
 codegen-backend = "cranelift"
-[profile.rw]
+[profile.dw]
 codegen-backend = "cranelift"

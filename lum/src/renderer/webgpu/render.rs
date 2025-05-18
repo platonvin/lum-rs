@@ -344,30 +344,19 @@ impl<'window> InternalRendererWebGPU<'window> {
             std::slice::from_raw_parts(self.radiance_updates.as_ptr() as *const u8, size_to_copy)
         };
 
-        // What the actual fuck? TODO:
-        self.buffers
-            .staging_radiance_updates
-            .current()
-            .slice(..)
-            .map_async(wgpu::MapMode::Write, |_| {});
-        self.wal.queue.submit([]);
-
-        let mut staging_data =
-            self.buffers.staging_radiance_updates.current().slice(..).get_mapped_range_mut();
-        staging_data[0..size_to_copy].copy_from_slice(data);
-        drop(staging_data);
-        self.buffers.staging_radiance_updates.current().unmap();
-
         // Record a buffer copy from the staging buffer to the GPU radiance updates buffer.
         if count_to_copy > 0 {
-            encoder.copy_buffer_to_buffer(
-                &self.buffers.staging_radiance_updates.current(),
+            let mut write = self.wal.queue.write_buffer_with(
+                self.buffers.gpu_radiance_updates.current(),
                 0,
-                &self.buffers.gpu_radiance_updates.current(),
-                0,
-                size_to_copy as u64,
+                std::num::NonZeroU64::new(size_to_copy as u64).unwrap(),
             );
+
+            write.as_mut().unwrap().copy_from_slice(data);
+
+            drop(write);
         }
+
         // Begin a compute pass.
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Radiance Compute Pass"),
@@ -574,6 +563,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: self.settings.world_size.y,
                 depth_or_array_layers: self.settings.world_size.z,
             };
+
             encoder.copy_buffer_to_texture(buffer_copy, dst, extent);
         }
         // let (dim_x, dim_y, dim_z) = (&mut self.renderer).current_world.dimensions();
@@ -971,7 +961,7 @@ impl<'window> RendererWgpu<'window> {
                 &mut rpass,
                 pipe.pipeline.as_ref().unwrap(),
                 pipe.pc_bind_groups.as_ref(),
-                pipe.pc_size,
+                // pipe.pc_size,
                 &mut pipe.current_pc_offset,
                 Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                 None,
@@ -1174,7 +1164,7 @@ impl<'window> RendererWgpu<'window> {
         self.renderer.buffers.uniform.move_next();
         self.renderer.buffers.ao_lut_uniform.move_next();
         self.renderer.buffers.gpu_radiance_updates.move_next();
-        self.renderer.buffers.staging_radiance_updates.move_next();
+        // self.renderer.buffers.staging_radiance_updates.move_next();
         self.renderer.buffers.gpu_particles_staged.move_next();
         self.renderer.buffers.gpu_particles.move_next();
 
@@ -1657,19 +1647,15 @@ impl<'window> RendererWgpu<'window> {
                 std::slice::from_raw_parts(padded_data.as_ptr() as *const u8, size_to_copy)
             };
 
-            // Write the data to the staging_world buffer.
-            self.renderer
-                .buffers
-                .staging_world
-                .current()
-                .slice(..)
-                .map_async(wgpu::MapMode::Write, |_| {});
-            self.renderer.wal.queue.submit([]);
-            let mut staging_world_slice =
-                self.renderer.buffers.staging_world.current().slice(..).get_mapped_range_mut();
-            staging_world_slice[0..size_to_copy].copy_from_slice(data);
-            drop(staging_world_slice);
-            self.renderer.buffers.staging_world.current().unmap();
+            let mut write = self.renderer.wal.queue.write_buffer_with(
+                self.renderer.buffers.staging_world.current(),
+                0,
+                std::num::NonZeroU64::new(size_to_copy as u64).unwrap(),
+            );
+
+            write.as_mut().unwrap().copy_from_slice(data);
+
+            drop(write);
         };
     }
 
@@ -1835,7 +1821,7 @@ impl<'window> RendererWgpu<'window> {
                 &mut rpass,
                 pipe.pipeline.as_ref().unwrap(),
                 pipe.pc_bind_groups.as_ref(),
-                pipe.pc_size,
+                // pipe.pc_size,
                 &mut pipe.current_pc_offset,
                 Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                 None,
@@ -1890,6 +1876,17 @@ impl<'window> RendererWgpu<'window> {
         for (foliage_index, foliage_pipe) in
             self.renderer.pipes.raygen_foliage_pipes.iter_mut().enumerate()
         {
+            // FUCK FUCK FUCK WHY IS IT CACHED MY INSTRUCTIONS
+            let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+                &mut rpass,
+                foliage_pipe.pipeline.as_ref().unwrap(),
+                foliage_pipe.static_bind_groups.as_ref(),
+                foliage_pipe.pc_bind_groups.as_ref(),
+                foliage_pipe.pc_buffers.as_ref(),
+                foliage_pipe.pc_size,
+                foliage_pipe.current_pc_offset,
+            );
+
             // let pipe = &mut self.renderer.pipes.raygen_foliage_pipes[foliage_index as usize];
             let foliage_queue = &self.foliage_ques[foliage_index];
             for frr in foliage_queue {
@@ -1898,17 +1895,6 @@ impl<'window> RendererWgpu<'window> {
                 let size = 10;
                 let x_flip = self.renderer.camera.camera_dir.x < 0.0;
                 let y_flip = self.renderer.camera.camera_dir.y < 0.0;
-
-                // FUCK FUCK FUCK WHY IS IT CACHED MY INSTRUCTIONS
-                let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
-                    &mut rpass,
-                    foliage_pipe.pipeline.as_ref().unwrap(),
-                    foliage_pipe.static_bind_groups.as_ref(),
-                    foliage_pipe.pc_bind_groups.as_ref(),
-                    foliage_pipe.pc_buffers.as_ref(),
-                    foliage_pipe.pc_size,
-                    foliage_pipe.current_pc_offset,
-                );
 
                 let desc = &self.renderer.foliage_descriptions[grass.stored_id as usize];
 
@@ -1937,7 +1923,7 @@ impl<'window> RendererWgpu<'window> {
                     &mut rpass,
                     foliage_pipe.pipeline.as_ref().unwrap(),
                     foliage_pipe.pc_bind_groups.as_ref(),
-                    foliage_pipe.pc_size,
+                    // foliage_pipe.pc_size,
                     &mut foliage_pipe.current_pc_offset,
                     Some(foliage_pipe.static_bind_groups.as_ref().unwrap().current()),
                     None,

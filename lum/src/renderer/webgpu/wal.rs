@@ -919,8 +919,8 @@ impl<'window> Wal<'window> {
         render_pass: &mut wgpu::RenderPass<'a>,
         pipeline: &'a wgpu::RenderPipeline, // Now passed individually
         pc_bind_groups: Option<&'a Ring<wgpu::BindGroup>>, // Now passed individually
-        pc_size: u32,                       // Now passed individually
-        current_pc_offset: &mut u32,        // Now mutable reference
+        // pc_size: u32,                       // Now passed individually
+        current_pc_offset: &mut u32, // Now mutable reference
         static_bind_groups: Option<&BindGroup>,
         dynamic_bind_group: Option<&BindGroup>,
         push_constants: Option<&[u8]>,
@@ -937,7 +937,8 @@ impl<'window> Wal<'window> {
         }
 
         if let Some(pc_data) = push_constants {
-            let padded_pc_size = pc_size.next_multiple_of(256);
+            let pc_size = pc_data.len();
+            let padded_pc_size = pc_size.next_multiple_of(256) as u32;
             render_pass.set_bind_group(
                 bind_index,
                 pc_bind_groups.as_ref().unwrap().current(), // Access directly from the passed Ring
@@ -949,11 +950,7 @@ impl<'window> Wal<'window> {
             if let Some(mut pc_write_slice) = pc_write_slice {
                 let offset = (*current_pc_offset * padded_pc_size) as usize;
                 let len = pc_data.len();
-                if offset + len <= pc_write_slice.len() {
-                    pc_write_slice[offset..offset + len].copy_from_slice(pc_data);
-                } else {
-                    panic!("Warning: Push constant data exceeds buffer slice bounds.");
-                }
+                pc_write_slice[offset..offset + len].copy_from_slice(pc_data);
             }
 
             *current_pc_offset += 1; // Increment the mutable reference
@@ -988,6 +985,7 @@ impl<'window> Wal<'window> {
         }
 
         if let Some(pc_data) = push_constants {
+            assert!(pc_size == pc_data.len() as u32);
             let padded_pc_size = pc_size.next_multiple_of(256);
             render_pass.set_bind_group(
                 bind_index,
@@ -1000,11 +998,7 @@ impl<'window> Wal<'window> {
             if let Some(mut pc_write_slice) = pc_write_slice {
                 let offset = (*current_pc_offset * padded_pc_size) as usize;
                 let len = pc_data.len();
-                if offset + len <= pc_write_slice.len() {
-                    pc_write_slice[offset..offset + len].copy_from_slice(pc_data);
-                } else {
-                    panic!("Warning: Push constant data exceeds buffer slice bounds.");
-                }
+                pc_write_slice[offset..offset + len].copy_from_slice(pc_data);
             }
 
             *current_pc_offset += 1; // Increment the mutable reference

@@ -79,7 +79,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         let staging_world = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
-            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
+            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
             padded_staging_world_size,
             false,
             Some("Staging World"),
@@ -99,7 +99,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             uniform: uniform,
             ao_lut_uniform,
             gpu_radiance_updates,
-            staging_radiance_updates,
+            // staging_radiance_updates,
             gpu_particles,
             gpu_particles_staged,
         }
@@ -114,7 +114,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         wal.destroy_buffer_ring(buffers.uniform);
         wal.destroy_buffer_ring(buffers.ao_lut_uniform);
         wal.destroy_buffer_ring(buffers.gpu_radiance_updates);
-        wal.destroy_buffer_ring(buffers.staging_radiance_updates);
+        // wal.destroy_buffer_ring(buffers.staging_radiance_updates);
         wal.destroy_buffer_ring(buffers.gpu_particles);
         println!("destroyed buffers");
     }
