@@ -7,7 +7,7 @@ use wgpu::{
     RenderPipelineDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource,
     VertexBufferLayout, VertexState,
 };
-use wgpu::{BindingResource, BindingType, DepthStencilState, ShaderStages};
+use wgpu::{BindingResource, BindingType, DepthStencilState, Limits, ShaderStages};
 
 use lumal::ring::Ring;
 
@@ -142,6 +142,10 @@ impl<'window> Wal<'window> {
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Device"),
                 required_features: Features::DEPTH32FLOAT_STENCIL8 | Features::FLOAT32_FILTERABLE,
+                required_limits: Limits {
+                    min_uniform_buffer_offset_alignment: 256,
+                    ..Default::default()
+                },
                 ..Default::default()
             })
             .await

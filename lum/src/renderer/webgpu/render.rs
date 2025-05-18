@@ -2231,17 +2231,25 @@ impl<'window> RendererWgpu<'window> {
             pipe.current_pc_offset,
         );
 
+        let mut previous_block: Option<i32> = None;
+
         for brr in &self.block_que {
             let ipos = ivec3!(brr.pos);
             let block_id = brr.block;
 
-            let block_mesh = &self.renderer.block_palette_meshes[brr.block as usize];
+            let block_mesh = &self.renderer.block_palette_meshes[block_id as usize];
 
-            rpass.set_vertex_buffer(0, block_mesh.triangles.vertexes.as_ref().unwrap().slice(..));
-            rpass.set_index_buffer(
-                block_mesh.triangles.indices.as_ref().unwrap().slice(..),
-                wgpu::IndexFormat::Uint16,
-            );
+            if previous_block.is_none_or(|pb| pb != block_id) {
+                rpass.set_vertex_buffer(
+                    0,
+                    block_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
+                );
+                rpass.set_index_buffer(
+                    block_mesh.triangles.indices.as_ref().unwrap().slice(..),
+                    wgpu::IndexFormat::Uint16,
+                );
+                previous_block = Some(block_id)
+            }
 
             #[repr(C)] // for push constants
             #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -2369,6 +2377,8 @@ impl<'window> RendererWgpu<'window> {
                 pipe.current_pc_offset,
             );
 
+            let mut previous_block: Option<i32> = None;
+
             for brr in &self.block_que {
                 let ipos = ivec3!(brr.pos);
                 {
@@ -2377,14 +2387,17 @@ impl<'window> RendererWgpu<'window> {
 
                     let block_mesh = &self.renderer.block_palette_meshes[block_id as usize];
 
-                    rpass.set_vertex_buffer(
-                        0,
-                        block_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
-                    );
-                    rpass.set_index_buffer(
-                        block_mesh.triangles.indices.as_ref().unwrap().slice(..),
-                        wgpu::IndexFormat::Uint16,
-                    );
+                    if previous_block.is_none_or(|pb| pb != block_id) {
+                        rpass.set_vertex_buffer(
+                            0,
+                            block_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
+                        );
+                        rpass.set_index_buffer(
+                            block_mesh.triangles.indices.as_ref().unwrap().slice(..),
+                            wgpu::IndexFormat::Uint16,
+                        );
+                        previous_block = Some(block_id)
+                    }
 
                     // TODO: how do i make functions used in macro visible to rust-analyzer?
                     macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
