@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use std::{borrow::Cow, collections::HashMap, num::NonZero};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
@@ -7,7 +8,7 @@ use wgpu::{
     RenderPipelineDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource,
     VertexBufferLayout, VertexState,
 };
-use wgpu::{BindingResource, BindingType, DepthStencilState, Limits, ShaderStages};
+use wgpu::{BindingResource, BindingType, Buffer, DepthStencilState, Limits, Queue, ShaderStages};
 
 use lumal::ring::Ring;
 
@@ -49,15 +50,41 @@ pub struct RasterPipe {
     // layout for bind groups, where dynamic bindings need to be
     pub pc_buffers: Option<Ring<wgpu::Buffer>>,
     pub pc_size: u32,
-    pub current_pc_offset: u32,
+    pub current_pc_offset: u32, // in count, not in bytes
     pub dynamic_bind_group_layout: Option<wgpu::BindGroupLayout>,
     pub pc_bind_groups: Option<Ring<wgpu::BindGroup>>,
 }
 
-pub struct PipePcWrite<'a> {
-    write: Option<wgpu::QueueWriteBufferView<'a>>,
-    buffers: Option<Ring<wgpu::Buffer>>,
+pub struct StupidBufferWrite<'a> {
+    data: Box<[u8]>,
+    buffer: &'a Buffer,
+    queue: &'a Queue,
 }
+
+impl<'a> Drop for StupidBufferWrite<'a> {
+    fn drop(&mut self) {
+        // todo!()
+        self.queue.write_buffer(self.buffer, 0, &self.data);
+    }
+}
+
+impl<'a> Deref for StupidBufferWrite<'a> {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        self.data.deref()
+    }
+}
+
+impl<'a> DerefMut for StupidBufferWrite<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.data.deref_mut()
+    }
+}
+
+// pub struct PipePcWrite<'a> {
+//     write: Option<wgpu::QueueWriteBufferView<'a>>,
+//     buffers: Option<Ring<wgpu::Buffer>>,
+// }
 
 #[derive(Clone, Debug)]
 pub struct AttrFormOffs {
@@ -861,7 +888,7 @@ impl<'window> Wal<'window> {
         pc_buffers: Option<&'a Ring<wgpu::Buffer>>,
         pc_size: u32,
         current_pc_offset: u32,
-    ) -> Option<wgpu::QueueWriteBufferView<'a>> {
+    ) -> Option<StupidBufferWrite> {
         render_pass.set_pipeline(pipeline);
 
         let mut bind_index = 0;
@@ -882,11 +909,18 @@ impl<'window> Wal<'window> {
 
             // Move the write_buffer_with call here
             if let Some(pc_buffers) = pc_buffers {
-                buffer_write_view = self.queue.write_buffer_with(
-                    pc_buffers.current(),
-                    0,
-                    std::num::NonZero::new(pc_buffers.current().size()).unwrap(),
-                );
+                // buffer_write_view = self.queue.write_buffer_with(
+                //     pc_buffers.current(),
+                //     0,
+                //     std::num::NonZero::new(pc_buffers.current().size()).unwrap(),
+                // );
+                buffer_write_view = Some(StupidBufferWrite {
+                    data: unsafe {
+                        Box::new_uninit_slice(pc_buffers.current().size() as usize).assume_init()
+                    },
+                    buffer: pc_buffers.current(),
+                    queue: &self.queue,
+                })
             }
         }
 
@@ -1064,7 +1098,7 @@ impl<'window> Wal<'window> {
         compute_pass.dispatch_workgroups(workgroup_count_x, workgroup_count_y, workgroup_count_z);
     }
 
-    pub fn write_buffer_with() {}
+    // pub fn write_buffer_with() {}
 }
 
 /*
