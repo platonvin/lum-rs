@@ -489,6 +489,6 @@ void main(void){
     vec3 traced_color = trace_glossy_ray(origin, direction, accumulated_light, accumulated_reflection);
     
     frame_color = vec4(encode_color(traced_color), 1.0-mat.roughness);
-    frame_color = vec4(encode_color(traced_color), 0.0);
+    // frame_color = vec4(encode_color(traced_color), 0.0);
     // frame_color = vec4(vec3(.1, .2, .3), 0.0);
 }

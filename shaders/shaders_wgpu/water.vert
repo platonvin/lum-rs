@@ -15,7 +15,7 @@ struct UboData {
 
 // --- Push Constants Structure ---
 // Matches GLSL push constants block
-struct Constants {
+struct PushConstants {
     shift: vec4<f32>, // Positional offset for the current batch, also contains world Z for water level.
     time_size: vec4<i32>,
 }
@@ -31,7 +31,7 @@ struct VertexOutput {
 @group(0) @binding(1) var state: texture_2d<f32>; // Texture with wave data (e.g., Gerstner wave displacements or height components).
 @group(0) @binding(2) var linear_samp_tiled: sampler; // Sampler for the state texture.
 
-@group(1) @binding(0) var<uniform> pco: Constants; // Push constants.
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 // Simple pseudo-random number generator.
 fn rand(co: vec2<f32>) -> f32 {
@@ -116,7 +116,7 @@ fn wave_water_vert(pos: vec2<f32>, shift: vec2<f32>, time: f32) -> vec3<f32> {
     return vec3<f32>(height, 0.0, 0.0);
 }
 
-fn get_water_vert(vert_index: i32, instance_index: i32, shift: vec2<f32>) -> vec3<f32> {
+fn get_water_vert(vert_index: i32, instance_index: i32, shift: vec2<f32>, pco: PushConstants) -> vec3<f32> {
     var vertex = vec3<f32>(0.0);
 
     let instance_y_offset = f32(instance_index);
@@ -137,10 +137,15 @@ fn get_water_vert(vert_index: i32, instance_index: i32, shift: vec2<f32>) -> vec
 // Main vertex shader function.
 @vertex
 fn main(@builtin(vertex_index) vert_id: u32, @builtin(instance_index) instance_id: u32) -> VertexOutput {
+    let batch_index = instance_id / (32);
+    let blade_index = instance_id % (32);
+    
+    let pco = pco_shared[batch_index];
+    
     var out: VertexOutput;
 
     let shift = pco.shift;
-    let local_pos = get_water_vert(i32(vert_id), i32(instance_id), shift.xy);
+    let local_pos = get_water_vert(i32(vert_id), i32(blade_index), shift.xy, pco);
 
     let world_pos_vec3 = local_pos + shift.xyz;
     let world_pos = vec4<f32>(world_pos_vec3, 1.0);

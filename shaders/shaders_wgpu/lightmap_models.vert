@@ -18,7 +18,7 @@ struct PushConstants {
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(1) @binding(0) var<uniform> pco: PushConstants;
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 struct VertexInput {
     @location(0) pos_in: vec4<u32>, // Matches layout(location = 0) in lowp uvec3 posIn;
@@ -46,7 +46,9 @@ fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
 
 // --- Vertex Entry Point ---
 @vertex
-fn main(input: VertexInput) -> VertexOutput {
+fn main(@builtin(instance_index) instance_id: u32, input: VertexInput) -> VertexOutput {
+    let pco = pco_shared[instance_id];
+
     var output: VertexOutput;
 
     // Convert u32 input position to f32

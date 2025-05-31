@@ -6,6 +6,7 @@ pub mod types;
 pub mod wal;
 
 use std::future::IntoFuture;
+use std::time::Instant;
 
 use super::{Camera, SunLight};
 use futures::executor;
@@ -34,28 +35,38 @@ static mut CHOSEN_STENCIL_FORMAT: Option<wgpu::TextureFormat> = Some(TextureForm
 static mut SWAPCHAIN_FORMAT: Option<wgpu::TextureFormat> = None;
 
 #[derive(Default)]
+pub struct PipeWithPushConstants {
+    pub pipe: RasterPipe,
+    pub push_constants: Vec<u8>,
+    pub pc_count: i32,
+    pub pc_buffer: Option<wgpu::Buffer>,
+    pub pc_bg: Option<wgpu::BindGroup>,
+}
+
+#[derive(Default)]
 pub struct AllPipes {
     pub lightmap_blocks_pipe: RasterPipe,
     pub lightmap_models_pipe: RasterPipe,
 
-    pub raygen_blocks_pipe: RasterPipe, // Or ComputePipeline if it's ray tracing
-    pub raygen_models_pipe: RasterPipe, // Or ComputePipeline
-    // pub raygen_models_push_layout: Option<wgpu::BindGroupLayout>, // Equivalent to DescriptorSetLayout
+    pub raygen_blocks_pipe: RasterPipe,
+    pub raygen_models_pipe: RasterPipe,
     pub raygen_particles_pipe: RasterPipe,
-    pub raygen_water_pipe: RasterPipe,
-    pub raygen_foliage_pipes: Vec<RasterPipe>, // Or ComputePipeline
+    pub raygen_water_pipe: PipeWithPushConstants, // i mean water is just grass but blue and flat
+    pub raygen_foliage_pipes: Vec<PipeWithPushConstants>,
 
     pub diffuse_pipe: RasterPipe,
     pub ao_pipe: RasterPipe,
     pub fill_stencil_glossy_pipe: RasterPipe,
-    pub fill_stencil_smoke_pipe: RasterPipe,
+    // smoke pipe goes hard
+    // pc cause smoke is composed of a bunch of drawcalls rendering cubes
+    pub fill_stencil_smoke_pipe: PipeWithPushConstants,
     pub glossy_pipe: RasterPipe,
     pub smoke_pipe: RasterPipe,
     pub tonemap_pipe: RasterPipe,
-    // pub overlay_pipe: RasterPipe,
+
     pub radiance_pipe: ComputePipe,
     pub map_pipe: ComputePipe,
-    // pub map_push_layout: Option<wgpu::BindGroupLayout>,
+
     pub update_grass_pipe: ComputePipe,
     pub update_water_pipe: ComputePipe,
     pub gen_perlin2d_pipe: ComputePipe,
@@ -147,12 +158,14 @@ pub struct InternalRendererWebGPU<'window> {
 
     particles: Vec<Particle>,
 
+    // we update it right before doing rendering to have most accurate timestamp
     delta_time: f32,
+    last_time: Instant,
 
     has_palette: bool,
     material_palette: Vec<Material>,
     block_palette_voxels: Vec<BlockVoxels<Voxel>>,
-    block_palette_meshes: Vec<InternalMeshBlock<Option<wgpu::Buffer>>>, // Adjust buffer type
+    block_palette_meshes: Vec<InternalMeshBlock<Option<wgpu::Buffer>, IndexedVerticesQueue>>,
 }
 
 impl<'window> InternalRendererWebGPU<'window> {
@@ -219,6 +232,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             wal,
             settings: Settings::default(),
             delta_time: 0.0,
+            last_time: Instant::now(),
 
             // rpasses: renderpasses,
             // cmdbufs: command_buffers,
@@ -247,14 +261,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             block_clear_queue: vec![],
             foliage_descriptions,
             block_palette_meshes: (0..lum_settings.static_block_palette_size)
-                .map(|_| InternalMeshBlock::<Option<wgpu::Buffer>>::default())
+                .map(|_| Default::default())
                 .collect(),
             current_encoder: None,
         };
 
         // 9. Generate perlin noise images (for grass, water, smoke, etc.)
-        // renderer.gen_perlin_2d();
-        // renderer.gen_perlin_3d();
+        renderer.gen_perlin_noises();
 
         renderer
     }

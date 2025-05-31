@@ -5,7 +5,6 @@ const BLOCK_PALETTE_SIZE_X: i32 = 64;
 const STATIC_BLOCK_COUNT: i32 = 15; // Currently unused in this shader.
 const PI: f32 = 3.1415926535;
 const world_size: vec3<i32> = vec3<i32>(48, 48, 16); // Dimensions of the world for texture mapping.
-const BLADES_PER_INSTANCE: i32 = 1; // Number of blades processed per instance.
 const VERTICES_PER_BLADE: u32 = 6u; // Number of vertices that define a single blade's geometry.
 const MAX_HEIGHT: f32 = 3.0; // Maximum height a blade can reach, used for scaling effects.
 
@@ -37,7 +36,7 @@ struct PushConstants {
     stxy: vec4<i32>, // Packed data: (grid_size, time_seed_related, x_flip_flag, y_flip_flag)
 }
 ;
-@group(1) @binding(0) var<uniform> pco: PushConstants;
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 
 // --- Vertex Output Structure ---
@@ -113,7 +112,7 @@ fn curve_blade_vert(rnd01: f32, vertex: ptr<function, vec3<f32>>, normal: ptr<fu
 }
 
 // Loads a wind-induced offset from the state texture.
-fn load_offset(local_pos: vec2<f32>) -> vec2<f32> {
+fn load_offset(local_pos: vec2<f32>, pco: PushConstants) -> vec2<f32> {
     let world_pos = local_pos * 16.0 + pco.shift.xy;
     // Normalize world position to UV coordinates for state texture sampling.
     let state_uv = world_pos / (vec2<f32>(world_size.xy) * 16.0);
@@ -123,9 +122,9 @@ fn load_offset(local_pos: vec2<f32>) -> vec2<f32> {
 }
 
 // Applies a wiggling effect to a blade vertex due to wind and procedural motion.
-fn wiggle_blade_vert(rnd01: f32, vertex: ptr<function, vec3<f32>>, normal: ptr<function, vec3<f32>>, pos_in_tile: vec2<f32>) {
+fn wiggle_blade_vert(rnd01: f32, vertex: ptr<function, vec3<f32>>, normal: ptr<function, vec3<f32>>, pos_in_tile: vec2<f32>, pco: PushConstants) {
     // Global offset from wind texture (currently disabled in load_offset).
-    let global_offset = load_offset(pos_in_tile);
+    let global_offset = load_offset(pos_in_tile, pco);
 
     // Local per-blade procedural wiggle.
     var local_offset = vec2(0.0);
@@ -152,7 +151,7 @@ fn wiggle_blade_vert(rnd01: f32, vertex: ptr<function, vec3<f32>>, normal: ptr<f
 // Generates the blade vertex position relative to its tile and its normal.
 // Generates the blade vertex position relative to its tile and its normal,
 // aligned more closely with the provided GLSL logic.
-fn get_blade_vert(blade_vertex_id: u32, rand01: f32, relative_pos_in_tile: vec2<f32>) -> BladeGeometry {
+fn get_blade_vert(blade_vertex_id: u32, rand01: f32, relative_pos_in_tile: vec2<f32>, pco: PushConstants) -> BladeGeometry {
     var vertex: vec3<f32>;
     var normal: vec3<f32>;
 
@@ -195,7 +194,7 @@ fn get_blade_vert(blade_vertex_id: u32, rand01: f32, relative_pos_in_tile: vec2<
     // Apply sequence of transformations.
     curve_blade_vert(rand01, &vertex, &normal);
     rotate_blade_vert(rand01, &vertex, &normal);
-    wiggle_blade_vert(rand01, &vertex, &normal, relative_pos_in_tile);
+    wiggle_blade_vert(rand01, &vertex, &normal, relative_pos_in_tile, pco);
     displace_blade(rand01, &vertex, &normal);
 
     // Final height scaling, as per GLSL.
@@ -214,11 +213,18 @@ fn get_blade_vert(blade_vertex_id: u32, rand01: f32, relative_pos_in_tile: vec2<
 
 @vertex
 fn main(@builtin(vertex_index) vertex_idx: u32, @builtin(instance_index) instance_idx: u32) -> VertexOutput {
+    // instance_idx is not quite the batch id yet
+    // total index count is batch_count * blades_per_batch
+    let blades_per_batch = u32(10*10);
+    let batch_index = instance_idx / blades_per_batch;
+    let blade_index = instance_idx % blades_per_batch;
+    let pco = pco_shared[batch_index];
+
     var output: VertexOutput;
 
     // Calculate blade and vertex IDs.
     let sub_blade_id = vertex_idx / VERTICES_PER_BLADE; // ID of the blade within this instance.
-    let blade_id = i32(instance_idx * u32(BLADES_PER_INSTANCE) + sub_blade_id); // Global blade ID.
+    let blade_id = i32(blade_index + sub_blade_id); // Global blade ID.
     let blade_vertex_id = vertex_idx % VERTICES_PER_BLADE; // Index of the vertex on the current blade (0 to VERTICES_PER_BLADE-1).
 
     // Calculate blade's grid position, applying flips if specified in push constants.
@@ -238,7 +244,7 @@ fn main(@builtin(vertex_index) vertex_idx: u32, @builtin(instance_index) instanc
     let rand01 = rand(relative_pos_in_tile + pco.shift.xy);
 
     // Generate blade vertex position (relative to tile) and normal.
-    let blade_geom = get_blade_vert(blade_vertex_id, rand01, relative_pos_in_tile);
+    let blade_geom = get_blade_vert(blade_vertex_id, rand01, relative_pos_in_tile, pco);
     var final_normal = blade_geom.normal;
 
     // Position vertex in world space by adding the global shift from push constants.

@@ -12,11 +12,20 @@ struct UboData {
     delta_time: f32,
 };
 
+// struct PushConstants {
+//     shift: vec4<i32>,
+// };
+
 struct PushConstants {
-    shift: vec4<i32>,
+    block: i32,
+    shift_x: i32,
+    shift_y: i32,
+    shift_z: i32,
+    FUCKWEB_unorm: u32, 
 };
+
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(1) @binding(0) var<uniform> pco: PushConstants;
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 struct VertexInput {
     @location(0) pos_in: vec4<u32>,
@@ -34,14 +43,18 @@ struct VertexOutput {
 
 // --- Vertex Entry Point ---
 @vertex
-fn main(input: VertexInput) -> VertexOutput {
+fn main(@builtin(instance_index) instance_id: u32, input: VertexInput) -> VertexOutput {
+    let pco = pco_shared[instance_id];
+    // let shift = pco.shift.xyz;
+    let shift = vec3<i32>(pco.shift_x, pco.shift_y, pco.shift_z);
+    
     var output: VertexOutput;
 
     // Convert u32 input position to f32 for calculations
     let local_pos_f32 = vec3<f32>(input.pos_in.xyz);
 
     // Apply shift from push constants (cast i32 shift to f32)
-    let world_pos = vec4<f32>(local_pos_f32 + vec3<f32>(pco.shift.xyz), 1.0);
+    let world_pos = vec4<f32>(local_pos_f32 + vec3<f32>(shift), 1.0);
 
     // Transform to homogeneous clip space using UBO matrix
     var clip_pos = ubo.lightmap_proj * world_pos;

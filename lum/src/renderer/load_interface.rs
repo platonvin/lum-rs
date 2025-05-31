@@ -10,13 +10,14 @@ use crate::{
     },
 };
 
-use super::ogt_vox;
+use super::{ogt_vox, webgpu::types::IndexedVerticesQueue};
 
 pub trait LoadInterface {
     type BufferType;
     type ImageType;
     type BlockId: Clone;
     type MatId;
+    type IndexedVertices = IndexedVertices;
     type Voxel: Zero + One + Eq + Default + Clone + From<u8>;
 
     fn update_block_palette_to_gpu(&mut self);
@@ -26,7 +27,7 @@ pub trait LoadInterface {
         &mut self,
         model: &ogt_vox::VoxModel,
         _make_vertices: bool,
-    ) -> InternalMeshModel<Self::BufferType, Self::ImageType>;
+    ) -> InternalMeshModel<Self::BufferType, Self::ImageType, Self::IndexedVertices>;
 
     // i love that we can implement functions in traits
     #[cold]
@@ -36,7 +37,7 @@ pub trait LoadInterface {
         mesh_file: &str,
         _make_vertices: bool,
         extrude_palette: bool,
-    ) -> InternalMeshModel<Self::BufferType, Self::ImageType> {
+    ) -> InternalMeshModel<Self::BufferType, Self::ImageType, Self::IndexedVertices> {
         let scene = ogt_vox::read_scene_from_file(mesh_file).unwrap();
         assert!(scene.models.len() == 1); // only one model per file supported for now
         let model = &scene.models[0];
@@ -58,7 +59,7 @@ pub trait LoadInterface {
         meshes_file: &str,
         _make_vertices: bool,
         extrude_palette: bool,
-    ) -> Vec<InternalMeshModel<Self::BufferType, Self::ImageType>> {
+    ) -> Vec<InternalMeshModel<Self::BufferType, Self::ImageType, Self::IndexedVertices>> {
         let scene = ogt_vox::read_scene_from_file(meshes_file).unwrap();
 
         if extrude_palette && !self.has_palette() {
@@ -142,12 +143,12 @@ pub trait LoadInterface {
     fn set_block_palette_mesh(
         &mut self,
         block_id: Self::BlockId,
-        mesh: InternalMeshBlock<Self::BufferType>,
+        mesh: InternalMeshBlock<Self::BufferType, Self::IndexedVertices>,
     );
     fn get_block_palette_mesh(
         &self,
         block_id: Self::BlockId,
-    ) -> &InternalMeshBlock<Self::BufferType>;
+    ) -> &InternalMeshBlock<Self::BufferType, Self::IndexedVertices>;
 
     #[cold]
     fn make_contour_vertices(
@@ -156,7 +157,7 @@ pub trait LoadInterface {
         size: uvec3,
         // 3d array with 1 padding
         padded_voxel_data: Array3D<VoxelForContour<Self::Voxel>>,
-    ) -> FaceBuffers<Self::BufferType>;
+    ) -> FaceBuffers<Self::BufferType, Self::IndexedVertices>;
 
     fn create_rayrace_voxel_image(
         &mut self,
@@ -165,7 +166,10 @@ pub trait LoadInterface {
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) -> Self::ImageType;
 
-    fn free_mesh(&mut self, mesh: InternalMeshModel<Self::BufferType, Self::ImageType>);
+    fn free_mesh(
+        &mut self,
+        mesh: InternalMeshModel<Self::BufferType, Self::ImageType, Self::IndexedVertices>,
+    );
 
     fn free_block(&mut self, block: Self::BlockId);
 

@@ -4,9 +4,14 @@ t = "test"
 b = "build"
 r = "run"
 br = "build --release"
-brr = "run --release"                                                              # yes one extra r.
+brr = "run --release"  # yes one extra r.
+
+nv = "run --profile nv --package examples --bin demo_vk --features vk_backend"
+nw = "run --profile nw --package examples --bin demo_wgpu --features wgpu_backend"
+
 rv = "run --profile rv --package examples --bin demo_vk --features vk_backend"
 rw = "run --profile rw --package examples --bin demo_wgpu --features wgpu_backend"
+
 dv = "run --profile dv --package examples --bin demo_vk --features vk_backend"
 dw = "run --profile dw --package examples --bin demo_wgpu --features wgpu_backend"
 
@@ -17,7 +22,7 @@ linker = "x86_64-w64-mingw32-gcc"
 linker = "rust-lld"
 
 [env]
-RUST_BACKTRACE = "full" # this is what i love in Rust
+RUST_BACKTRACE = "short" # this is what i love in Rust
 
 # native is highest perfomance build
 [profile.native.build-override]
@@ -29,6 +34,13 @@ rustflags = [
     "-Zlocation-detail=none",
     "-Zfmt-debug=none",
 ]
+# nw and nv are native for wgpu and vk respectively
+# native is highest perfomance build
+[profile.nw.build-override]
+rustflags = ["-C", "target-cpu=native"]
+[profile.nv.build-override]
+rustflags = ["-C", "target-cpu=native"]
+
 
 # natsize is smallest build
 [profile.natsize.build-override]
@@ -44,9 +56,9 @@ codegen-backend = true
 
 # dev is a normal debug build, almost unused
 # rv/rw are (Release Vulkan/Wgpu), they are just "debug but fast" and separate for convinience
-[profile.dev]
-codegen-backend = "cranelift"
-[profile.dv]
-codegen-backend = "cranelift"
-[profile.dw]
-codegen-backend = "cranelift"
+# [profile.dev]
+# codegen-backend = "cranelift"
+# [profile.dv]
+# codegen-backend = "cranelift"
+# [profile.dw]
+# codegen-backend = "cranelift"

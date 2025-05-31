@@ -22,7 +22,6 @@ struct UboData {
 // @group(1) @binding(0) var<uniform> pco: Constants;
 
 struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
     @location(0) mat_norm: vec4<u32>,
 };
 

@@ -21,8 +21,8 @@ struct Constants {
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(1) @binding(0) var<uniform> pco: Constants;
 // @group(0) @binding(2) var blockPalette: texture_3d<i32>;
+@group(1) @binding(0) var<storage, read> pco_shared: array<Constants>;
 
 struct VertexInput {
     @location(0) posIn: vec4<u32>,
@@ -39,7 +39,9 @@ fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
 }
 
 @vertex
-fn main(in: VertexInput) -> VertexOutput {
+fn main(@builtin(instance_index) instance_id: u32, in: VertexInput) -> VertexOutput {
+    let pco = pco_shared[instance_id];
+    
     let upos = vec3<i32>(in.posIn.xyz);
     let normal_encoded = pco.FUCKWEB_unorm;
     let block = pco.block;

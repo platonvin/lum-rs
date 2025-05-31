@@ -31,11 +31,11 @@ struct FragmentOutput {
 @group(0) @binding(2) var smoke_depth_near: texture_2d<f32>;
 @group(0) @binding(3) var radianceCache: texture_3d<f32>;
 @group(0) @binding(4) var noise: texture_3d<f32>;
-@group(0) @binding(5) var linear_sampler: sampler; // Assuming linear filtering
+@group(0) @binding(5) var linear_sampler_tiled: sampler; // Assuming linear filtering
 
 @group(1) @binding(0) var<uniform> pc: Constants;
 
-const COLOR_ENCODE_VALUE: f32 = 8.0;
+const COLOR_ENCODE_VALUE: f32 = 1.0;
 const MAX_STEPS: i32 = 8;
 const TRESHOLD: f32 = 0.7;
 const MULTIPLIER: f32 = 1.7;
@@ -196,10 +196,13 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
     var total_dencity = 0.0;
 
     var fraction = near;
-    let time = f32(ubo.timeseed);
+    // let time = f32(u32(ubo.timeseed));
+    let time = 1.0;
     for (var i: i32 = 0; i < MAX_STEPS; i++) {
         fraction += step_size;
-        let clip_pos = pos.xy;
+        let pix: vec2<f32> = pos.xy;                          // pixel coords
+        let clip_pos: vec2<f32> = (pix / ubo.frame_size) * 2.0 - vec2<f32>(1.0, 1.0);
+        // let clip_pos = pos.xy;
         position = get_origin_from_depth(fraction, clip_pos);
         let voxel_pos = position;
         let noise_clip_pos = voxel_pos / 32.0;
@@ -207,30 +210,33 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
         var wind_direction = vec3<f32>(1.0, 0.0, 0.0);
         let wind_rotate = rotatem(1.6);
 
-        noises.x = textureSampleLevel(noise, linear_sampler, noise_clip_pos / 1.0 + wind_direction * time / 3500.0, 0.0).x;
+        noises.x = textureSampleLevel(noise, linear_sampler_tiled, noise_clip_pos / 1.0 + wind_direction * time / 3500.0, 0.0).x;
         wind_direction.x = (wind_rotate * wind_direction.xy).x;
         wind_direction.y = (wind_rotate * wind_direction.xy).y;
-        noises.y = textureSampleLevel(noise, linear_sampler, noise_clip_pos / 2.1 + wind_direction * time / 3000.0, 0.0).y;
+        noises.y = textureSampleLevel(noise, linear_sampler_tiled, noise_clip_pos / 2.1 + wind_direction * time / 3000.0, 0.0).y;
         wind_direction.x = (wind_rotate * wind_direction.xy).x;
         wind_direction.y = (wind_rotate * wind_direction.xy).y;
-        noises.z = textureSampleLevel(noise, linear_sampler, noise_clip_pos / 3.2 + wind_direction * time / 2500.0, 0.0).z;
+        noises.z = textureSampleLevel(noise, linear_sampler_tiled, noise_clip_pos / 3.2 + wind_direction * time / 2500.0, 0.0).z;
         wind_direction.x = (wind_rotate * wind_direction.xy).x;
         wind_direction.y = (wind_rotate * wind_direction.xy).y;
-        noises.w = textureSampleLevel(noise, linear_sampler, noise_clip_pos / 4.3 + wind_direction * time / 2000.0, 0.0).w;
+        noises.w = textureSampleLevel(noise, linear_sampler_tiled, noise_clip_pos / 4.3 + wind_direction * time / 2000.0, 0.0).w;
 
         let close_to_border = clamp(diff, 0.1, 16.0) / 16.0;
         var dencity = (noises.x + noises.y + noises.z - noises.w / close_to_border) / 2.0 - TRESHOLD;
         dencity = clamp(dencity, 0.0, TRESHOLD) * MULTIPLIER;
-        dencity = 1.0;
+        // dencity = 1.0;
         I = (1.0 - dencity * step_size) * I;
         total_dencity += dencity * step_size;
     }
 
-    let final_light = sample_radiance_no_normal(position);
-    let smoke_opacity = 1.0 - I;
+    // let final_light = sample_radiance_no_normal(position);
+    var smoke_opacity = 1.0 - I;
+    // smoke_opacity = diff / 10.0;
+    // smoke_opacity = clamp(diff, -100000.0, 100000.0);
+    
+
     var out: FragmentOutput;
-    // out.smoke_color = vec4<f32>(encode_color(final_light), smoke_opacity);
-    out.smoke_color = vec4<f32>(encode_color(vec3f(1.0)), smoke_opacity);
-    // out.smoke_color = vec4<f32>(encode_color(vec3f(1.0)), 1.0);
+    out.smoke_color = vec4<f32>(encode_color(vec3f(0.15)), smoke_opacity);
+    // out.smoke_color = vec4<f32>(encode_color(vec3f(0.15)), 1.0);
     return out;
 }

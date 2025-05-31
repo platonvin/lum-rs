@@ -127,6 +127,7 @@ pub trait RendererInterface {
     type MeshLiquid;
     type MeshModel;
     type MeshBlock;
+    type Particle;
     type BlockId;
     type MatId;
     type Voxel;
@@ -177,6 +178,7 @@ pub trait RendererInterface {
     fn draw_foliage(&mut self, foliage: &Self::MeshFoliage, pos: &vec3);
     fn draw_liquid(&mut self, liquid: &Self::MeshLiquid, pos: &vec3);
     fn draw_volumetric(&mut self, volumetric: &Self::MeshVolumetric, pos: &vec3);
+    fn spawn_particle(&mut self, particle: &Self::Particle);
 
     fn get_world_blocks(&self) -> &Array3D<Self::BlockId>;
     fn get_world_blocks_mut(&mut self) -> &mut Array3D<Self::BlockId>;

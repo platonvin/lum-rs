@@ -5,6 +5,8 @@ use std::{
     fs::File,
     io::{self, Read},
     path::Path,
+    sync::OnceLock,
+    time::{Duration, Instant},
 };
 
 // we import types directly so we can use them like BlockId
@@ -27,6 +29,14 @@ use winit::{
     event_loop::{ActiveEventLoop, EventLoop},
     window::{Window, WindowId},
 };
+
+static mut FPS_STATE: OnceLock<FpsState> = OnceLock::new();
+
+struct FpsState {
+    last_instant: Instant,
+    frame_count: u64,
+    output_interval: Duration,
+}
 
 // i hardcode it but you probably should use some sort of "Asset library" - hashmap of YourEntityTypeEnum -> LumMeshModel
 // #[derive(Default)]
@@ -244,9 +254,39 @@ impl<'renderer> AppState<'renderer> {
             }
         }
 
+        if self.lum.renderer.counter % 160 == 0 {
+            self.lum.spawn_particle(&Particle {
+                pos: self.transforms.tank_body.translation,
+                vel: vec3::new(0.0, 0.0, 16.0),
+                life_time: 6.9,
+                mat_id: 249,
+            });
+        }
+
         self.lum.prepare_frame();
 
         self.lum.end_frame();
+
+        {
+            use std::time::{Duration, Instant};
+            let state = unsafe {
+                FPS_STATE.get_or_init(|| FpsState {
+                    last_instant: Instant::now(),
+                    frame_count: 0,
+                    output_interval: Duration::from_millis(1000),
+                });
+                FPS_STATE.get_mut().unwrap()
+            };
+            state.frame_count += 1;
+            let now = Instant::now();
+            let elapsed = now - state.last_instant;
+            if elapsed >= state.output_interval {
+                let fps = state.frame_count as f64 / elapsed.as_secs_f64();
+                println!("FPS: {:.2}", fps);
+                state.last_instant = now;
+                state.frame_count = 0;
+            }
+        };
     }
 }
 
@@ -329,6 +369,7 @@ fn main() {
         .with_maximized(true)
         // .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
         ;
+
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();
 

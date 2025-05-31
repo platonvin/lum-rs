@@ -21,7 +21,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     pub fn create_all_buffers(wal: &mut Wal, lum_settings: &Settings) -> AllBuffers {
         let gpu_particles = wal.create_buffer_rings(
             wal.config.desired_maximum_frame_latency as usize,
-            wgpu::BufferUsages::VERTEX,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             (lum_settings.max_particle_count as usize) * mem::size_of::<Particle>(),
             false,
             Some("Particles"),

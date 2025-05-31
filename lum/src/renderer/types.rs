@@ -6,6 +6,8 @@ use qvek::vek::{
     num_traits::{One, Zero},
 };
 
+use super::webgpu::types::IndexedVerticesQueue;
+
 // // my glsl brain dictaited me to do this
 pub type uvec4 = vek::Vec4<u32>;
 pub type u16vec4 = vek::Vec4<u16>;
@@ -141,15 +143,15 @@ pub struct IndexedVertices {
 
 #[allow(non_snake_case)]
 #[derive(Debug, Default)]
-pub struct FaceBuffers<BufferType> {
+pub struct FaceBuffers<BufferType, IndexedVerticesType = IndexedVertices> {
     // zPz means zero-Positive-zero
     // zzN means zero-zero-Negative
-    pub Pzz: IndexedVertices,
-    pub Nzz: IndexedVertices,
-    pub zPz: IndexedVertices,
-    pub zNz: IndexedVertices,
-    pub zzP: IndexedVertices,
-    pub zzN: IndexedVertices,
+    pub Pzz: IndexedVerticesType,
+    pub Nzz: IndexedVerticesType,
+    pub zPz: IndexedVerticesType,
+    pub zNz: IndexedVerticesType,
+    pub zzP: IndexedVerticesType,
+    pub zzN: IndexedVerticesType,
     pub vertexes: BufferType,
     pub indices: BufferType,
 }
@@ -182,20 +184,34 @@ pub struct FaceBuffersShared {
 //     pub faces: FaceBuffersShared,
 // }
 
+#[derive(Debug)]
+pub struct MetadataMapModel {
+    pub workgroup_size: ivec3,
+}
+
 // handle (reference) to a mesh.
 // You can clone it but still need to unload one time
 #[derive(Debug, Default)]
-pub struct InternalMeshModel<BufferType, ImageType> {
-    pub triangles: FaceBuffers<BufferType>,
+pub struct InternalMeshModel<BufferType, ImageType, IndexedVerticesType = IndexedVertices> {
+    pub triangles: FaceBuffers<BufferType, IndexedVerticesType>,
     // when model has multiple sprites in a spritesheet, `voxels` contains all of them, stacked along `Y`
     pub voxels: ImageType,
     // size of voxels. So if only one sprite, equal to its size, but when multiple - equal to sum of sizes
-    pub total_size: uvec3, // integer because in voxels
-
+    // integer because in voxels
+    pub size: uvec3,
     // // array of offset + size for all the sprites in a spritesheet
     // pub sprites: Vec<SpriteDescription>,
-    pub voxels_bind_group_fragment: Option<wgpu::BindGroup>,
+
+    // this is not needed since bind groups are now per-face and include what this used to bind
+    // pub voxels_bind_group_fragment: Option<wgpu::BindGroup>,
+    //
+    pub compute_push_constants: Vec<u8>,
+    // pub compute_metadata: Vec<MetadataMapModel>,
+    // separate from faces cause thats what i came up with.
+    pub compute_pc_buffer: Option<wgpu::Buffer>,
+    // this is still needed cause our compute workload is per-mehsh, not per-face
     pub voxels_bind_group_compute: Option<wgpu::BindGroup>,
+    pub compute_pc_count: i32,
 }
 
 //5.76k bytes for compact 100 sprites (models)
@@ -204,8 +220,8 @@ pub struct InternalMeshModel<BufferType, ImageType> {
 // handle (reference) to a block triangles.
 // You can clone it but still need to unload one time
 #[derive(Debug, Default)]
-pub struct InternalMeshBlock<BufferType> {
-    pub triangles: FaceBuffers<BufferType>,
+pub struct InternalMeshBlock<BufferType, IndexedVerticesType = IndexedVertices> {
+    pub triangles: FaceBuffers<BufferType, IndexedVerticesType>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -217,6 +233,10 @@ pub struct InternalMeshFoliage {
 pub struct InternalMeshLiquid<MatIdType> {
     pub main: MatIdType,
     pub foam: MatIdType,
+    // pub pc_buffer: Option<wgpu::Buffer>,
+    // pub pc_bg: Option<wgpu::BindGroup>,
+    // pub push_constants: Vec<u8>,
+    // pub pc_count: i32,
 }
 
 #[derive(Clone, Debug, Default)]

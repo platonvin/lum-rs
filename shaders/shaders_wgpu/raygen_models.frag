@@ -13,7 +13,8 @@ struct UboData {
 };
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(2) @binding(0) var modelVoxels: texture_3d<i32>; 
+// @group(1) @binding(0) var<storage, read> pco_shared: array<Constants>;
+@group(1) @binding(1) var modelVoxels: texture_3d<i32>; 
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,

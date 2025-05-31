@@ -16,26 +16,15 @@ pub mod vulkan;
 #[cfg(feature = "wgpu_backend")]
 pub mod webgpu;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Settings {
-    pub world_size: uvec3,
-    pub static_block_palette_size: u32,
-    pub max_particle_count: u32,
-    pub lightmap_extent: vk::Extent2D,
-}
-
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            world_size: uvec3::new(48, 48, 16),
-            static_block_palette_size: 15,
-            max_particle_count: 8128,
-            lightmap_extent: Extent2D {
-                width: 1024,
-                height: 1024,
-            },
-        }
-    }
+    pub world_size: uvec3 = uvec3::new(48, 48, 16),
+    pub static_block_palette_size: u32 = 15,
+    pub max_particle_count: u32 = 8128,
+    pub lightmap_extent: vk::Extent2D = Extent2D {
+        width: 1024,
+        height: 1024,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]

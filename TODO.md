@@ -1,10 +1,12 @@
 todoy:
-  smoke
   docs
   code cleanup
   separate builds & good flags
-  wgpu push constants
   less magic constants
+  static(?) rings
+  better traits
+  more division (divide in crates)
+
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
 wgpui better pcnherit TODO from lum++
@@ -163,5 +165,47 @@ why the fuck does
             .slice(..)
             .map_async(wgpu::MapMode::Write, move |res| ready = true);
         self.wal.queue.submit([]);
-
 crash??? wgpu, seriously?
+
+ideas to fix bottleneck:
+  sort by state not by depth (trade more GPU compute work for less memory work): 
+    sort by depth in each buffer
+    merge buffers
+
+less error checking:
+  assert validity in important places in debug / release (not native/distribution)
+
+
+people say that rust compile errors are better. Where?
+error[E0053]: method `make_contour_vertices` has an incompatible type for trait
+   --> lum\src\renderer\webgpu\load.rs:348:10
+    |
+348 |     ) -> FaceBuffers<Self::BufferType, IndexedVerticesQueue<1>> {
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `renderer::types::IndexedVertices`, found `webgpu::types::IndexedVerticesQueue<1>`
+    |
+note: type in trait
+   --> lum\src\renderer\load_interface.rs:159:10
+    |
+159 |     ) -> FaceBuffers<Self::BufferType>;
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: expected signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> renderer::types::FaceBuffers<_, renderer::types::IndexedVertices>`
+               found signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> renderer::types::FaceBuffers<_, webgpu::types::IndexedVerticesQueue<1>>`
+help: change the output type to match the trait
+    |
+348 -     ) -> FaceBuffers<Self::BufferType, IndexedVerticesQueue<1>> {
+348 +     ) -> renderer::types::FaceBuffers<std::option::Option<wgpu::Buffer>> {
+    |
+
+
+again:
+  push constants as repr c struct defs
+  
+example of good error message:
+  Caused by:
+  In RenderPass::end
+    In a draw command, kind: Draw
+      Index 2250 extends beyond limit 1266. Did you bind the correct index buffer?
+
+can be improved by specifying what index is and where limit comes from
+
+debug asserts for games are just built-in tests

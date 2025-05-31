@@ -191,9 +191,12 @@ impl LoadInterface for InternalRendererVulkan {
         InternalMeshModel {
             triangles,
             voxels,
-            total_size: size,
+            size,
             voxels_bind_group_compute: None,
-            voxels_bind_group_fragment: None,
+            compute_push_constants: todo!(),
+            compute_pc_buffer: todo!(),
+            compute_pc_count: todo!(),
+            // voxels_bind_group_fragment: None,
             // sprites: vec![],
         }
     }

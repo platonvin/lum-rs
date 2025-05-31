@@ -205,6 +205,26 @@ debug = false
 panic = "unwind"
 overflow-checks = true
 
+# debug for vk feature
+[profile.dv]
+inherits = "dev"
+opt-level = 0
+lto = "off"
+codegen-units = 16
+debug = true
+panic = "unwind"
+overflow-checks = false
+
+# debug for wgpu feature
+[profile.dw]
+inherits = "dev"
+opt-level = 0
+lto = "off"
+codegen-units = 16
+debug = true
+panic = "unwind"
+overflow-checks = false
+
 
 # release for vk feature
 [profile.rv]
@@ -226,30 +246,23 @@ debug = false
 panic = "unwind"
 overflow-checks = false
 
-[profile.rw.package."*"]
-opt-level = 3
-debug = false
 
-[profile.rv.package."*"]
+# native for vk feature
+[profile.nv]
+inherits = "release"
 opt-level = 3
+lto = "fat"
+codegen-units = 1
 debug = false
-
-# debug for vk feature
-[profile.dv]
-inherits = "dev"
-opt-level = 0
-lto = "off"
-codegen-units = 16
-debug = true
 panic = "unwind"
 overflow-checks = false
 
-# debug for wgpu feature
-[profile.dw]
-inherits = "dev"
-opt-level = 0
-lto = "off"
-codegen-units = 16
-debug = true
+# native for wgpu feature
+[profile.nw]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = false
 panic = "unwind"
 overflow-checks = false

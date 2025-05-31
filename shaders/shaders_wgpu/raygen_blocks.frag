@@ -12,9 +12,10 @@ struct UboData {
     delta_time: f32,
 };
 
+
 @group(0) @binding(0) var<uniform> uniforms: UboData;
-// @group(0) @binding(1) var<uniform> pco: Constants;
 @group(0) @binding(2) var blockPalette: texture_3d<i32>;
+// @group(1) @binding(0) var<storage, read> pco_shared: array<PushConstant>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,

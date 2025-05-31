@@ -17,7 +17,7 @@ struct UboData {
 struct PushConstants {
     originSize: vec4<f32>, 
 };
-@group(1) @binding(0) var<uniform> pco: PushConstants; 
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -41,7 +41,9 @@ const vertices = array(
 
 
 @vertex
-fn main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
+fn main(@builtin(vertex_index) vertex_idx: u32, @builtin(instance_index) instance_id: u32) -> VertexOutput {
+    let pco = pco_shared[instance_id];
+    
     var output: VertexOutput;
 
     let vertex = vertices[vertex_idx];
@@ -52,8 +54,7 @@ fn main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
 
     var clip_pos = ubo.trans_w2s * world_pos;
 
-    var calculated_depth: f32 = 0.0;
-    output.end_depth = calculated_depth + 1.0;
+    output.end_depth = 1.0 + clip_pos.z;
     clip_pos.z = 1.0 + clip_pos.z;
 
 

@@ -38,11 +38,16 @@ use crate::{
 use as_u8_slice_derive::AsU8Slice;
 use lumal::atrace;
 use lumal::ring::Ring;
+use lumal::vk::Instance;
+use qvek::vek::num_traits::{ToPrimitive, Zero};
+use qvek::vek::Vec3;
 use qvek::{i16vec3, i16vec4, vec2, vec3, vec4, vek::Clamp};
 use qvek::{ivec3, ivec4, uvec2, uvec3};
 use std::mem::{size_of, transmute};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
-use wgpu::{BindGroup, Color};
+use std::time::Instant;
+use wgpu::{BindGroup, BufferSize, Color, ComputePassDescriptor};
 use wgpu::{
     Extent3d, Origin3d, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo,
     COPY_BYTES_PER_ROW_ALIGNMENT,
@@ -318,6 +323,11 @@ impl<'window> InternalRendererWebGPU<'window> {
     // under the hood it prepares Vulkan for recording draw calls
     /// Begins the frame—updates camera/light transforms and creates a new command encoder.
     pub fn start_frame(&mut self) {
+        let now = Instant::now();
+        let delta = now - self.last_time;
+        self.delta_time = (delta.subsec_nanos() as f64 / 1e9 as f64) as f32;
+        self.last_time = now;
+
         self.update_camera();
         self.update_light_transform();
 
@@ -375,7 +385,6 @@ impl<'window> InternalRendererWebGPU<'window> {
         self.wal.dispatch_with_params(
             &mut compute_pass,
             &mut self.pipes.radiance_pipe,
-            None,
             None,
             workgroup_count,
             1,
@@ -595,6 +604,76 @@ impl<'window> InternalRendererWebGPU<'window> {
         //     },
         // );
     }
+
+    pub fn gen_perlin_noises(&mut self) {
+        //
+
+        let mut encoder = self.wal.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("perlin noise encoder"),
+        });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("perlin noise generation pass"),
+                timestamp_writes: None,
+            });
+
+            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin2d_pipe);
+
+            self.wal.dispatch_with_params(
+                &mut compute_pass,
+                &mut self.pipes.gen_perlin2d_pipe,
+                None,
+                (self.origin_world.x_size as u32 + 7) / 8,
+                (self.origin_world.y_size as u32 + 7) / 8,
+                1,
+            );
+
+            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin3d_pipe);
+
+            self.wal.dispatch_with_params(
+                &mut compute_pass,
+                &mut self.pipes.gen_perlin3d_pipe,
+                None,
+                32 / 4,
+                32 / 4,
+                32 / 4,
+            );
+        };
+
+        self.pipes.gen_perlin2d_pipe.static_bind_groups.as_mut().unwrap().move_next();
+        self.pipes.gen_perlin3d_pipe.static_bind_groups.as_mut().unwrap().move_next();
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("perlin noise generation pass"),
+                timestamp_writes: None,
+            });
+
+            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin2d_pipe);
+
+            self.wal.dispatch_with_params(
+                &mut compute_pass,
+                &mut self.pipes.gen_perlin2d_pipe,
+                None,
+                (self.origin_world.x_size as u32 + 7) / 8,
+                (self.origin_world.y_size as u32 + 7) / 8,
+                1,
+            );
+
+            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin3d_pipe);
+
+            self.wal.dispatch_with_params(
+                &mut compute_pass,
+                &mut self.pipes.gen_perlin3d_pipe,
+                None,
+                32 / 4,
+                32 / 4,
+                32 / 4,
+            );
+        };
+        self.wal.queue.submit([encoder.finish()]);
+    }
 }
 
 fn process_axis(shift: i32, _world_size: i32) -> ivec2 {
@@ -648,7 +727,7 @@ pub struct PreInitRenderer {
 #[derive(Default)]
 struct RendererStorage<BufferType, ImageType> {
     // TODO: arena?
-    models: Arena<InternalMeshModel<BufferType, ImageType>>,
+    models: Arena<InternalMeshModel<BufferType, ImageType, IndexedVerticesQueue>>,
     volumetrics: Arena<InternalMeshVolumetric>,
     liquids: Arena<InternalMeshLiquid<MatId>>,
     // TODO: do smth about that this is stored inside internal renderer and everything else is stored here
@@ -715,20 +794,6 @@ impl<'window> RendererWgpu<'window> {
                     },
                 })],
                 depth_stencil_attachment: None,
-                // Some(wgpu::RenderPassDepthStencilAttachment {
-                //     view: &self
-                //         .renderer
-                //         .dependent_images
-                //         .as_ref()
-                //         .unwrap()
-                //         .full_view_for_ds
-                //         .current(),
-                //     depth_ops: Some(wgpu::Operations {
-                //         load: wgpu::LoadOp::Load,
-                //         store: wgpu::StoreOp::Store,
-                //     }),
-                //     stencil_ops: None,
-                // }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             },
@@ -740,10 +805,6 @@ impl<'window> RendererWgpu<'window> {
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
         #[repr(C)]
@@ -802,10 +863,6 @@ impl<'window> RendererWgpu<'window> {
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
         // Draw fullscreen triangle
@@ -850,10 +907,6 @@ impl<'window> RendererWgpu<'window> {
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
         rpass.set_stencil_reference(0x01);
@@ -933,14 +986,10 @@ impl<'window> RendererWgpu<'window> {
 
         let pipe = &mut self.renderer.pipes.fill_stencil_smoke_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
-            pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
+            pipe.pipe.pipeline.as_ref().unwrap(),
+            pipe.pipe.static_bind_groups.as_ref(),
         );
 
         rpass.set_stencil_reference(0x02);
@@ -957,19 +1006,33 @@ impl<'window> RendererWgpu<'window> {
                 center_size: vec4!(vrr.pos, 16.0),
             };
 
+            pipe.push_constants.extend_from_slice(push_constant.as_u8_slice());
+            pipe.pc_count += 1;
+        }
+
+        if pipe.pc_count > 0 {
+            let count = pipe.push_constants.len();
+            let write = self.renderer.wal.queue.write_buffer_with(
+                pipe.pc_buffer.as_ref().unwrap(),
+                0,
+                std::num::NonZero::new(count as u64).unwrap(),
+            );
+            let src_pc_slice_u8 = unsafe {
+                std::slice::from_raw_parts(pipe.push_constants.as_ptr() as *const u8, count)
+            };
+            write.unwrap().copy_from_slice(src_pc_slice_u8);
+
             self.renderer.wal.draw_with_params(
                 &mut rpass,
-                pipe.pipeline.as_ref().unwrap(),
-                pipe.pc_bind_groups.as_ref(),
-                // pipe.pc_size,
-                &mut pipe.current_pc_offset,
-                Some(pipe.static_bind_groups.as_ref().unwrap().current()),
-                None,
-                Some(push_constant.as_u8_slice()),
-                pc_write_view.as_deref_mut(),
+                pipe.pipe.pipeline.as_ref().unwrap(),
+                Some(pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
+                pipe.pc_bg.as_ref(),
                 0..36,
-                0..1,
+                0..pipe.pc_count as u32,
             );
+
+            pipe.push_constants.clear();
+            pipe.pc_count = 0;
         }
     }
 
@@ -1021,10 +1084,6 @@ impl<'window> RendererWgpu<'window> {
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
         rpass.set_stencil_reference(0x01);
@@ -1077,10 +1136,6 @@ impl<'window> RendererWgpu<'window> {
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
         rpass.set_stencil_reference(0x02);
@@ -1137,10 +1192,6 @@ impl<'window> RendererWgpu<'window> {
                 &mut rpass,
                 pipe.pipeline.as_ref().unwrap(),
                 pipe.static_bind_groups.as_ref(),
-                pipe.pc_bind_groups.as_ref(),
-                pipe.pc_buffers.as_ref(),
-                pipe.pc_size,
-                pipe.current_pc_offset,
             );
 
             // Draw fullscreen triangle
@@ -1170,8 +1221,8 @@ impl<'window> RendererWgpu<'window> {
 
         self.renderer.independent_images.grass_state.move_next();
         self.renderer.independent_images.water_state.move_next();
-        self.renderer.independent_images.perlin_noise2d.move_next();
-        self.renderer.independent_images.perlin_noise3d.move_next();
+        // self.renderer.independent_images.perlin_noise2d.move_next();
+        // self.renderer.independent_images.perlin_noise3d.move_next();
         self.renderer.independent_images.world.move_next();
         self.renderer.independent_images.radiance_cache.move_next();
         self.renderer.independent_images.origin_block_palette.move_next();
@@ -1181,334 +1232,135 @@ impl<'window> RendererWgpu<'window> {
         self.renderer
             .pipes
             .lightmap_blocks_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .lightmap_blocks_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .lightmap_blocks_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.lightmap_blocks_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .lightmap_models_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .lightmap_models_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
         self.renderer
             .pipes
             .lightmap_models_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.lightmap_models_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .raygen_blocks_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        // Or ComputePipeline if it's ray tracing
-        self.renderer
-            .pipes
-            .raygen_blocks_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
-        // Or ComputePipeline if it's ray tracing
         self.renderer
             .pipes
             .raygen_blocks_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        // Or ComputePipeline if it's ray tracing
-        self.renderer.pipes.raygen_blocks_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .raygen_models_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        // Or ComputePipeline
-        self.renderer
-            .pipes
-            .raygen_models_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
-        // Or ComputePipeline
         self.renderer
             .pipes
             .raygen_models_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        // Or ComputePipeline
-        self.renderer.pipes.raygen_models_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .raygen_particles_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .raygen_particles_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
         self.renderer
             .pipes
             .raygen_particles_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.raygen_particles_pipe.current_pc_offset = 0;
 
         self.renderer
             .pipes
             .raygen_water_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .raygen_water_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .raygen_water_pipe
+            .pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.raygen_water_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .diffuse_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer.pipes.diffuse_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
         self.renderer
             .pipes
             .diffuse_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.diffuse_pipe.current_pc_offset = 0;
 
-        self.renderer.pipes.ao_pipe.pc_bind_groups.as_mut().map(|bg| bg.move_next());
-        self.renderer.pipes.ao_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
         self.renderer.pipes.ao_pipe.static_bind_groups.as_mut().map(|bg| bg.move_next());
-        self.renderer.pipes.ao_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .fill_stencil_glossy_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .fill_stencil_glossy_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
         self.renderer
             .pipes
             .fill_stencil_glossy_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.fill_stencil_glossy_pipe.current_pc_offset = 0;
 
         self.renderer
             .pipes
             .fill_stencil_smoke_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .fill_stencil_smoke_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .fill_stencil_smoke_pipe
+            .pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.fill_stencil_smoke_pipe.current_pc_offset = 0;
 
-        self.renderer.pipes.glossy_pipe.pc_bind_groups.as_mut().map(|bg| bg.move_next());
-        self.renderer.pipes.glossy_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
         self.renderer
             .pipes
             .glossy_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.glossy_pipe.current_pc_offset = 0;
 
-        self.renderer.pipes.smoke_pipe.pc_bind_groups.as_mut().map(|bg| bg.move_next());
-        self.renderer.pipes.smoke_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
         self.renderer
             .pipes
             .smoke_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.smoke_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .tonemap_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer.pipes.tonemap_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
         self.renderer
             .pipes
             .tonemap_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.tonemap_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .radiance_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer.pipes.radiance_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
         self.renderer
             .pipes
             .radiance_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.radiance_pipe.current_pc_offset = 0;
 
-        self.renderer.pipes.map_pipe.pc_bind_groups.as_mut().map(|bg| bg.move_next());
-        self.renderer.pipes.map_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
         self.renderer
             .pipes
             .map_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.map_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .update_grass_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .update_grass_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
         self.renderer
             .pipes
             .update_grass_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.update_grass_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .update_water_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .update_water_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
         self.renderer
             .pipes
             .update_water_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.update_water_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .gen_perlin2d_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .gen_perlin2d_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
         self.renderer
             .pipes
             .gen_perlin2d_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.gen_perlin2d_pipe.current_pc_offset = 0;
 
-        self.renderer
-            .pipes
-            .gen_perlin3d_pipe
-            .pc_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-        self.renderer
-            .pipes
-            .gen_perlin3d_pipe
-            .pc_buffers
-            .as_mut()
-            .map(|bg| bg.move_next());
         self.renderer
             .pipes
             .gen_perlin3d_pipe
             .static_bind_groups
             .as_mut()
             .map(|bg| bg.move_next());
-        self.renderer.pipes.gen_perlin3d_pipe.current_pc_offset = 0;
 
         for foliage_pipe in self.renderer.pipes.raygen_foliage_pipes.iter_mut() {
-            foliage_pipe.pc_bind_groups.as_mut().map(|bg| bg.move_next());
-            foliage_pipe.pc_buffers.as_mut().map(|bg| bg.move_next());
-            foliage_pipe.static_bind_groups.as_mut().map(|bg| bg.move_next());
-            foliage_pipe.current_pc_offset = 0;
+            foliage_pipe.pipe.static_bind_groups.as_mut().map(|bg| bg.move_next());
         }
     }
 
@@ -1528,7 +1380,7 @@ impl<'window> RendererWgpu<'window> {
                 let trans: &MeshTransform = &mrr.trans;
                 let rotate = mat4::from(trans.rotation);
                 let shift = mat4::identity().translated_3d(trans.translation);
-                let border_in_voxel = get_shift(shift * rotate, model_mesh.total_size);
+                let border_in_voxel = get_shift(shift * rotate, model_mesh.size);
 
                 let mut border = iAABB {
                     min: ivec3!(border_in_voxel.min - 1.0) / 16,
@@ -1705,7 +1557,6 @@ impl<'window> RendererWgpu<'window> {
             &mut compute_pass,
             &mut self.renderer.pipes.update_water_pipe,
             None,
-            None,
             (self.renderer.settings.world_size.x * 2).div_ceil(8),
             (self.renderer.settings.world_size.y * 2).div_ceil(8),
             1,
@@ -1782,22 +1633,19 @@ impl<'window> RendererWgpu<'window> {
             },
         );
 
-        let pipe = &mut self.renderer.pipes.raygen_water_pipe;
+        let water_pipe = &mut self.renderer.pipes.raygen_water_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
-            pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
+            water_pipe.pipe.pipeline.as_ref().unwrap(),
+            water_pipe.pipe.static_bind_groups.as_ref(),
         );
 
+        const QUALITY_SIZE: u32 = 32;
+
         for lrr in &self.liquid_que {
-            let liquid_mesh = self.storage.liquids.get(lrr.mesh.0).unwrap();
+            let liquid_mesh = self.storage.liquids.get_mut(lrr.mesh.0).unwrap();
             let pos: &vec3 = &lrr.pos;
-            let quality_size = 32;
 
             #[repr(C)] // for push constants
             #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -1811,25 +1659,42 @@ impl<'window> RendererWgpu<'window> {
 
             let push_constant = PushConstant {
                 shift: vec4!(*pos, 0),
-                size_time: ivec4!(self.renderer.counter, quality_size, 0, 0),
+                size_time: ivec4!(self.renderer.counter, QUALITY_SIZE, 0, 0),
             };
 
-            let verts_per_water_tape = quality_size * 2 + 2;
-            let tapes_per_block = quality_size;
+            water_pipe.push_constants.extend_from_slice(push_constant.as_u8_slice());
+            water_pipe.pc_count += 1;
+        }
+
+        let verts_per_water_tape = QUALITY_SIZE * 2 + 2;
+        let tapes_per_block = QUALITY_SIZE;
+        let batches = water_pipe.pc_count as u32;
+
+        // same as count > 0 ... i guess
+        if batches > 0 {
+            // only render batch if it has anything to render
+            let count = water_pipe.push_constants.len();
+            let write = self.renderer.wal.queue.write_buffer_with(
+                water_pipe.pc_buffer.as_ref().unwrap(),
+                0,
+                std::num::NonZero::new(count as u64).unwrap(),
+            );
+            let src_pc_slice_u8 = unsafe {
+                std::slice::from_raw_parts(water_pipe.push_constants.as_ptr() as *const u8, count)
+            };
+            write.unwrap().copy_from_slice(src_pc_slice_u8);
 
             self.renderer.wal.draw_with_params(
                 &mut rpass,
-                pipe.pipeline.as_ref().unwrap(),
-                pipe.pc_bind_groups.as_ref(),
-                // pipe.pc_size,
-                &mut pipe.current_pc_offset,
-                Some(pipe.static_bind_groups.as_ref().unwrap().current()),
-                None,
-                Some(push_constant.as_u8_slice()),
-                pc_write_view.as_deref_mut(),
+                water_pipe.pipe.pipeline.as_ref().unwrap(),
+                Some(water_pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
+                water_pipe.pc_bg.as_ref(),
                 0..verts_per_water_tape,
-                0..tapes_per_block,
+                0..tapes_per_block * batches,
             );
+
+            water_pipe.push_constants.clear();
+            water_pipe.pc_count = 0;
         }
     }
 
@@ -1876,27 +1741,21 @@ impl<'window> RendererWgpu<'window> {
         for (foliage_index, foliage_pipe) in
             self.renderer.pipes.raygen_foliage_pipes.iter_mut().enumerate()
         {
-            // FUCK FUCK FUCK WHY IS IT CACHED MY INSTRUCTIONS
-            let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+            self.renderer.wal.bind_raster_pipeline(
                 &mut rpass,
-                foliage_pipe.pipeline.as_ref().unwrap(),
-                foliage_pipe.static_bind_groups.as_ref(),
-                foliage_pipe.pc_bind_groups.as_ref(),
-                foliage_pipe.pc_buffers.as_ref(),
-                foliage_pipe.pc_size,
-                foliage_pipe.current_pc_offset,
+                foliage_pipe.pipe.pipeline.as_ref().unwrap(),
+                foliage_pipe.pipe.static_bind_groups.as_ref(),
             );
 
             // let pipe = &mut self.renderer.pipes.raygen_foliage_pipes[foliage_index as usize];
             let foliage_queue = &self.foliage_ques[foliage_index];
-            for frr in foliage_queue {
-                let grass: &InternalMeshFoliage = &frr.mesh.0;
 
-                let size = 10;
+            // TODO:
+            let size = 10;
+
+            for frr in foliage_queue {
                 let x_flip = self.renderer.camera.camera_dir.x < 0.0;
                 let y_flip = self.renderer.camera.camera_dir.y < 0.0;
-
-                let desc = &self.renderer.foliage_descriptions[grass.stored_id as usize];
 
                 #[repr(C)] // for push constants
                 #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -1915,23 +1774,50 @@ impl<'window> RendererWgpu<'window> {
                     y_flip: y_flip as i32,
                 };
 
-                let verts_per_blade = desc.vertices;
-                let blade_per_instance = 1; //for triangle strip
-                let instance_count = (size * size + (blade_per_instance - 1)) / blade_per_instance;
+                // (as everywhere else, do repeat yourself if it helps understanding)
+                // we do not submit a bunch of drawcalls (vertices generated btw)
+                // instead, we record (fake, i.e. emulated) push constant buffers and then submit single "batched" drawcall
+                // we were already using instancing - instance was a blade
+                // now its the same, but grass_batch_id is instance_id / blades_per_batch
+                // and fake_pco = pco_array[grass_batch_id]
+
+                foliage_pipe.push_constants.extend_from_slice(push_constant.as_u8_slice());
+                foliage_pipe.pc_count += 1;
+            }
+
+            let desc = &self.renderer.foliage_descriptions[foliage_index as usize];
+            let verts_per_blade = desc.vertices;
+            let blade_per_instance = 1; //for triangle strip
+            let instances_per_batch = (size * size + (blade_per_instance - 1)) / blade_per_instance;
+            let batch_count = foliage_pipe.pc_count as u32;
+
+            // only render batch if it has anything to render
+            if foliage_pipe.pc_count > 0 {
+                let count = foliage_pipe.push_constants.len();
+                let write = self.renderer.wal.queue.write_buffer_with(
+                    foliage_pipe.pc_buffer.as_ref().unwrap(),
+                    0,
+                    std::num::NonZero::new(count as u64).unwrap(),
+                );
+                let src_pc_slice_u8 = unsafe {
+                    std::slice::from_raw_parts(
+                        foliage_pipe.push_constants.as_ptr() as *const u8,
+                        count,
+                    )
+                };
+                write.unwrap().copy_from_slice(src_pc_slice_u8);
 
                 self.renderer.wal.draw_with_params(
                     &mut rpass,
-                    foliage_pipe.pipeline.as_ref().unwrap(),
-                    foliage_pipe.pc_bind_groups.as_ref(),
-                    // foliage_pipe.pc_size,
-                    &mut foliage_pipe.current_pc_offset,
-                    Some(foliage_pipe.static_bind_groups.as_ref().unwrap().current()),
-                    None,
-                    Some(push_constant.as_u8_slice()),
-                    pc_write_view.as_deref_mut(),
+                    foliage_pipe.pipe.pipeline.as_ref().unwrap(),
+                    Some(foliage_pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
+                    foliage_pipe.pc_bg.as_ref(),
                     0..verts_per_blade * blade_per_instance,
-                    0..instance_count,
+                    0..instances_per_batch * batch_count,
                 );
+
+                foliage_pipe.push_constants.clear();
+                foliage_pipe.pc_count = 0;
             }
         }
 
@@ -1939,43 +1825,39 @@ impl<'window> RendererWgpu<'window> {
     }
 
     fn update_raygen_particles(&mut self) {
-        {
-            let this = &mut self.renderer;
-            let mut write_index = 0;
+        let mut write_index = 0;
 
-            for i in 0..this.particles.len() {
-                let should_keep = this.particles[i].life_time > 0.0;
-                if should_keep {
-                    this.particles[write_index] = this.particles[i];
+        for i in 0..self.renderer.particles.len() {
+            let should_keep = self.renderer.particles[i].life_time > 0.0;
+            if should_keep {
+                self.renderer.particles[write_index] = self.renderer.particles[i];
 
-                    let velocity = this.particles[write_index].vel;
-                    this.particles[write_index].pos += velocity * this.delta_time;
+                let velocity = self.renderer.particles[write_index].vel;
+                self.renderer.particles[write_index].pos += velocity * self.renderer.delta_time;
 
-                    this.particles[write_index].life_time -= this.delta_time;
-                    write_index += 1;
-                }
+                self.renderer.particles[write_index].life_time -= self.renderer.delta_time;
+                write_index += 1;
             }
+        }
 
-            this.particles.shrink_to(write_index);
-            let capped_particle_count =
-                write_index.clamp(0, this.settings.max_particle_count as usize);
+        self.renderer.particles.resize(write_index, Default::default());
+        let capped_particle_count =
+            write_index.clamp(0, self.renderer.settings.max_particle_count as usize);
 
-            // Update the GPU particle buffer with the current particle data
-            if capped_particle_count > 0 {
-                // Convert particle data to bytes
-                let particle_bytes = unsafe {
-                    std::slice::from_raw_parts(
-                        this.particles.as_ptr() as *const u8,
-                        capped_particle_count * std::mem::size_of::<Particle>(),
-                    )
-                };
+        // Update the GPU particle buffer with the current particle data
+        if capped_particle_count > 0 {
+            // Convert particle data to bytes
+            let size = capped_particle_count * std::mem::size_of::<Particle>();
+            let particle_bytes = unsafe {
+                std::slice::from_raw_parts(self.renderer.particles.as_ptr() as *const u8, size)
+            };
 
-                this.wal.queue.write_buffer(
-                    &this.buffers.gpu_particles.current(),
-                    0,
-                    particle_bytes,
-                );
-            }
+            let write = self.renderer.wal.queue.write_buffer_with(
+                &self.renderer.buffers.gpu_particles.current(),
+                0,
+                BufferSize::new(size as u64).unwrap(),
+            );
+            write.unwrap().copy_from_slice(particle_bytes);
         };
 
         // Render the particles
@@ -2020,86 +1902,111 @@ impl<'window> RendererWgpu<'window> {
 
             let pipe = &mut self.renderer.pipes.raygen_particles_pipe;
 
-            let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+            self.renderer.wal.bind_raster_pipeline(
                 &mut rpass,
                 pipe.pipeline.as_ref().unwrap(),
                 pipe.static_bind_groups.as_ref(),
-                pipe.pc_bind_groups.as_ref(),
-                pipe.pc_buffers.as_ref(),
-                pipe.pc_size,
-                pipe.current_pc_offset,
             );
 
             rpass.set_vertex_buffer(0, self.renderer.buffers.gpu_particles.current().slice(..));
 
-            rpass.draw(0..self.renderer.particles.len() as u32, 0..1);
+            rpass.draw(0..36, 0..self.renderer.particles.len() as u32);
         }
     }
 
     fn map_meshes(&mut self) {
-        {
-            // thing about wgpu is that they very much want to be pain in the ass, and after few hours i still did not figure out how to store passes
-            // so here we fucking are, doing everything in a single scope and refactoring entire renderer to fit a non-gapi gapi
-            let mut compute_pass =
-                self.renderer.current_encoder.as_mut().unwrap().begin_compute_pass(
-                    &wgpu::ComputePassDescriptor {
-                        label: Some("Map Compute Pass"),
-                        timestamp_writes: None,
-                    },
-                );
+        // thing about wgpu is that they very much want to be pain in the ass, and after few hours i still did not figure out how to store passes
+        // so here we fucking are, doing everything in a single scope and refactoring entire renderer to fit a non-gapi gapi
+        let mut compute_pass = self.renderer.current_encoder.as_mut().unwrap().begin_compute_pass(
+            &wgpu::ComputePassDescriptor {
+                label: Some("Map Compute Pass"),
+                timestamp_writes: None,
+            },
+        );
 
-            self.renderer
-                .wal
-                .bind_compute_pipeline(&mut compute_pass, &self.renderer.pipes.map_pipe);
+        self.renderer
+            .wal
+            .bind_compute_pipeline(&mut compute_pass, &self.renderer.pipes.map_pipe);
 
-            for mrr in &self.model_que {
-                let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
-                {
-                    let trans: &MeshTransform = &mrr.trans;
+        for mrr in &self.model_que {
+            let model_mesh = self.storage.models.get_mut(mrr.mesh.0).unwrap();
+            {
+                let trans: &MeshTransform = &mrr.trans;
 
-                    // In Vulkan a push descriptor was used to push a descriptor referencing mesh.voxels.
-                    // In WGPU you must update the bind group in advance. For example:
-                    // (&mut self.renderer).update_map_bind_group(model_mesh);
-                    // todo!("push model voxels to map");
+                let rotate = mat4::from(trans.rotation);
+                let shift = mat4::identity().translated_3d(trans.translation);
+                let transform = shift * rotate;
 
-                    // Compute the transformation matrices.
-                    let rotate = mat4::from(trans.rotation);
-                    let shift = mat4::identity().translated_3d(trans.translation);
-                    let transform = shift * rotate;
+                // grid-aligned bounding box for our mesh in our voxel world
+                let border_in_voxel = get_shift(transform, model_mesh.size);
+                let border = iAABB {
+                    min: ivec3!(border_in_voxel.min.floor()),
+                    max: ivec3!(border_in_voxel.max.ceil()),
+                };
+                // unused, since we just use upper bound and dont extra voxels cull on cpu for higher parallelism
+                let map_area = border.max - border.min;
 
-                    // Compute border (in voxel space) using your helper get_shift.
-                    let border_in_voxel = get_shift(transform, model_mesh.total_size);
-                    let border = iAABB {
-                        min: ivec3!(border_in_voxel.min.floor()),
-                        max: ivec3!(border_in_voxel.max.ceil()),
-                    };
-                    let map_area = border.max - border.min;
+                // here we encounter a problem:
+                // just amount of dispatch calls is not enough, we (also) need bounding box
+                // more generic approach would be to store this as metadata in separate Vec
+                // however, due to how we divide compute work, this is already in push constants
+                let push_constant = PcMapModel {
+                    trans: transform.inverted(),
+                    shift: ivec4!(border.min, 0),
+                    map_area: ivec4!(map_area, 0),
+                };
 
-                    #[repr(C)]
-                    #[derive(Clone, Copy, AsU8Slice)]
-                    struct PushConstant {
-                        trans: mat4,
-                        shift: ivec4,
-                    }
-                    let push_constant = PushConstant {
-                        trans: transform.inverted(),
-                        shift: ivec4!(border.min, 0),
-                    };
+                assert!(self.renderer.pipes.map_pipe.static_bind_groups.is_some());
 
-                    assert!(self.renderer.pipes.map_pipe.static_bind_groups.is_some());
-
-                    self.renderer.wal.dispatch_with_params(
-                        &mut compute_pass,
-                        &mut self.renderer.pipes.map_pipe,
-                        Some(model_mesh.voxels_bind_group_compute.as_ref().unwrap()),
-                        Some(push_constant.as_u8_slice()),
-                        ((map_area.x + 3) as u32) / 4,
-                        ((map_area.y + 3) as u32) / 4,
-                        ((map_area.z + 3) as u32) / 4,
-                    );
-                }
+                // as everywhere, instead of directly submitting command, "sort" by state and delay actual work
+                model_mesh.compute_push_constants.extend_from_slice(push_constant.as_u8_slice());
+                model_mesh.compute_pc_count += 1;
             }
-        };
+        }
+
+        for model_mesh in &mut self.storage.models {
+            let model_mesh = model_mesh.1;
+
+            let count = model_mesh.compute_push_constants.len();
+            if count == 0 {
+                continue;
+            }
+            let write = self.renderer.wal.queue.write_buffer_with(
+                model_mesh.compute_pc_buffer.as_ref().unwrap(),
+                0,
+                std::num::NonZero::new(count as u64).unwrap(),
+            );
+            let src_pc_slice_u8 = unsafe {
+                std::slice::from_raw_parts(
+                    model_mesh.compute_push_constants.as_ptr() as *const u8,
+                    count,
+                )
+            };
+            write.unwrap().copy_from_slice(src_pc_slice_u8);
+
+            // there is no instancing for compute work.
+            // however, all the models in our batch are the same size, and thus dispatch size has same upper bound
+            // so what we do, is we submit upper bound of voxels no matter how many actually needed and discard extra
+            // this loses like 50% in bad cases, but doing anything CPU-side with wgpu is even more expensive
+
+            let model_size = model_mesh.size;
+            let max_extent = (vec3!(model_size.x, model_size.y, model_size.z))
+                .distance(Vec3::new(0.0, 0.0, 0.0));
+            let worst_case_aabb = uvec3!(max_extent.ceil(), max_extent.ceil(), max_extent.ceil());
+            let worst_case_voxels = worst_case_aabb.x * worst_case_aabb.y * worst_case_aabb.z;
+
+            self.renderer.wal.dispatch_with_params(
+                &mut compute_pass,
+                &mut self.renderer.pipes.map_pipe,
+                Some(model_mesh.voxels_bind_group_compute.as_ref().unwrap()),
+                worst_case_voxels, // this gets converted to xyz using size in push constants
+                1,                 // we dont do anything with this one
+                model_mesh.compute_pc_count as u32, // and this is our instancing giving us push constants
+            );
+
+            model_mesh.compute_pc_count = 0;
+            model_mesh.compute_push_constants.clear();
+        }
     }
 
     fn lightmap_models(&mut self) {
@@ -2132,10 +2039,6 @@ impl<'window> RendererWgpu<'window> {
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
         for mrr in &self.model_que {
@@ -2165,19 +2068,14 @@ impl<'window> RendererWgpu<'window> {
                     let fnorm = vec3!($__normal);
                     if is_face_visible(fnorm, self.renderer.camera.camera_dir) {
                         {
-                            let buff: &IndexedVertices = &model_mesh.triangles.$__face;
+                            let buff = &model_mesh.triangles.$__face;
 
                             self.renderer.wal.draw_indexed_with_params(
                                 &mut rpass,
                                 pipe.pipeline.as_ref().unwrap(),
-                                pipe.pc_bind_groups.as_ref(),
-                                pipe.pc_size,
-                                &mut pipe.current_pc_offset,
                                 Some(pipe.static_bind_groups.as_ref().unwrap().current()),
-                                None,
-                                Some(push_constant.as_u8_slice()),
-                                pc_write_view.as_deref_mut(),
-                                buff.offset..buff.offset + buff.icount,
+                                buff.pc_bg.as_ref(),
+                                buff.iv.offset..buff.iv.offset + buff.iv.icount,
                                 0,
                                 0..1,
                             );
@@ -2195,51 +2093,97 @@ impl<'window> RendererWgpu<'window> {
         }
     }
 
-    fn lightmap_blocks(&mut self) {
-        let render_pass_desc = wgpu::RenderPassDescriptor {
-            label: Some("Lightmap Blocks Render Pass"),
-            color_attachments: &[],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.renderer.independent_images.lightmap.current().view,
-                depth_ops: Some(wgpu::Operations {
-                    // clear cause first
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
+    fn lightmap_block_face<'a>(
+        // wal: &Wal,
+        // rpass: &mut wgpu::RenderPass<'a>,
+        // pipeline: &'a wgpu::RenderPipeline, // Now passed individually
+        // pc_bind_group: Option<&'a Ring<wgpu::BindGroup>>, // Now passed individually
+        // pc_size: u32,
+        // current_pc_offset: &mut u32, // Now mutable reference
+        // static_bind_group: Option<&BindGroup>,
+        pc_write_slice: &mut Vec<u8>, // The mutable slice for writing
+        pc_counter: &mut u32,
+        shift: ivec3,
+        buff: &IndexedVertices,
+        block_id: BlockId,
+    ) {
+        debug_assert!(block_id > 0);
+
+        let push_constant = PcLightmapBlockFace {
+            block: 0,
+            shift: shift,
+            unorm: 0,
         };
 
-        let mut rpass = self
-            .renderer
-            .current_encoder
-            .as_mut()
-            .unwrap()
-            .begin_render_pass(&render_pass_desc);
+        // yeah we just delay rendering it cause sorting by state is faster for wgpu
+        pc_write_slice.extend_from_slice(push_constant.as_u8_slice());
+        *pc_counter += 1;
+    }
+
+    fn lightmap_blocks(&mut self) {
+        let mut rpass = self.renderer.current_encoder.as_mut().unwrap().begin_render_pass(
+            &wgpu::RenderPassDescriptor {
+                label: Some("Lightmap Blocks Render Pass"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.renderer.independent_images.lightmap.current().view,
+                    depth_ops: Some(wgpu::Operations {
+                        // clear cause first
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            },
+        );
 
         let pipe = &mut self.renderer.pipes.lightmap_blocks_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
-        let mut previous_block: Option<i32> = None;
+        // lightmap and raygen share same pc buffer for blocks
+        // so no pc buffer update
 
-        for brr in &self.block_que {
-            let ipos = ivec3!(brr.pos);
-            let block_id = brr.block;
+        // for brr in &self.block_que {
+        //     let ipos = ivec3!(brr.pos);
+        //     let block_id = brr.block;
 
-            let block_mesh = &self.renderer.block_palette_meshes[block_id as usize];
+        //     let block_mesh = &mut self.renderer.block_palette_meshes[block_id as usize];
 
-            if previous_block.is_none_or(|pb| pb != block_id) {
+        //     let check_and_lightmap_block_face =
+        //         |normal: i8vec3, face: &mut IndexedVerticesQueue| {
+        //             let fnorm = vec3::new(normal.x as f32, normal.y as f32, normal.z as f32);
+        //             if is_face_visible(fnorm, self.renderer.camera.camera_dir) {
+        //                 // Self::lightmap_block_face(
+        //                 //     &mut face.push_constants,
+        //                 //     &mut face.pc_count,
+        //                 //     ipos,
+        //                 //     &face.iv,
+        //                 //     block_id,
+        //                 // );
+        //             };
+        //         };
+
+        //     check_and_lightmap_block_face(i8vec3::new(1, 0, 0), &mut block_mesh.triangles.Pzz);
+        //     check_and_lightmap_block_face(i8vec3::new(-1, 0, 0), &mut block_mesh.triangles.Nzz);
+        //     check_and_lightmap_block_face(i8vec3::new(0, 1, 0), &mut block_mesh.triangles.zPz);
+        //     check_and_lightmap_block_face(i8vec3::new(0, -1, 0), &mut block_mesh.triangles.zNz);
+        //     check_and_lightmap_block_face(i8vec3::new(0, 0, 1), &mut block_mesh.triangles.zzP);
+        //     check_and_lightmap_block_face(i8vec3::new(0, 0, -1), &mut block_mesh.triangles.zzN);
+        // }
+
+        for block_mesh in &mut self.renderer.block_palette_meshes {
+            // for every block, for every of its sides
+            // copy its push constants from stored queue for a side and submit a drawcall
+
+            if block_mesh.triangles.vertexes.is_some() && block_mesh.triangles.indices.is_some() {
+                // bind vertex & index buffers for that side
                 rpass.set_vertex_buffer(
                     0,
                     block_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
@@ -2248,52 +2192,47 @@ impl<'window> RendererWgpu<'window> {
                     block_mesh.triangles.indices.as_ref().unwrap().slice(..),
                     wgpu::IndexFormat::Uint16,
                 );
-                previous_block = Some(block_id)
             }
 
-            #[repr(C)] // for push constants
-            #[derive(AsU8Slice)] // allow cast to &[u8]
-            struct PushConstant {
-                shift: ivec4,
-            }
-            let push_constant = PushConstant {
-                shift: ivec4!(ipos, 0),
+            let mut draw_indexed_block_face = |face: &mut IndexedVerticesQueue| {
+                if face.pc_bg.is_some() {
+                    // we dont need to update memory since we reuse old one
+
+                    // let count = face.push_constants.len();
+                    // let size = count;
+                    // let write = self.renderer.wal.queue.write_buffer_with(
+                    //     face.pc_buffer.as_ref().unwrap(),
+                    //     0,
+                    //     std::num::NonZero::new(size as u64).unwrap(),
+                    // );
+                    // let src_pc_slice_u8 = unsafe {
+                    //     std::slice::from_raw_parts(face.push_constants.as_ptr() as *const u8, size)
+                    // };
+                    // write.unwrap().copy_from_slice(src_pc_slice_u8);
+
+                    self.renderer.wal.draw_indexed_with_params(
+                        &mut rpass,
+                        pipe.pipeline.as_ref().unwrap(),
+                        Some(pipe.static_bind_groups.as_ref().unwrap().current()),
+                        face.pc_bg.as_ref(),
+                        face.iv.offset..face.iv.offset + face.iv.icount,
+                        0,
+                        0..face.pc_count as u32,
+                    );
+
+                    face.pc_count = 0;
+                }
             };
 
-            macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
-                ($__normal:expr, $__face:ident) => {
-                    let fnorm =
-                        vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
-                    if is_face_visible(fnorm, self.renderer.camera.camera_dir) {
-                        {
-                            let buff: &IndexedVertices = &block_mesh.triangles.$__face;
-
-                            self.renderer.wal.draw_indexed_with_params(
-                                &mut rpass,
-                                pipe.pipeline.as_ref().unwrap(),
-                                pipe.pc_bind_groups.as_ref(),
-                                pipe.pc_size,
-                                &mut pipe.current_pc_offset,
-                                Some(pipe.static_bind_groups.as_ref().unwrap().current()),
-                                None,
-                                Some(push_constant.as_u8_slice()),
-                                pc_write_view.as_deref_mut(),
-                                buff.offset..buff.offset + buff.icount,
-                                0,
-                                0..1,
-                            );
-                        };
-                    };
-                };
-            }
-
-            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
-            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
-            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
-            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
-            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
-            CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
+            draw_indexed_block_face(&mut block_mesh.triangles.Pzz);
+            draw_indexed_block_face(&mut block_mesh.triangles.Nzz);
+            draw_indexed_block_face(&mut block_mesh.triangles.zPz);
+            draw_indexed_block_face(&mut block_mesh.triangles.zNz);
+            draw_indexed_block_face(&mut block_mesh.triangles.zzP);
+            draw_indexed_block_face(&mut block_mesh.triangles.zzN);
         }
+
+        self.renderer.wal.queue.submit([]);
     }
 
     fn update_light_ubo(&mut self) {
@@ -2315,129 +2254,194 @@ impl<'window> RendererWgpu<'window> {
         );
     }
 
-    fn raygen_blocks(&mut self) {
-        {
-            // Begin the raygen blocks render pass
-            let mut rpass = self.renderer.current_encoder.as_mut().unwrap().begin_render_pass(
-                &wgpu::RenderPassDescriptor {
-                    label: Some("Raygen Blocks Render Pass"),
-                    // raster mat_norm gbuffers
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &self
-                            .renderer
-                            .dependent_images
-                            .as_ref()
-                            .unwrap()
-                            .highres_mat_norm
-                            .current()
-                            .view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            // first use clears, other just load
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 0.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    // depth is normal gbuffer depth
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self
-                            .renderer
-                            .dependent_images
-                            .as_ref()
-                            .unwrap()
-                            .highres_depth
-                            .current()
-                            .view,
-                        depth_ops: Some(wgpu::Operations {
-                            // clear cause first
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    }),
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                },
-            );
-
-            let pipe = &mut self.renderer.pipes.raygen_blocks_pipe;
-
-            let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
-                &mut rpass,
-                pipe.pipeline.as_ref().unwrap(),
-                pipe.static_bind_groups.as_ref(),
-                pipe.pc_bind_groups.as_ref(),
-                pipe.pc_buffers.as_ref(),
-                pipe.pc_size,
-                pipe.current_pc_offset,
-            );
-
-            let mut previous_block: Option<i32> = None;
-
-            for brr in &self.block_que {
-                let ipos = ivec3!(brr.pos);
-                {
-                    let block_id = brr.block;
-                    let shift = ipos;
-
-                    let block_mesh = &self.renderer.block_palette_meshes[block_id as usize];
-
-                    if previous_block.is_none_or(|pb| pb != block_id) {
-                        rpass.set_vertex_buffer(
-                            0,
-                            block_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
-                        );
-                        rpass.set_index_buffer(
-                            block_mesh.triangles.indices.as_ref().unwrap().slice(..),
-                            wgpu::IndexFormat::Uint16,
-                        );
-                        previous_block = Some(block_id)
-                    }
-
-                    // TODO: how do i make functions used in macro visible to rust-analyzer?
-                    macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
-                        ($__normal:expr, $__face:ident) => {
-                            let fnorm = vec3::new(
-                                $__normal.x as f32,
-                                $__normal.y as f32,
-                                $__normal.z as f32,
-                            );
-                            let inorm =
-                                ivec3!($__normal.x as i32, $__normal.y as i32, $__normal.z as i32);
-                            if is_face_visible(fnorm, self.renderer.camera.camera_dir) {
-                                Self::raygen_block_face(
-                                    &self.renderer.wal,
-                                    &mut rpass,
-                                    pipe.pipeline.as_ref().unwrap(),
-                                    pipe.pc_bind_groups.as_ref(),
-                                    pipe.pc_size,
-                                    &mut pipe.current_pc_offset,
-                                    Some(pipe.static_bind_groups.as_ref().unwrap().current()),
-                                    pc_write_view.as_deref_mut(),
-                                    inorm,
-                                    shift,
-                                    &block_mesh.triangles.$__face,
-                                    block_id,
-                                );
-                            }
-                        };
-                    }
-
-                    // draw every face (separately). This allows per-face culling
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(1, 0, 0), Pzz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(-1, 0, 0), Nzz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 1, 0), zPz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, -1, 0), zNz);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, 1), zzP);
-                    CHECK_AND_DRAW_BLOCK_FACE!(i8vec3::new(0, 0, -1), zzN);
-                }
-            }
+    fn raygen_block_face<'a>(
+        wal: &Wal,
+        pc_write_slice: &mut Vec<u8>, // The mutable slice for writing
+        pc_counter: &mut u32,
+        normal: ivec3,
+        shift: ivec3,
+        buff: &IndexedVertices,
+        block_id: BlockId,
+    ) {
+        debug_assert!(block_id > 0);
+        let sum = normal.x + normal.y + normal.z;
+        // u8 sign = (sum > 0) ? 0 : 1;
+        let neg_sign = match sum > 0 {
+            true => 0,
+            false => 1,
         };
+
+        let absnorm = u8vec3::new(
+            normal.x.unsigned_abs() as u8,
+            normal.y.unsigned_abs() as u8,
+            normal.z.unsigned_abs() as u8,
+        );
+        debug_assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
+        //signBit_4EmptyBits_xBit_yBit_zBit
+        let pbn = { (neg_sign << 7) | absnorm.x | (absnorm.y << 1) | (absnorm.z << 2) };
+
+        let push_constant = PcRyagenBlockFace {
+            block: block_id,
+            shift,
+            unorm: unsafe { transmute(u8vec4::new(pbn, 0, 0, 0)) },
+        };
+
+        // yeah we just delay rendering it cause sorting by state is faster for wgpu
+        pc_write_slice.extend_from_slice(push_constant.as_u8_slice());
+        *pc_counter += 1;
+    }
+
+    fn raygen_blocks(&mut self) {
+        // Begin the raygen blocks render pass
+        let mut rpass = self.renderer.current_encoder.as_mut().unwrap().begin_render_pass(
+            &wgpu::RenderPassDescriptor {
+                label: Some("Raygen Blocks Render Pass"),
+                // raster mat_norm gbuffers
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self
+                        .renderer
+                        .dependent_images
+                        .as_ref()
+                        .unwrap()
+                        .highres_mat_norm
+                        .current()
+                        .view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // first use clears, other just load
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 0.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                // depth is normal gbuffer depth
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self
+                        .renderer
+                        .dependent_images
+                        .as_ref()
+                        .unwrap()
+                        .highres_depth
+                        .current()
+                        .view,
+                    depth_ops: Some(wgpu::Operations {
+                        // clear cause first
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            },
+        );
+
+        let pipe = &mut self.renderer.pipes.raygen_blocks_pipe;
+
+        self.renderer.wal.bind_raster_pipeline(
+            &mut rpass,
+            pipe.pipeline.as_ref().unwrap(),
+            pipe.static_bind_groups.as_ref(),
+        );
+
+        for brr in &self.block_que {
+            let ipos = ivec3!(brr.pos);
+            {
+                let block_id = brr.block;
+                let shift = ipos;
+
+                let block_mesh = &mut self.renderer.block_palette_meshes[block_id as usize];
+
+                let check_and_draw_block_face =
+                    |normal: i8vec3, face: &mut IndexedVerticesQueue| {
+                        let fnorm = vec3::new(normal.x as f32, normal.y as f32, normal.z as f32);
+                        let inorm = ivec3!(normal.x as i32, normal.y as i32, normal.z as i32);
+
+                        if is_face_visible(fnorm, self.renderer.camera.camera_dir) {
+                            Self::raygen_block_face(
+                                &self.renderer.wal,
+                                &mut face.push_constants,
+                                &mut face.pc_count,
+                                inorm,
+                                shift,
+                                &face.iv,
+                                block_id,
+                            );
+                        }
+                    };
+
+                // draw every face (separately). This allows per-face culling
+                check_and_draw_block_face(i8vec3::new(1, 0, 0), &mut block_mesh.triangles.Pzz);
+                check_and_draw_block_face(i8vec3::new(-1, 0, 0), &mut block_mesh.triangles.Nzz);
+                check_and_draw_block_face(i8vec3::new(0, 1, 0), &mut block_mesh.triangles.zPz);
+                check_and_draw_block_face(i8vec3::new(0, -1, 0), &mut block_mesh.triangles.zNz);
+                check_and_draw_block_face(i8vec3::new(0, 0, 1), &mut block_mesh.triangles.zzP);
+                check_and_draw_block_face(i8vec3::new(0, 0, -1), &mut block_mesh.triangles.zzN);
+            }
+        }
+
+        // now we processed all block render requests and sorted them by state and now we will actually render them in very few (3 x block_count) drawcalls
+
+        for block_mesh in &mut self.renderer.block_palette_meshes {
+            // for every block, for every of its sides
+            // copy its push constants from stored queue for a side and submit a drawcall
+
+            if block_mesh.triangles.vertexes.is_some() && block_mesh.triangles.indices.is_some() {
+                // bind vertex & index buffers for all sides
+                rpass.set_vertex_buffer(
+                    0,
+                    block_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
+                );
+                rpass.set_index_buffer(
+                    block_mesh.triangles.indices.as_ref().unwrap().slice(..),
+                    wgpu::IndexFormat::Uint16,
+                );
+            }
+
+            let mut draw_block_face = |face: &mut IndexedVerticesQueue| {
+                if face.pc_bg.is_some() && !face.push_constants.is_empty() {
+                    let count = face.push_constants.len();
+                    let size = count;
+
+                    let write = self.renderer.wal.queue.write_buffer_with(
+                        face.pc_buffer.as_ref().unwrap(),
+                        0,
+                        std::num::NonZero::new(size as u64).unwrap(),
+                    );
+                    let src_pc_slice_u8 = unsafe {
+                        std::slice::from_raw_parts(face.push_constants.as_ptr() as *const u8, size)
+                    };
+                    write.unwrap().copy_from_slice(src_pc_slice_u8);
+
+                    self.renderer.wal.draw_indexed_with_params(
+                        &mut rpass,
+                        pipe.pipeline.as_ref().unwrap(),
+                        Some(pipe.static_bind_groups.as_ref().unwrap().current()),
+                        face.pc_bg.as_ref(),
+                        face.iv.offset..face.iv.offset + face.iv.icount,
+                        0,
+                        0..face.pc_count as u32,
+                    );
+
+                    // we dont set pc_count to 0 here cause its used in lightmap_blocks cause they share pc buffers
+                    // face.pc_count = 0;
+                    face.push_constants.clear(); // cpu memory however can be cleaned
+                }
+            };
+
+            draw_block_face(&mut block_mesh.triangles.Pzz);
+            draw_block_face(&mut block_mesh.triangles.Nzz);
+            draw_block_face(&mut block_mesh.triangles.zPz);
+            draw_block_face(&mut block_mesh.triangles.zNz);
+            draw_block_face(&mut block_mesh.triangles.zzP);
+            draw_block_face(&mut block_mesh.triangles.zzN);
+        }
+
+        self.renderer.wal.queue.submit([]);
     }
 
     fn update_ubo(&mut self) {
@@ -2476,72 +2480,6 @@ impl<'window> RendererWgpu<'window> {
 
     fn shift_radiance(&mut self, shift: ivec3) {
         self.radiance_shift = shift;
-    }
-
-    fn raygen_block_face<'a>(
-        wal: &Wal,
-        rpass: &mut wgpu::RenderPass<'a>,
-        pipeline: &'a wgpu::RenderPipeline, // Now passed individually
-        pc_bind_group: Option<&'a Ring<wgpu::BindGroup>>, // Now passed individually
-        pc_size: u32,
-        current_pc_offset: &mut u32, // Now mutable reference
-        static_bind_group: Option<&BindGroup>,
-        pc_write_slice: Option<&mut [u8]>, // The mutable slice for writing
-        normal: ivec3,
-        shift: ivec3,
-        buff: &IndexedVertices,
-        block_id: BlockId,
-    ) {
-        debug_assert!(block_id > 0);
-        let sum = normal.x + normal.y + normal.z;
-        // u8 sign = (sum > 0) ? 0 : 1;
-        let neg_sign = match sum > 0 {
-            true => 0,
-            false => 1,
-        };
-
-        let absnorm = u8vec3::new(
-            normal.x.unsigned_abs() as u8,
-            normal.y.unsigned_abs() as u8,
-            normal.z.unsigned_abs() as u8,
-        );
-        debug_assert!((absnorm.x + absnorm.y + absnorm.z) == 1);
-        let pbn = { (neg_sign << 7) | absnorm.x | (absnorm.y << 1) | (absnorm.z << 2) };
-        //signBit_4EmptyBits_xBit_yBit_zBit
-        #[repr(C)] // for push constants
-        #[derive(AsU8Slice)] // allow cast to &[u8]
-        struct PushConstant {
-            block: i32,
-            shift: ivec3,
-            unorm: u32, // inorm: i8vec4, // passed separately
-        }
-
-        let push_constant = PushConstant {
-            block: block_id,
-            shift,
-            unorm: unsafe { transmute(u8vec4::new(pbn, 0, 0, 0)) },
-        };
-
-        // rpass.set_push_constants(
-        //     wgpu::ShaderStages::VERTEX_FRAGMENT,
-        //     8,
-        //     push_constant.as_u8_slice(),
-        // );
-
-        wal.draw_indexed_with_params(
-            rpass,
-            pipeline,
-            pc_bind_group,
-            pc_size,
-            current_pc_offset,
-            static_bind_group,
-            None,
-            Some(push_constant.as_u8_slice()),
-            pc_write_slice,
-            buff.offset..buff.offset + buff.icount,
-            0,
-            0..1,
-        );
     }
 
     fn raygen_models(&mut self) {
@@ -2593,14 +2531,10 @@ impl<'window> RendererWgpu<'window> {
             &mut rpass,
             pipe.pipeline.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
-            pipe.pc_bind_groups.as_ref(),
-            pipe.pc_buffers.as_ref(),
-            pipe.pc_size,
-            pipe.current_pc_offset,
         );
 
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
+            let model_mesh = self.storage.models.get_mut(mrr.mesh.0).unwrap();
             let model_trans: &MeshTransform = &mrr.trans;
 
             rpass.set_vertex_buffer(0, model_mesh.triangles.vertexes.as_ref().unwrap().slice(..));
@@ -2612,56 +2546,95 @@ impl<'window> RendererWgpu<'window> {
             // Update the model voxels bind group if needed
             // This would replace the Vulkan descriptor set update
             // For now, we'll assume the bind group is already set up correctly
+            let check_and_raygen_model_face = |normal: i8vec3, face: &mut IndexedVerticesQueue| {
+                let fnorm = vec3::new(normal.x as f32, normal.y as f32, normal.z as f32);
+                if is_face_visible(
+                    model_trans.rotation * fnorm,
+                    self.renderer.camera.camera_dir,
+                ) {
+                    Self::raygen_model_face(
+                        &mut face.push_constants,
+                        &model_trans.rotation,
+                        &model_trans.translation,
+                        fnorm,
+                        &face.iv,
+                    );
+                    face.pc_count += 1;
+                }
+            };
 
-            macro_rules! CHECK_AND_DRAW_MODEL_FACE {
-                ($__normal:expr, $__face:ident) => {
-                    let fnorm =
-                        vec3::new($__normal.x as f32, $__normal.y as f32, $__normal.z as f32);
-                    if is_face_visible(
-                        model_trans.rotation * fnorm,
-                        self.renderer.camera.camera_dir,
-                    ) {
-                        Self::raygen_model_face(
-                            &self.renderer.wal,
-                            &mut rpass,
-                            pipe.pipeline.as_ref().unwrap(),
-                            pipe.pc_bind_groups.as_ref(),
-                            pipe.pc_size,
-                            &mut pipe.current_pc_offset,
-                            Some(pipe.static_bind_groups.as_ref().unwrap().current()),
-                            pc_write_view.as_deref_mut(),
-                            &model_trans.rotation,
-                            &model_trans.translation,
-                            model_mesh.voxels_bind_group_fragment.as_ref().unwrap(),
-                            fnorm,
-                            &model_mesh.triangles.$__face,
-                        );
-                    }
-                };
+            check_and_raygen_model_face(i8vec3::new(1, 0, 0), &mut model_mesh.triangles.Pzz);
+            check_and_raygen_model_face(i8vec3::new(-1, 0, 0), &mut model_mesh.triangles.Nzz);
+            check_and_raygen_model_face(i8vec3::new(0, 1, 0), &mut model_mesh.triangles.zPz);
+            check_and_raygen_model_face(i8vec3::new(0, -1, 0), &mut model_mesh.triangles.zNz);
+            check_and_raygen_model_face(i8vec3::new(0, 0, 1), &mut model_mesh.triangles.zzP);
+            check_and_raygen_model_face(i8vec3::new(0, 0, -1), &mut model_mesh.triangles.zzN);
+        }
+
+        // no iter by state (not by depth)
+        for model_mesh in &mut self.storage.models {
+            let model_mesh = model_mesh.1;
+
+            // bind if valid (TODO: have single Option)
+            if model_mesh.triangles.vertexes.is_some() && model_mesh.triangles.indices.is_some() {
+                rpass.set_vertex_buffer(
+                    0,
+                    model_mesh.triangles.vertexes.as_ref().unwrap().slice(..),
+                );
+                rpass.set_index_buffer(
+                    model_mesh.triangles.indices.as_ref().unwrap().slice(..),
+                    wgpu::IndexFormat::Uint16,
+                );
             }
 
-            // let wal = &mut self.renderer.wal;
-            CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(1, 0, 0), Pzz);
-            CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(-1, 0, 0), Nzz);
-            CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, 1, 0), zPz);
-            CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, -1, 0), zNz);
-            CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, 0, 1), zzP);
-            CHECK_AND_DRAW_MODEL_FACE!(i8vec3::new(0, 0, -1), zzN);
+            // TODO: no macro | reuse it?
+            let mut draw_indexed_model_face = |face: &mut IndexedVerticesQueue| {
+                if face.pc_bg.is_some() && !face.push_constants.is_empty() {
+                    let count = face.push_constants.len();
+                    let size = count;
+                    let write = self.renderer.wal.queue.write_buffer_with(
+                        face.pc_buffer.as_ref().unwrap(),
+                        0,
+                        std::num::NonZero::new(size as u64).unwrap(),
+                    );
+                    let src_pc_slice_u8 = unsafe {
+                        std::slice::from_raw_parts(face.push_constants.as_ptr() as *const u8, size)
+                    };
+                    write.unwrap().copy_from_slice(src_pc_slice_u8);
+
+                    self.renderer.wal.draw_indexed_with_params(
+                        &mut rpass,
+                        pipe.pipeline.as_ref().unwrap(),
+                        Some(pipe.static_bind_groups.as_ref().unwrap().current()),
+                        face.pc_bg.as_ref(),
+                        face.iv.offset..face.iv.offset + face.iv.icount,
+                        0,
+                        0..face.pc_count as u32,
+                    );
+
+                    face.pc_count = 0;
+                    face.push_constants.clear();
+                }
+            };
+
+            draw_indexed_model_face(&mut model_mesh.triangles.Pzz);
+            draw_indexed_model_face(&mut model_mesh.triangles.Nzz);
+            draw_indexed_model_face(&mut model_mesh.triangles.zPz);
+            draw_indexed_model_face(&mut model_mesh.triangles.zNz);
+            draw_indexed_model_face(&mut model_mesh.triangles.zzP);
+            draw_indexed_model_face(&mut model_mesh.triangles.zzN);
         }
     }
 
     fn raygen_model_face<'a>(
-        wal: &Wal,
-        rpass: &mut wgpu::RenderPass<'a>,
-        pipeline: &'a wgpu::RenderPipeline, // Now passed individually
-        pc_bind_group: Option<&'a Ring<wgpu::BindGroup>>, // Now passed individually
-        pc_size: u32,
-        current_pc_offset: &mut u32, // Now mutable reference
-        static_bind_group: Option<&BindGroup>,
-        pc_write_slice: Option<&mut [u8]>,
+        // wal: &Wal,
+        // rpass: &mut wgpu::RenderPass<'a>,
+        // pipeline: &'a wgpu::RenderPipeline, // Now passed individually
+        // static_bind_group: Option<&BindGroup>,
+        pc_write_slice: &mut Vec<u8>,
         rot: &quat,
         shift: &vec3,
-        model_voxels_bg: &BindGroup,
+        // model_voxels_bg: &BindGroup,
         normal: vec3,
         buff: &IndexedVertices,
     ) {
@@ -2678,21 +2651,8 @@ impl<'window> RendererWgpu<'window> {
             fnormal: vec4!(normal, 0.0),
         };
 
+        pc_write_slice.extend_from_slice(push_constant.as_u8_slice());
         // rpass.draw_indexed(buff.offset..buff.offset + buff.icount, 0, 0..1);
-        wal.draw_indexed_with_params(
-            rpass,
-            pipeline,
-            pc_bind_group,
-            pc_size,
-            current_pc_offset,
-            static_bind_group,
-            Some(model_voxels_bg),
-            Some(push_constant.as_u8_slice()),
-            pc_write_slice,
-            buff.offset..buff.offset + buff.icount,
-            0,
-            0..1,
-        );
     }
 }
 
@@ -2739,6 +2699,7 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     type MeshLiquid = MeshLiquid;
     type MeshModel = MeshModel;
     type MeshBlock = BlockId;
+    type Particle = Particle;
     type BlockId = BlockId;
     type MatId = MatId;
     type Voxel = Voxel;
@@ -2771,7 +2732,7 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     }
     // TODO: move to impl MeshModel
     fn get_model_size(&self, model: MeshModel) -> uvec3 {
-        self.storage.models.get(model.0).unwrap().total_size
+        self.storage.models.get(model.0).unwrap().size
     }
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
@@ -2946,7 +2907,7 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     fn draw_model(&mut self, model: &MeshModel, trans: &MeshTransform) {
         let model_mesh = self.storage.models.get(model.0).unwrap();
         // model size also happens to be >= its bounding box (dont leave voxel padding)
-        if self.is_model_visible(&model_mesh.total_size, trans) {
+        if self.is_model_visible(&model_mesh.size, trans) {
             self.model_que.push(ModelRenderRequest {
                 cam_dist: 0.0,
                 mesh: *model,
@@ -2987,6 +2948,10 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
                 pos: *pos,
             });
         }
+    }
+
+    fn spawn_particle(&mut self, particle: &Self::Particle) {
+        self.renderer.particles.push(*particle);
     }
 
     // function that "optimizes" the frame
@@ -3040,11 +3005,10 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         self.raygen_blocks();
         self.raygen_models();
 
-        // self.update_raygen_particles();
+        self.update_raygen_particles();
 
         self.raygen_grass();
         self.raygen_water();
-        self.raygen_smoke();
 
         // wgpu is so good that most important Vulkan feature is missing (for convinience)
 
@@ -3060,7 +3024,7 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
 
         self.renderer.counter += 1;
 
-        atrace!();
+        // atrace!();
     }
 
     fn get_world_blocks(&self) -> &Array3D<BlockId> {

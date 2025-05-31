@@ -67,7 +67,7 @@ impl InternalRendererVulkan {
     ) {
         let rotate = mat4::from(trans.rotation);
         let shift = mat4::identity().translated_3d(trans.translation);
-        let border_in_voxel = get_shift(shift * rotate, mesh.total_size);
+        let border_in_voxel = get_shift(shift * rotate, mesh.size);
 
         let mut border = iAABB {
             min: ivec3!(border_in_voxel.min - 1.0) / 16,
@@ -893,7 +893,7 @@ impl InternalRendererVulkan {
         let shift = mat4::identity().translated_3d(trans.translation);
         let transform = shift * rotate;
 
-        let border_in_voxel = get_shift(transform, mesh.total_size);
+        let border_in_voxel = get_shift(transform, mesh.size);
 
         let border = iAABB {
             min: ivec3!(border_in_voxel.min.floor()),
@@ -2186,6 +2186,7 @@ impl RendererInterface for RendererVulkan<'_> {
     type MeshLiquid = MeshLiquid;
     type MeshModel = MeshModel;
     type MeshBlock = BlockId;
+    type Particle = Particle;
     type BlockId = BlockId;
     type MatId = MatId;
     type Voxel = Voxel;
@@ -2222,7 +2223,7 @@ impl RendererInterface for RendererVulkan<'_> {
         self.renderer.free_mesh(model_mesh);
     }
     fn get_model_size(&self, model: MeshModel) -> uvec3 {
-        self.storage.models.get(model.0).unwrap().total_size
+        self.storage.models.get(model.0).unwrap().size
     }
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
@@ -2260,6 +2261,10 @@ impl RendererInterface for RendererVulkan<'_> {
         let liquid_mesh = InternalMeshLiquid {
             main: main_mat,
             foam: foam_mat,
+            // pc_buffer: todo!(),
+            // pc_bg: todo!(),
+            // push_constants: todo!(),
+            // pc_count: todo!(),
         };
         let index = self.storage.liquids.allocate(liquid_mesh).unwrap();
         MeshLiquid(index)
@@ -2307,7 +2312,7 @@ impl RendererInterface for RendererVulkan<'_> {
     fn draw_model(&mut self, model: &MeshModel, trans: &MeshTransform) {
         let model_mesh = self.storage.models.get(model.0).unwrap();
         // model size also happens to be >= its bounding box (dont leave voxel padding)
-        if self.is_model_visible(&model_mesh.total_size, trans) {
+        if self.is_model_visible(&model_mesh.size, trans) {
             self.model_que.push(ModelRenderRequest {
                 cam_dist: 0.0,
                 mesh: *model,
@@ -2347,6 +2352,10 @@ impl RendererInterface for RendererVulkan<'_> {
                 pos: *pos,
             });
         }
+    }
+
+    fn spawn_particle(&mut self, particle: &Self::Particle) {
+        self.renderer.particles.push(*particle);
     }
 
     // fn shift_radiance(&mut self, shift: ivec3) {

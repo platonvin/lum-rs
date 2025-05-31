@@ -16,13 +16,11 @@ struct UboData {
 // @group(0) @binding(1) var blocks: texture_3d<i32>;
 // @group(0) @binding(2) var blockPalette: texture_storage_3d<r32sint, write>; // Assuming write access
 
-struct VertexInput {
+struct InstanceInput {
     @location(0) posIn: vec3<f32>,
     @location(1) velIn: vec3<f32>,
     @location(2) lifeTimeIn: f32,
     @location(3) matIDIn: u32,
-    @builtin(vertex_index) vertex_index: u32,
-    @builtin(instance_index) instance_index: u32,
 };
 
 struct VertexOutput {
@@ -30,69 +28,74 @@ struct VertexOutput {
     @location(0) mat_norm: vec4<u32>,
 };
 
-struct FragmentOutput {
-    @location(0) outMatNorm: vec4<u32>,
-};
-
-const BLOCK_PALETTE_SIZE_X: i32 = 64;
-const STATIC_BLOCK_COUNT: i32 = 15;
-const DELTA_TIME: f32 = 1.0 / 75.0;
-
-const CUBE_STRIP_POS: array<vec3<f32>, 14> = array(
-    vec3<f32>(-1.0, 1.0, 1.0),
-    vec3<f32>(1.0, 1.0, 1.0),
-    vec3<f32>(-1.0, -1.0, 1.0),
-    vec3<f32>(1.0, -1.0, 1.0),
-    vec3<f32>(1.0, -1.0, -1.0),
-    vec3<f32>(1.0, 1.0, 1.0),
-    vec3<f32>(1.0, 1.0, -1.0),
-    vec3<f32>(-1.0, 1.0, 1.0),
-    vec3<f32>(-1.0, 1.0, -1.0),
-    vec3<f32>(-1.0, -1.0, 1.0),
-    vec3<f32>(-1.0, -1.0, -1.0),
-    vec3<f32>(1.0, -1.0, -1.0),
-    vec3<f32>(-1.0, 1.0, -1.0),
-    vec3<f32>(1.0, 1.0, -1.0),
+// --- Define a standard 36-vertex cube (12 triangles) ---
+const CUBE_VERTICES: array<vec3<f32>, 36> = array<vec3<f32>, 36>(
+    // +X face
+    vec3<f32>(1, -1,  1), vec3<f32>(1, -1, -1), vec3<f32>(1,  1, -1),
+    vec3<f32>(1, -1,  1), vec3<f32>(1,  1, -1), vec3<f32>(1,  1,  1),
+    // -X face
+    vec3<f32>(-1, -1, -1), vec3<f32>(-1, -1,  1), vec3<f32>(-1,  1,  1),
+    vec3<f32>(-1, -1, -1), vec3<f32>(-1,  1,  1), vec3<f32>(-1,  1, -1),
+    // +Y face
+    vec3<f32>(-1, 1,  1), vec3<f32>(1, 1,  1), vec3<f32>(1, 1, -1),
+    vec3<f32>(-1, 1,  1), vec3<f32>(1, 1, -1), vec3<f32>(-1, 1, -1),
+    // -Y face
+    vec3<f32>(-1, -1, -1), vec3<f32>(1, -1, -1), vec3<f32>(1, -1,  1),
+    vec3<f32>(-1, -1, -1), vec3<f32>(1, -1,  1), vec3<f32>(-1, -1,  1),
+    // +Z face
+    vec3<f32>(-1, -1, 1), vec3<f32>(-1,  1, 1), vec3<f32>(1,  1, 1),
+    vec3<f32>(-1, -1, 1), vec3<f32>(1,  1, 1), vec3<f32>(1, -1, 1),
+    // -Z face
+    vec3<f32>(1, -1, -1), vec3<f32>(1,  1, -1), vec3<f32>(-1,  1, -1),
+    vec3<f32>(1, -1, -1), vec3<f32>(-1,  1, -1), vec3<f32>(-1, -1, -1)
 );
 
-const CUBE_STRIP_NORM: array<vec3<f32>, 14> = array(
-    vec3<f32>(0.0, 0.0, 1.0),
-    vec3<f32>(0.0, 0.0, 1.0),
-    vec3<f32>(0.0, -1.0, 0.0),
-    vec3<f32>(1.0, 0.0, 0.0),
-    vec3<f32>(1.0, 0.0, 0.0),
-    vec3<f32>(0.0, 1.0, 0.0),
-    vec3<f32>(0.0, 1.0, 0.0),
-    vec3<f32>(-1.0, 0.0, 0.0),
-    vec3<f32>(-1.0, 0.0, 0.0),
-    vec3<f32>(0.0, -1.0, 0.0),
-    vec3<f32>(0.0, 0.0, -1.0),
-    vec3<f32>(0.0, 0.0, -1.0),
-    vec3<f32>(1.0, 1.0, 1.0),
-    vec3<f32>(1.0, 1.0, 1.0),
+const CUBE_NORMALS: array<vec3<f32>, 36> = array<vec3<f32>, 36>(
+    // +X normals
+    vec3<f32>(1, 0, 0), vec3<f32>(1, 0, 0), vec3<f32>(1, 0, 0),
+    vec3<f32>(1, 0, 0), vec3<f32>(1, 0, 0), vec3<f32>(1, 0, 0),
+    // -X normals
+    vec3<f32>(-1, 0, 0), vec3<f32>(-1, 0, 0), vec3<f32>(-1, 0, 0),
+    vec3<f32>(-1, 0, 0), vec3<f32>(-1, 0, 0), vec3<f32>(-1, 0, 0),
+    // +Y normals
+    vec3<f32>(0, 1, 0), vec3<f32>(0, 1, 0), vec3<f32>(0, 1, 0),
+    vec3<f32>(0, 1, 0), vec3<f32>(0, 1, 0), vec3<f32>(0, 1, 0),
+    // -Y normals
+    vec3<f32>(0, -1, 0), vec3<f32>(0, -1, 0), vec3<f32>(0, -1, 0),
+    vec3<f32>(0, -1, 0), vec3<f32>(0, -1, 0), vec3<f32>(0, -1, 0),
+    // +Z normals
+    vec3<f32>(0, 0, 1), vec3<f32>(0, 0, 1), vec3<f32>(0, 0, 1),
+    vec3<f32>(0, 0, 1), vec3<f32>(0, 0, 1), vec3<f32>(0, 0, 1),
+    // -Z normals
+    vec3<f32>(0, 0, -1), vec3<f32>(0, 0, -1), vec3<f32>(0, 0, -1),
+    vec3<f32>(0, 0, -1), vec3<f32>(0, 0, -1), vec3<f32>(0, 0, -1)
 );
-
-fn voxel_in_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
-    let block_x = block_id % BLOCK_PALETTE_SIZE_X;
-    let block_y = block_id / BLOCK_PALETTE_SIZE_X;
-    return relative_voxel_pos + vec3<i32>(16 * block_x, 16 * block_y, 0);
-}
 
 @vertex
-fn main(in: VertexInput) -> VertexOutput {
-    let world_pos = vec4<f32>(in.posIn, 1.0);
-    let clip_coords = (ubo.trans_w2s * world_pos).xyz;
+fn main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instance_index: u32, in: InstanceInput) -> VertexOutput {
+    // fetch per-particle attributes
+    let base_pos    = in.posIn;
+    var life_size   = in.lifeTimeIn / 2.0;
+    let material_id = in.matIDIn;
+
+    // expand to cube corner + scale
+    let corner = CUBE_VERTICES[vertex_index] * life_size;
+    let world_pos = vec4<f32>(base_pos + corner, 1.0);
+
+    // project correctly
+    var clip = ubo.trans_w2s * world_pos;
+    clip.z = 1.0 + clip.z;
+
 
     var out: VertexOutput;
-    out.position = vec4<f32>(clip_coords, 1.0);
 
-    let size = in.lifeTimeIn / 14.0;
-    let mat = in.matIDIn;
-    let geom_index = in.vertex_index % 14u;
-    let normal = CUBE_STRIP_NORM[geom_index];
+    // let uv = vec2<f32>(f32((vertex_index << 1u) & 2u), f32(vertex_index & 2u));
+    // out.position = vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);;
+    out.position = clip;
 
-    // pack mat and normal to u32 (4xu8)
-    out.mat_norm = vec4<u32>(mat, vec3<u32>(normal));
-    
+    // pack material & normal
+    let norm = CUBE_NORMALS[vertex_index];
+    out.mat_norm = vec4<u32>(material_id, vec3<u32>(norm));
+
     return out;
 }

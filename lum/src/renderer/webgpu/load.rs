@@ -1,3 +1,5 @@
+use std::mem;
+
 use block_mesh::{greedy_quads, ilattice::extent, GreedyQuadsBuffer, VoxelVisibility};
 use lumal::atrace;
 use qvek::{vec3, vek::Vec3};
@@ -8,6 +10,7 @@ use wgpu::{
     SamplerBindingType, ShaderStages, TexelCopyBufferLayout, TexelCopyTextureInfo,
     TextureSampleType, TextureViewDimension,
 };
+use wgpu::{BufferBinding, BufferUsages};
 // use rand::Rng;
 use crate::renderer::types::*;
 use crate::{
@@ -39,6 +42,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
     type BlockId = BlockId;
     type MatId = MatId;
     type Voxel = Voxel;
+    type IndexedVertices = IndexedVerticesQueue;
 
     // Palette on CPU side is (should) be represented as a POD array
     // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is
@@ -153,7 +157,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
         &mut self,
         model: &ogt_vox::VoxModel,
         _make_vertices: bool,
-    ) -> InternalMeshModel<Self::BufferType, Self::ImageType> {
+    ) -> InternalMeshModel<Self::BufferType, Self::ImageType, IndexedVerticesQueue> {
         let size = uvec3 {
             x: model.size_x,
             y: model.size_y,
@@ -189,64 +193,124 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
             Some("Mesh Voxels"),
         );
 
-        let triangles = self.make_contour_vertices(size, padded_voxel_data);
+        let mut triangles = self.make_contour_vertices(size, padded_voxel_data);
 
         // TODO: reuse this
-        let voxel_bind_group_layout_compute =
+        let raster_dynamic_bind_group_layout =
             self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("Dynamic per-Mesh Voxels Bind Group Layout"),
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Sint,
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
-        let voxels_bind_group_compute = self.wal.device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Dynamic per-Mesh Voxels Bind Group"),
-            layout: &voxel_bind_group_layout_compute,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&voxels.as_ref().unwrap().view),
-            }],
-        });
-
-        let voxel_bind_group_layout_fragment =
+        let compute_dynamic_bind_group_layout =
             self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("Dynamic per-Mesh Voxels Bind Group Layout"),
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Sint,
-                        view_dimension: TextureViewDimension::D3,
-                        multisampled: false,
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Sint,
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
-        let voxels_bind_group_fragment = self.wal.device.create_bind_group(&BindGroupDescriptor {
+        let create_face_bind_group = |face: &mut IndexedVerticesQueue| {
+            let dynamic_bind_group = self.wal.device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Dynamic per-face Voxels Bind Group"),
+                layout: &raster_dynamic_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(
+                            face.pc_buffer.as_ref().unwrap().as_entire_buffer_binding(),
+                        ),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(
+                            &voxels.as_ref().unwrap().view,
+                        ),
+                    },
+                ],
+            });
+            face.pc_bg = Some(dynamic_bind_group);
+        };
+
+        create_face_bind_group(&mut triangles.Pzz);
+        create_face_bind_group(&mut triangles.Nzz);
+        create_face_bind_group(&mut triangles.zPz);
+        create_face_bind_group(&mut triangles.zNz);
+        create_face_bind_group(&mut triangles.zzP);
+        create_face_bind_group(&mut triangles.zzN);
+
+        let compute_pc_buffer = self.wal.create_buffer(
+            BufferUsages::COPY_DST | BufferUsages::STORAGE,
+            16 * 1024 * 20,
+            false,
+            Some("(per-mesh) pc buffer for compute"),
+        );
+        let compute_dynamic_bind_group = self.wal.device.create_bind_group(&BindGroupDescriptor {
             label: Some("Dynamic per-Mesh Voxels Bind Group"),
-            layout: &voxel_bind_group_layout_fragment,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&voxels.as_ref().unwrap().view),
-            }],
+            layout: &compute_dynamic_bind_group_layout,
+            // we bind same voxel image and 6 different pc buffers to 6 different bind groups
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(
+                        compute_pc_buffer.as_entire_buffer_binding(),
+                    ),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&voxels.as_ref().unwrap().view),
+                },
+            ],
         });
 
         InternalMeshModel {
             triangles,
             voxels,
-            total_size: size,
-            voxels_bind_group_fragment: Some(voxels_bind_group_fragment),
-            voxels_bind_group_compute: Some(voxels_bind_group_compute),
-            // sprites: vec![],
+            size,
+            compute_pc_buffer: Some(compute_pc_buffer),
+            voxels_bind_group_compute: Some(compute_dynamic_bind_group),
+            compute_push_constants: vec![], // cause its empty
+            compute_pc_count: 0,            // cause its empty
         }
     }
 
@@ -345,7 +409,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
         size: uvec3,
         // 3d array with 1 padding
         padded_voxel_data: Array3D<VoxelForContour<Voxel>>,
-    ) -> FaceBuffers<Self::BufferType> {
+    ) -> FaceBuffers<Self::BufferType, IndexedVerticesQueue> {
         let mut buffer = GreedyQuadsBuffer::new(padded_voxel_data.data.len());
 
         // TODO: issue on block_mesh bad readme example
@@ -476,13 +540,100 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
             let (vertexes, indices) =
                 self.create_and_upload_contour_buffers(&circ_verts, &all_indices);
 
-            FaceBuffers::<Self::BufferType> {
-                Pzz: triangles_Pzz,
-                Nzz: triangles_Nzz,
-                zPz: triangles_zPz,
-                zNz: triangles_zNz,
-                zzP: triangles_zzP,
-                zzN: triangles_zzN,
+            let pc_buffer_bind_group_layout =
+                self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                    label: Some("Layout of fake PC for block mesh side"),
+                    entries: &[BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
+
+            macro_rules! create_indexed_vertices_queue {
+                ($wal:expr, $pc_layout:expr, $triangles:expr, $label_suffix:expr, $buffer_usage:expr, $buffer_size:expr) => {{
+                    let buffer = $wal.create_buffer(
+                        $buffer_usage,
+                        $buffer_size,
+                        false,
+                        Some(&format!("PC buffer for {}", $label_suffix)),
+                    );
+                    // let bind_group = $wal.device.create_bind_group(&BindGroupDescriptor {
+                    //     label: Some(&format!("PC buffer for {}", $label_suffix)),
+                    //     layout: $pc_layout,
+                    //     entries: &[BindGroupEntry {
+                    //         binding: 0,
+                    //         resource: wgpu::BindingResource::Buffer(
+                    //             buffer.as_entire_buffer_binding(),
+                    //         ),
+                    //     }],
+                    // });
+                    IndexedVerticesQueue {
+                        iv: $triangles,
+                        push_constants: vec![],
+                        pc_count: 0,
+                        pc_buffer: Some(buffer),
+                        // pc_bg: Some(bind_group),
+                        // we dont create bind group here cause we want it to also contain Voxel data, which comes into play later. So None for now
+                        pc_bg: None,
+                    }
+                }};
+            }
+
+            FaceBuffers {
+                Pzz: create_indexed_vertices_queue!(
+                    self.wal,
+                    &pc_buffer_bind_group_layout,
+                    triangles_Pzz,
+                    "Pzz",
+                    BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                    16 * 1024 * 20
+                ),
+                Nzz: create_indexed_vertices_queue!(
+                    self.wal,
+                    &pc_buffer_bind_group_layout,
+                    triangles_Nzz,
+                    "Nzz",
+                    BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                    16 * 1024 * 20
+                ),
+                zPz: create_indexed_vertices_queue!(
+                    self.wal,
+                    &pc_buffer_bind_group_layout,
+                    triangles_zPz,
+                    "zPz",
+                    BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                    16 * 1024 * 20
+                ),
+                zNz: create_indexed_vertices_queue!(
+                    self.wal,
+                    &pc_buffer_bind_group_layout,
+                    triangles_zNz,
+                    "zNz",
+                    BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                    16 * 1024 * 20
+                ),
+                zzP: create_indexed_vertices_queue!(
+                    self.wal,
+                    &pc_buffer_bind_group_layout,
+                    triangles_zzP,
+                    "zzP",
+                    BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                    16 * 1024 * 20
+                ),
+                zzN: create_indexed_vertices_queue!(
+                    self.wal,
+                    &pc_buffer_bind_group_layout,
+                    triangles_zzN,
+                    "zzN",
+                    BufferUsages::COPY_DST | BufferUsages::STORAGE,
+                    16 * 1024 * 20
+                ),
                 vertexes,
                 indices,
             }
@@ -491,7 +642,10 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
 
     #[cold]
     #[optimize(size)]
-    fn free_mesh(&mut self, mesh: InternalMeshModel<Self::BufferType, Self::ImageType>) {
+    fn free_mesh(
+        &mut self,
+        mesh: InternalMeshModel<Self::BufferType, Self::ImageType, Self::IndexedVertices>,
+    ) {
         drop(mesh);
     }
 
@@ -515,12 +669,46 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
     fn set_block_palette_mesh(
         &mut self,
         block_id: BlockId,
-        mesh: InternalMeshBlock<Self::BufferType>,
+        mesh: InternalMeshBlock<Self::BufferType, Self::IndexedVertices>,
     ) {
+        // let mesh: InternalMeshBlock<Option<wgpu::Buffer>, IndexedVerticesQueue<{ 44 }>> =
+        //     InternalMeshBlock {
+        //         triangles: FaceBuffers {
+        //             Pzz: IndexedVerticesQueue {
+        //                 iv: mesh.triangles.Pzz,
+        //                 push_constants: vec![],
+        //             },
+        //             Nzz: IndexedVerticesQueue {
+        //                 iv: mesh.triangles.Nzz,
+        //                 push_constants: vec![],
+        //             },
+        //             zPz: IndexedVerticesQueue {
+        //                 iv: mesh.triangles.zPz,
+        //                 push_constants: vec![],
+        //             },
+        //             zNz: IndexedVerticesQueue {
+        //                 iv: mesh.triangles.zNz,
+        //                 push_constants: vec![],
+        //             },
+        //             zzP: IndexedVerticesQueue {
+        //                 iv: mesh.triangles.zzP,
+        //                 push_constants: vec![],
+        //             },
+        //             zzN: IndexedVerticesQueue {
+        //                 iv: mesh.triangles.zzN,
+        //                 push_constants: vec![],
+        //             },
+        //             vertexes: mesh.triangles.vertexes,
+        //             indices: mesh.triangles.indices,
+        //         },
+        //     };
         self.block_palette_meshes[block_id as usize] = mesh;
     }
 
-    fn get_block_palette_mesh(&self, block_id: BlockId) -> &InternalMeshBlock<Self::BufferType> {
+    fn get_block_palette_mesh(
+        &self,
+        block_id: BlockId,
+    ) -> &InternalMeshBlock<Self::BufferType, Self::IndexedVertices> {
         &self.block_palette_meshes[block_id as usize]
     }
 
@@ -563,7 +751,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
         let size = uvec3::new(model.size_x, model.size_y, model.size_z);
 
         let mut padded_voxel_data = Array3D::<VoxelForContour<Voxel>>::new(
-            // +2 cause padding of 1 from each side
+            // +2 cause padding of 1 from each side for trianglezation
             (size.x + 2) as usize,
             (size.y + 2) as usize,
             (size.z + 2) as usize,
@@ -596,7 +784,44 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
             }
         }
 
-        let triangles = self.make_contour_vertices(size, padded_voxel_data);
+        let mut triangles = self.make_contour_vertices(size, padded_voxel_data);
+
+        // TODO: reuse this
+        let raster_dynamic_bind_group_layout =
+            self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Dynamic per-Mesh Voxels Bind Group Layout"),
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let create_face_bind_group = |face: &mut IndexedVerticesQueue| {
+            let dynamic_bind_group = self.wal.device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Dynamic per-face Voxels Bind Group"),
+                layout: &raster_dynamic_bind_group_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(
+                        face.pc_buffer.as_ref().unwrap().as_entire_buffer_binding(),
+                    ),
+                }],
+            });
+            face.pc_bg = Some(dynamic_bind_group);
+        };
+
+        create_face_bind_group(&mut triangles.Pzz);
+        create_face_bind_group(&mut triangles.Nzz);
+        create_face_bind_group(&mut triangles.zPz);
+        create_face_bind_group(&mut triangles.zNz);
+        create_face_bind_group(&mut triangles.zzP);
+        create_face_bind_group(&mut triangles.zzN);
 
         self.set_block_palette_mesh(block_id, InternalMeshBlock { triangles });
     }

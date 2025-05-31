@@ -30,7 +30,7 @@ struct AoLutEntry {
 @group(0) @binding(3) var depthBuffer_tex: texture_depth_2d; // sampler2D depthBuffer
 @group(0) @binding(4) var depth_samp: sampler; // Sampler for depthBuffer
 
-const COLOR_ENCODE_VALUE: f32 = 8.0;
+const COLOR_ENCODE_VALUE: f32 = 1.0;
 const SAMPLE_COUNT: i32 = 8;
 
 struct FragmentOutput {
