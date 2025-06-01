@@ -81,110 +81,6 @@ impl<'window> InternalRendererWebGPU<'window> {
         uvec2!(x, y)
     }
 
-    // // allocates temp block in palette for every block that intersects with every mesh blockified
-    // pub fn blockify_mesh(
-    //     &mut self,
-    //     mesh: &InternalMeshModel<Option<wgpu::Buffer>, Option<wal::Image>>,
-    //     trans: &MeshTransform,
-    // ) {
-    //     let rotate = mat4::from(trans.rotation);
-    //     let shift = mat4::identity().translated_3d(trans.translation);
-    //     let border_in_voxel = get_shift(shift * rotate, mesh.total_size);
-
-    //     let mut border = iAABB {
-    //         min: ivec3!(border_in_voxel.min - 1.0) / 16,
-    //         max: ivec3!(border_in_voxel.max + 1.0) / 16,
-    //     };
-
-    //     // clamp to world size so no out of bounds
-    //     border.min = ivec3::clamped(
-    //         border.min,
-    //         ivec3::zero(),
-    //         ivec3!(self.settings.world_size - 1),
-    //     );
-    //     border.max = ivec3::clamped(
-    //         border.max,
-    //         ivec3::zero(),
-    //         ivec3!(self.settings.world_size - 1),
-    //     );
-
-    //     for zz in border.min.z..=border.max.z {
-    //         for yy in border.min.y..=border.max.y {
-    //             for xx in border.min.x..=border.max.x {
-    //                 let current_block = self.current_world[(xx as usize, yy as usize, zz as usize)];
-    //                 if (current_block as u32) < self.static_block_palette_size {
-    //                     // static
-    //                     //add to copy queue
-    //                     let src_block = self.index_block_xy(current_block as usize);
-    //                     let dst_block = self.index_block_xy(self.palette_counter);
-
-    //                     // do image copy on for non-zero-src blocks. Other things still done for every allocated block
-    //                     // because zeroing is fast
-    //                     if current_block != 0 {
-    //                         let static_block_copy = vk::ImageCopy {
-    //                             src_subresource: vk::ImageSubresourceLayers {
-    //                                 aspect_mask: vk::ImageAspectFlags::COLOR,
-    //                                 mip_level: 0,
-    //                                 base_array_layer: 0,
-    //                                 layer_count: 1,
-    //                             },
-    //                             src_offset: vk::Offset3D {
-    //                                 x: src_block.x as i32 * 16,
-    //                                 y: src_block.y as i32 * 16,
-    //                                 z: 0,
-    //                             },
-    //                             dst_subresource: vk::ImageSubresourceLayers {
-    //                                 aspect_mask: vk::ImageAspectFlags::COLOR,
-    //                                 mip_level: 0,
-    //                                 base_array_layer: 0,
-    //                                 layer_count: 1,
-    //                             },
-    //                             dst_offset: vk::Offset3D {
-    //                                 x: dst_block.x as i32 * 16,
-    //                                 y: dst_block.y as i32 * 16,
-    //                                 z: 0,
-    //                             },
-    //                             extent: vk::Extent3D {
-    //                                 width: 16,
-    //                                 height: 16,
-    //                                 depth: 16,
-    //                             },
-    //                         };
-    //                         // TODO: more compact representation
-    //                         self.block_copies_queue.push((
-    //                             static_block_copy.src_subresource,
-    //                             static_block_copy.dst_subresource,
-    //                             static_block_copy.extent,
-    //                         ));
-    //                     }
-
-    //                     self.current_world[(xx as usize, yy as usize, zz as usize)] =
-    //                         self.palette_counter as BlockId;
-    //                     self.palette_counter += 1;
-    //                 } else {
-    //                     //already new block, just leave it
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    /// Copies the entire world state to the staging buffer.
-    // pub fn end_blockify(&mut self) {
-    //     let (dim_x, dim_y, dim_z) = self.current_world.dimensions();
-    //     let count_to_copy = dim_x * dim_y * dim_z;
-    //     // Cast the current world data to a byte slice.
-    //     let data: &[u8] = unsafe {
-    //         std::slice::from_raw_parts(
-    //             self.current_world.data.as_ptr() as *const u8,
-    //             count_to_copy * size_of::<BlockId>(),
-    //         )
-    //     };
-    //     // Write the data to the staging_world buffer.
-    //     self.wal.queue.write_buffer(&self.buffers.staging_world.current(), 0, data);
-    //     // No explicit flush is required in WGPU.
-    // }
-
     // i love the fact that none of these does anything
     #[optimize(speed)]
     // Note: this is the last function that can be called before Vulkan interraction
@@ -494,7 +390,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         {
             let clear_color = wgpu::Color::default();
             // Assume self.independent_images.origin_block_palette.current_view() returns a &wgpu::TextureView.
-            let view = &self.independent_images.origin_block_palette.current().view;
+            let view = &self.independent_images.block_palette.current().view;
             let rp_desc = wgpu::RenderPassDescriptor {
                 label: Some("Clear OriginBlockPalette"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -523,13 +419,13 @@ impl<'window> InternalRendererWebGPU<'window> {
                 depth_or_array_layers: 16,
             };
             let src = TexelCopyTextureInfo {
-                texture: &self.independent_images.origin_block_palette.previous().texture,
+                texture: &self.independent_images.block_palette.previous().texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             };
             let dst = TexelCopyTextureInfo {
-                texture: &self.independent_images.origin_block_palette.current().texture,
+                texture: &self.independent_images.block_palette.current().texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -779,14 +675,7 @@ impl<'window> RendererWgpu<'window> {
             &wgpu::RenderPassDescriptor {
                 label: Some("Diffuse Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_frame
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -803,7 +692,7 @@ impl<'window> RendererWgpu<'window> {
 
         let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -838,14 +727,7 @@ impl<'window> RendererWgpu<'window> {
             &wgpu::RenderPassDescriptor {
                 label: Some("Ambient Occlusion Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_frame
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -861,7 +743,7 @@ impl<'window> RendererWgpu<'window> {
 
         let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -877,14 +759,7 @@ impl<'window> RendererWgpu<'window> {
                 // not really writing any color
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_stencil
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -905,7 +780,7 @@ impl<'window> RendererWgpu<'window> {
 
         let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -922,14 +797,7 @@ impl<'window> RendererWgpu<'window> {
                 label: Some("Smoke Raygen Render Pass"),
                 color_attachments: &[
                     Some(wgpu::RenderPassColorAttachment {
-                        view: &self
-                            .renderer
-                            .dependent_images
-                            .as_ref()
-                            .unwrap()
-                            .near_depth
-                            .current()
-                            .view,
+                        view: &self.renderer.dependent_images.as_ref().unwrap().near_depth.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(Color {
@@ -942,14 +810,7 @@ impl<'window> RendererWgpu<'window> {
                         },
                     }),
                     Some(wgpu::RenderPassColorAttachment {
-                        view: &self
-                            .renderer
-                            .dependent_images
-                            .as_ref()
-                            .unwrap()
-                            .far_depth
-                            .current()
-                            .view,
+                        view: &self.renderer.dependent_images.as_ref().unwrap().far_depth.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(Color {
@@ -963,14 +824,7 @@ impl<'window> RendererWgpu<'window> {
                     }),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_stencil
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
                     depth_ops: None,
                     stencil_ops: Some(wgpu::Operations {
                         // not clear because THAT WOULD FUCKING OVERRIDE THE GLOSSY RAYGEN
@@ -988,7 +842,7 @@ impl<'window> RendererWgpu<'window> {
 
         self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipe.pipeline.as_ref().unwrap(),
+            pipe.pipe.line.as_ref().unwrap(),
             pipe.pipe.static_bind_groups.as_ref(),
         );
 
@@ -1024,7 +878,7 @@ impl<'window> RendererWgpu<'window> {
 
             self.renderer.wal.draw_with_params(
                 &mut rpass,
-                pipe.pipe.pipeline.as_ref().unwrap(),
+                pipe.pipe.line.as_ref().unwrap(),
                 Some(pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
                 pipe.pc_bg.as_ref(),
                 0..36,
@@ -1041,14 +895,7 @@ impl<'window> RendererWgpu<'window> {
             &wgpu::RenderPassDescriptor {
                 label: Some("Glossy Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_frame
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -1056,14 +903,7 @@ impl<'window> RendererWgpu<'window> {
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_stencil
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -1082,7 +922,7 @@ impl<'window> RendererWgpu<'window> {
 
         let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -1096,14 +936,7 @@ impl<'window> RendererWgpu<'window> {
             &wgpu::RenderPassDescriptor {
                 label: Some("Glossy Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_frame
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -1111,14 +944,7 @@ impl<'window> RendererWgpu<'window> {
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_stencil
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
                     depth_ops: None,
                     stencil_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -1134,7 +960,7 @@ impl<'window> RendererWgpu<'window> {
 
         let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -1190,7 +1016,7 @@ impl<'window> RendererWgpu<'window> {
 
             let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
                 &mut rpass,
-                pipe.pipeline.as_ref().unwrap(),
+                pipe.line.as_ref().unwrap(),
                 pipe.static_bind_groups.as_ref(),
             );
 
@@ -1203,31 +1029,24 @@ impl<'window> RendererWgpu<'window> {
     }
 
     fn move_next(&mut self) {
-        self.renderer.dependent_images.as_mut().unwrap().highres_frame.move_next();
-        self.renderer.dependent_images.as_mut().unwrap().highres_depth.move_next();
-        self.renderer.dependent_images.as_mut().unwrap().highres_stencil.move_next();
-        self.renderer.dependent_images.as_mut().unwrap().highres_mat_norm.move_next();
-        self.renderer.dependent_images.as_mut().unwrap().far_depth.move_next();
-        self.renderer.dependent_images.as_mut().unwrap().near_depth.move_next();
-
         self.renderer.buffers.staging_world.move_next();
         self.renderer.buffers.light_uniform.move_next();
         self.renderer.buffers.uniform.move_next();
         self.renderer.buffers.ao_lut_uniform.move_next();
         self.renderer.buffers.gpu_radiance_updates.move_next();
         // self.renderer.buffers.staging_radiance_updates.move_next();
-        self.renderer.buffers.gpu_particles_staged.move_next();
+        // self.renderer.buffers.gpu_particles_staged.move_next();
         self.renderer.buffers.gpu_particles.move_next();
 
-        self.renderer.independent_images.grass_state.move_next();
-        self.renderer.independent_images.water_state.move_next();
+        // self.renderer.independent_images.grass_state.move_next();
+        // self.renderer.independent_images.water_state.move_next();
         // self.renderer.independent_images.perlin_noise2d.move_next();
         // self.renderer.independent_images.perlin_noise3d.move_next();
         self.renderer.independent_images.world.move_next();
         self.renderer.independent_images.radiance_cache.move_next();
-        self.renderer.independent_images.origin_block_palette.move_next();
-        self.renderer.independent_images.material_palette.move_next();
-        self.renderer.independent_images.lightmap.move_next();
+        self.renderer.independent_images.block_palette.move_next();
+        // self.renderer.independent_images.material_palette.move_next();
+        // self.renderer.independent_images.lightmap.move_next();
 
         self.renderer
             .pipes
@@ -1599,14 +1418,7 @@ impl<'window> RendererWgpu<'window> {
             &wgpu::RenderPassDescriptor {
                 label: Some("Raygen Water Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_mat_norm
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().mat_norm.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -1614,14 +1426,7 @@ impl<'window> RendererWgpu<'window> {
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_depth
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().depth.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -1637,7 +1442,7 @@ impl<'window> RendererWgpu<'window> {
 
         self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            water_pipe.pipe.pipeline.as_ref().unwrap(),
+            water_pipe.pipe.line.as_ref().unwrap(),
             water_pipe.pipe.static_bind_groups.as_ref(),
         );
 
@@ -1686,7 +1491,7 @@ impl<'window> RendererWgpu<'window> {
 
             self.renderer.wal.draw_with_params(
                 &mut rpass,
-                water_pipe.pipe.pipeline.as_ref().unwrap(),
+                water_pipe.pipe.line.as_ref().unwrap(),
                 Some(water_pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
                 water_pipe.pc_bg.as_ref(),
                 0..verts_per_water_tape,
@@ -1704,14 +1509,7 @@ impl<'window> RendererWgpu<'window> {
             &wgpu::RenderPassDescriptor {
                 label: Some("Raygen Grass Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_mat_norm
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().mat_norm.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -1719,14 +1517,7 @@ impl<'window> RendererWgpu<'window> {
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_depth
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().depth.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -1743,7 +1534,7 @@ impl<'window> RendererWgpu<'window> {
         {
             self.renderer.wal.bind_raster_pipeline(
                 &mut rpass,
-                foliage_pipe.pipe.pipeline.as_ref().unwrap(),
+                foliage_pipe.pipe.line.as_ref().unwrap(),
                 foliage_pipe.pipe.static_bind_groups.as_ref(),
             );
 
@@ -1809,7 +1600,7 @@ impl<'window> RendererWgpu<'window> {
 
                 self.renderer.wal.draw_with_params(
                     &mut rpass,
-                    foliage_pipe.pipe.pipeline.as_ref().unwrap(),
+                    foliage_pipe.pipe.line.as_ref().unwrap(),
                     Some(foliage_pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
                     foliage_pipe.pc_bg.as_ref(),
                     0..verts_per_blade * blade_per_instance,
@@ -1866,14 +1657,7 @@ impl<'window> RendererWgpu<'window> {
                 &wgpu::RenderPassDescriptor {
                     label: Some("Particle Render Pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &self
-                            .renderer
-                            .dependent_images
-                            .as_ref()
-                            .unwrap()
-                            .highres_mat_norm
-                            .current()
-                            .view,
+                        view: &self.renderer.dependent_images.as_ref().unwrap().mat_norm.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
@@ -1881,14 +1665,7 @@ impl<'window> RendererWgpu<'window> {
                         },
                     })],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self
-                            .renderer
-                            .dependent_images
-                            .as_ref()
-                            .unwrap()
-                            .highres_depth
-                            .current()
-                            .view,
+                        view: &self.renderer.dependent_images.as_ref().unwrap().depth.view,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -1904,7 +1681,7 @@ impl<'window> RendererWgpu<'window> {
 
             self.renderer.wal.bind_raster_pipeline(
                 &mut rpass,
-                pipe.pipeline.as_ref().unwrap(),
+                pipe.line.as_ref().unwrap(),
                 pipe.static_bind_groups.as_ref(),
             );
 
@@ -2014,7 +1791,7 @@ impl<'window> RendererWgpu<'window> {
             label: Some("Lightmap Models Render Pass"),
             color_attachments: &[],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.renderer.independent_images.lightmap.current().view,
+                view: &self.renderer.independent_images.lightmap.view,
                 depth_ops: Some(wgpu::Operations {
                     // not clear cause on top of blocks - just continuation
                     load: wgpu::LoadOp::Load,
@@ -2037,7 +1814,7 @@ impl<'window> RendererWgpu<'window> {
 
         let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -2072,7 +1849,7 @@ impl<'window> RendererWgpu<'window> {
 
                             self.renderer.wal.draw_indexed_with_params(
                                 &mut rpass,
-                                pipe.pipeline.as_ref().unwrap(),
+                                pipe.line.as_ref().unwrap(),
                                 Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                                 buff.pc_bg.as_ref(),
                                 buff.iv.offset..buff.iv.offset + buff.iv.icount,
@@ -2126,7 +1903,7 @@ impl<'window> RendererWgpu<'window> {
                 label: Some("Lightmap Blocks Render Pass"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.renderer.independent_images.lightmap.current().view,
+                    view: &self.renderer.independent_images.lightmap.view,
                     depth_ops: Some(wgpu::Operations {
                         // clear cause first
                         load: wgpu::LoadOp::Clear(1.0),
@@ -2143,7 +1920,7 @@ impl<'window> RendererWgpu<'window> {
 
         self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -2212,7 +1989,7 @@ impl<'window> RendererWgpu<'window> {
 
                     self.renderer.wal.draw_indexed_with_params(
                         &mut rpass,
-                        pipe.pipeline.as_ref().unwrap(),
+                        pipe.line.as_ref().unwrap(),
                         Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                         face.pc_bg.as_ref(),
                         face.iv.offset..face.iv.offset + face.iv.icount,
@@ -2298,14 +2075,7 @@ impl<'window> RendererWgpu<'window> {
                 label: Some("Raygen Blocks Render Pass"),
                 // raster mat_norm gbuffers
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_mat_norm
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().mat_norm.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         // first use clears, other just load
@@ -2320,14 +2090,7 @@ impl<'window> RendererWgpu<'window> {
                 })],
                 // depth is normal gbuffer depth
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_depth
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().depth.view,
                     depth_ops: Some(wgpu::Operations {
                         // clear cause first
                         load: wgpu::LoadOp::Clear(1.0),
@@ -2344,7 +2107,7 @@ impl<'window> RendererWgpu<'window> {
 
         self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -2419,7 +2182,7 @@ impl<'window> RendererWgpu<'window> {
 
                     self.renderer.wal.draw_indexed_with_params(
                         &mut rpass,
-                        pipe.pipeline.as_ref().unwrap(),
+                        pipe.line.as_ref().unwrap(),
                         Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                         face.pc_bg.as_ref(),
                         face.iv.offset..face.iv.offset + face.iv.icount,
@@ -2489,14 +2252,7 @@ impl<'window> RendererWgpu<'window> {
                 label: Some("Raygen Models Render Pass"),
                 // raster mat_norm gbuffers
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_mat_norm
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().mat_norm.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         // because why the fuck would we erase raygen'ed blocks?
@@ -2506,14 +2262,7 @@ impl<'window> RendererWgpu<'window> {
                 })],
                 // depth is normal gbuffer depth
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self
-                        .renderer
-                        .dependent_images
-                        .as_ref()
-                        .unwrap()
-                        .highres_depth
-                        .current()
-                        .view,
+                    view: &self.renderer.dependent_images.as_ref().unwrap().depth.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -2529,7 +2278,7 @@ impl<'window> RendererWgpu<'window> {
 
         let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
-            pipe.pipeline.as_ref().unwrap(),
+            pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
 
@@ -2604,7 +2353,7 @@ impl<'window> RendererWgpu<'window> {
 
                     self.renderer.wal.draw_indexed_with_params(
                         &mut rpass,
-                        pipe.pipeline.as_ref().unwrap(),
+                        pipe.line.as_ref().unwrap(),
                         Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                         face.pc_bg.as_ref(),
                         face.iv.offset..face.iv.offset + face.iv.icount,

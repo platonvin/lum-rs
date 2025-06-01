@@ -1,3 +1,8 @@
+//! This module contains core structures for managing the wgpu state and rendering
+//! Essentially, it's `lumal` for wgpu.
+//! Provides abstractions over raw wgpu types to simplify rendering operations of Lum
+
+use lumal::ring::Ring;
 use std::ops::{Deref, DerefMut};
 use std::{borrow::Cow, collections::HashMap, num::NonZero};
 use wgpu::{
@@ -9,177 +14,154 @@ use wgpu::{
     VertexBufferLayout, VertexState,
 };
 use wgpu::{BindingResource, BindingType, Buffer, DepthStencilState, Limits, Queue, ShaderStages};
-
-use lumal::ring::Ring;
-
 use winit::window::Window;
 
-use super::SWAPCHAIN_FORMAT;
-
-// Webgpu Abstraction Layer
+/// Manages the core wgpu state and resources required for rendering.
+/// Represents primary interface for Lum to interact with wgpu.
+/// Read wgpu documentation for detailed information on the underlying types.
 pub struct Wal<'window> {
-    // pub window: Window,
-    pub instance: wgpu::Instance,
+    /// The window surface we render to.
     pub surface: wgpu::Surface<'window>,
+    /// The chosen graphics adapter (GPU).
     pub adapter: wgpu::Adapter,
+    /// The logical device for interacting with the adapter.
     pub device: wgpu::Device,
+    /// The command queue for submitting commands to the GPU.
+    /// We use a single one because wgpu sync makes multiple queues useless.
     pub queue: wgpu::Queue,
+    /// The configuration of the surface.
     pub config: wgpu::SurfaceConfiguration,
-    // pub pc_buffers: Ring<wgpu::Buffer>,
-    // pub pc_buffer_size: Option<wgpu::BufferSize>,
+    /// Counter for the total number of frames rendered.
+    ///
+    /// This index is not circular and increments with each completed frame.
+    /// Used as RNG source
     pub frame_index: usize,
+    /// Texture format we decided to use (supported formats are different for different devices)
+    pub swapchain_format: wgpu::TextureFormat,
 }
 
+/// Bundled resources for Compute Pipeline. Exists primarily for convenience.
 #[derive(Debug, Default)]
 pub struct ComputePipe {
-    pub pipeline: Option<wgpu::ComputePipeline>,
-    pub pipeline_layout: Option<wgpu::PipelineLayout>,
-    // pub pc_buffers: Option<Ring<wgpu::Buffer>>,
+    /// Underlying wgpu compute pipeline object.
+    pub line: Option<wgpu::ComputePipeline>,
+    /// Layout of the compute pipeline.
+    pub layout: Option<wgpu::PipelineLayout>,
+    /// Bind groups that are used for every dispatch call with this pipeline (if any).
+    /// These typically hold `global` resources like UBO that are constant across different
+    /// dispatches using this pipeline.
     pub static_bind_groups: Option<Ring<wgpu::BindGroup>>,
-    // pub pc_size: u32,
-    // current push constants offset
-    // pub current_pc_offset: u32,
-    // pub pc_bind_groups: Option<Ring<wgpu::BindGroup>>,
+    /// Layout (not bindings themselves) for all the bind groups that are not static
+    /// Yes, they have to be bundled in a single bind group (not like its fundamental property of wgpu, but such limitation really fits Lum)
+    /// Usage example:
+    /// you would create Pipe with dynamic bind group layout,
+    /// then use it for per-model textures bind groups, stored in model (struct Model {dyn_bg: wgpu::BindGroup})
+    pub dynamic_bind_group_layout: Option<wgpu::BindGroupLayout>,
 }
+
+/// Bundled resources for Rasterization Pipeline. Exists primarily for convenience.
 #[derive(Debug, Default)]
 pub struct RasterPipe {
-    pub pipeline: Option<wgpu::RenderPipeline>,
-    pub pipeline_layout: Option<wgpu::PipelineLayout>,
-    // Bind groups that are the same accross frames (e.g. camera parameters)
+    /// Underlying wgpu render pipeline object.
+    pub line: Option<wgpu::RenderPipeline>,
+    /// Layout of the render pipeline.
+    pub layout: Option<wgpu::PipelineLayout>,
+    /// Bind group that is used for every dispatch call with this pipeline (if any).
+    /// This typically holds `global` resources like UBO that are constant across different
+    /// dispatches using this pipeline.
+    /// There is multiple for FIF (and thus they are in Ring)
     pub static_bind_groups: Option<Ring<wgpu::BindGroup>>,
-    // layout for bind groups, where dynamic bindings need to be
-    // pub pc_buffers: Option<Ring<wgpu::Buffer>>,
-    // pub pc_size: u32,
-    // pub current_pc_offset: u32, // in count, not in bytes
+    /// Layout (not bindings themselves) for all the bind groups that are not static
+    /// Yes, they have to be bundled in a single bind group (not like its fundamental property of wgpu, but such limitation really fits Lum)
     pub dynamic_bind_group_layout: Option<wgpu::BindGroupLayout>,
-    // pub pc_bind_groups: Option<Ring<wgpu::BindGroup>>,
 }
 
-pub struct StupidBufferWrite<'a> {
-    data: Box<[u8]>,
-    buffer: &'a Buffer,
-    queue: &'a Queue,
-}
-
-impl<'a> Drop for StupidBufferWrite<'a> {
-    fn drop(&mut self) {
-        // todo!()
-        self.queue.write_buffer(self.buffer, 0, &self.data);
-    }
-}
-
-impl<'a> Deref for StupidBufferWrite<'a> {
-    type Target = [u8];
-    fn deref(&self) -> &Self::Target {
-        self.data.deref()
-    }
-}
-
-impl<'a> DerefMut for StupidBufferWrite<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.data.deref_mut()
-    }
-}
-
-// pub struct PipePcWrite<'a> {
-//     write: Option<wgpu::QueueWriteBufferView<'a>>,
-//     buffers: Option<Ring<wgpu::Buffer>>,
-// }
-
-#[derive(Clone, Debug)]
-pub struct AttrFormOffs {
-    pub format: wgpu::VertexFormat,
-    pub binding: u32,
-    pub offset: usize,
-}
-
-// #[derive(Clone)]
-// pub enum ResourceType<'a> {
-//     // PushConstant, // for marking where pc is
-//     Dynamic(BindingType),
-//     Static(BindingType, Ring<BindingResource<'a>>),
-// }
-
+/// Bundled descriptions and resource bindings for a static bind group.
+///
+/// Static bind groups are those whose resources are bundled with the Pipe (e.g. global UBO with per-frame data).
+/// They are typically bound once with `Wal::bind_raster_pipe` / `Wal::bind_compute_pipe` functions.
+///
+/// They take the first set available (which is 0): `layout(set = 0, binding = ...) ... `
 #[derive(Clone)]
 pub struct StaticBindGroupDescription<'a> {
-    /// Binding index. Must match shader index and be unique inside a BindGroupLayout. A binding
-    /// of index 1, would be described as `layout(set = 0, binding = 1) uniform` in shaders.
+    /// Binding index of the resource within the bind group in the shader.
+    ///
+    /// For example, `binding = 1` would correspond to `layout(set = 0, binding = 1) ...`
+    /// in shader.
     pub binding: u32,
-    /// Which shader stages can see this binding.
-    pub visibility: ShaderStages,
-    // / The type of the binding
-    /// so, what function gets is array of rings, and they get converted to ring of arrays
-    /// If bind group is dynamic, then Ring is empty
-    pub binding_type: BindingType,
-    pub resources: Ring<BindingResource<'a>>,
+    /// Shader stages that can access this binding.
+    pub visibility: wgpu::ShaderStages,
+    /// Type of the binding resource (e.g., buffer, sampler, texture).
+    pub binding_type: wgpu::BindingType,
+    /// Actual binding resources (there is no need to store CPU-side resource handles in here, BindingReource is a better fit)
+    pub resources: Ring<wgpu::BindingResource<'a>>,
 }
 
+/// Bundled descriptions for a dynamic bind group layout.
+///
+/// Dynamic bind groups are those whose resources change frequently, often on a
+/// per-draw/dispatch basis (e.g., per-mesh textures). This struct only
+/// describes the *layout* of such a bind group; the actual resources are provided
+/// when binding the group before a draw or dispatch call.
+///
+/// In shader code, dynamic bind groups are placed in a set *after* static bind groups (if any).
+/// For example, if there's static bind group presented `set = 0`,
+/// the dynamic bind group would be in `set = 1`.
 #[derive(Clone)]
 pub struct DynamicBindGroupDescription {
-    /// Binding index. Must match shader index and be unique inside a BindGroupLayout. A binding
-    /// of index 1, would be described as `layout(set = 0, binding = 1) uniform` in shaders.
+    /// Binding index of the resource within the bind group in the shader.
+    ///
+    /// For example, `binding = 2` would correspond to `layout(set = ..., binding = 2) ...`
+    /// in the shader code. The specific set index depends on the pipeline's layout
+    /// and the presence of static bind group.
     pub binding: u32,
-    /// Which shader stages can see this binding.
-    pub visibility: ShaderStages,
-    // / The type of the binding
-    /// so, what function gets is array of rings, and they get converted to ring of arrays
-    /// If bind group is dynamic, then Ring is empty
-    pub binding_type: BindingType,
-    // no resources cause they are not stored in the pipe
+    /// Shader stages that can access this binding.
+    pub visibility: wgpu::ShaderStages,
+    /// Type of the binding resource (e.g., buffer, sampler, texture).
+    pub binding_type: wgpu::BindingType,
+    // resources are not stored here as they are provided dynamically per draw/dispatch.
 }
 
-// #[derive(Clone, Debug)]
-// pub struct PushConstantDescription {
-//     pub size: u32,
-//     pub max_count: u32,
-//     pub stages: ShaderStages,
-// }
+/// Describes a single shader stage with its `code`.
 #[derive(Clone, Debug)]
-pub struct ShaderStage {
-    pub stage: ShaderStages,
+pub struct ShaderStageSource {
+    /// Single shader stage (Vertex/Fragment/Compute...) the source code belongs to
+    pub stage: wgpu::ShaderStages,
+    /// Source code of the shader.
     pub code: &'static str,
 }
 
-pub struct RenderPass {
-    /// The clear color for the pass (for the single color attachment).
-    pub clear_color: wgpu::Color,
-    /// A ring (vector) of framebuffer attachments (in WGPU, these are TextureViews).
-    /// Typically you create these from your offscreen textures.
-    pub framebuffer_views: Option<Ring<wgpu::TextureView>>,
-    /// Optional depth/stencil attachment view.
-    pub depth_stencil_view: Option<Ring<wgpu::TextureView>>,
-    /// The extent (width and height) of the render area.
-    pub extent: winit::dpi::PhysicalSize<u32>,
-}
-
+/// Bundled texture and its view.
 pub struct Image {
+    /// Underlying wgpu texture object.
     pub texture: wgpu::Texture,
+    /// Default texture view, covering the entire texture with all aspects (except stencil).
     pub view: wgpu::TextureView,
 }
 
 impl<'window> Wal<'window> {
     pub async fn new(window: Window) -> Self {
-        let size = window.inner_size();
-        // 1) Create instance
+        let window_size = window.inner_size();
+
+        // if you dont understand what is happening here i recommend looking into WGPU guide
+        // essntially we are just setting up a few of GPU/Driver state objects in a way we need to proceed
+
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
 
-        // 2) Create surface
         let surface = instance.create_surface(window).unwrap();
 
-        // 3) Request an adapter
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
-            .await
+            .await // yes its async cause web
             .expect("No suitable GPU adapters found");
 
-        // 4) Request device + queue
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Device"),
@@ -192,48 +174,35 @@ impl<'window> Wal<'window> {
             })
             .await
             .unwrap();
-        unsafe {
-            SWAPCHAIN_FORMAT =
-                Some(surface.get_capabilities(&adapter).formats[0].remove_srgb_suffix());
-            dbg!(SWAPCHAIN_FORMAT);
-        };
 
-        // 5) Configure the swapchain (surface)
+        let capable_formats = surface.get_capabilities(&adapter).formats;
+        let swapchain_format = capable_formats
+            .iter()
+            .find(|format| !(*format).is_srgb())
+            .expect("no Non-SRGB swapchain format found"); // Lum is build around no srgb thing
+        dbg!(swapchain_format);
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: unsafe { SWAPCHAIN_FORMAT.unwrap() },
-            width: size.width,
-            height: size.height,
+            format: *swapchain_format,
+            width: window_size.width,
+            height: window_size.height,
             present_mode: wgpu::PresentMode::Mailbox,
-            desired_maximum_frame_latency: 2,
+            desired_maximum_frame_latency: 2, // two is enough for FIF but not too many for delays
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
         surface.configure(&device, &config);
 
-        // // Create the shared push constant buffer
-        // let push_constant_buffers = (0..config.desired_maximum_frame_latency)
-        //     .map(|_| {
-        //         device.create_buffer(&wgpu::BufferDescriptor {
-        //             label: Some("Shared Push Constant Buffer"),
-        //             size: push_constant_buffer_size.map_or(0, |size| size.get()),
-        //             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        //             mapped_at_creation: false,
-        //         })
-        //     })
-        //     .collect();
-
         Self {
-            // window,
-            instance,
+            // instance, // we dont really have to store it
             surface,
             adapter,
             device,
             queue,
             config,
-            // pc_buffers: push_constant_buffers,
-            // pc_buffer_size: push_constant_buffer_size,
             frame_index: 0,
+            swapchain_format: *swapchain_format,
         }
     }
 
@@ -243,57 +212,38 @@ impl<'window> Wal<'window> {
         self.surface.configure(&self.device, &self.config);
     }
 
-    // The usage controls what the buffer is used for.
-    // If host_visible is true the buffer is created with MAP_WRITE (and optionally COPY_SRC)
-    // so you can map it immediately.
+    /// Creates a single wgpu::Buffer
     pub fn create_buffer(
         &self,
-        mut usage: wgpu::BufferUsages,
+        usage: wgpu::BufferUsages,
         size: usize,
-        host_visible: bool,
         label: Option<&str>,
     ) -> wgpu::Buffer {
-        if host_visible {
-            usage |= wgpu::BufferUsages::MAP_WRITE;
-        }
-
         self.device.create_buffer(&wgpu::BufferDescriptor {
             label,
             size: size as u64,
             usage,
-            // For host buffers, we initialize mapped_at_creation=true so that the memory is available.
-            mapped_at_creation: host_visible,
+            mapped_at_creation: false,
         })
     }
 
-    // Creates a ring of buffers.
-    pub fn create_buffer_rings(
+    // Creates a Ring of wgpu::Buffers
+    pub fn create_buffers(
         &self,
         ring_size: usize,
         usage: wgpu::BufferUsages,
         buffer_size: usize,
-        host_visible: bool,
         label: Option<&str>,
     ) -> Ring<wgpu::Buffer> {
-        (0..ring_size)
-            .map(|_| self.create_buffer(usage, buffer_size, host_visible, label))
-            .collect()
+        (0..ring_size).map(|_| self.create_buffer(usage, buffer_size, label)).collect()
     }
 
-    pub fn destroy_buffer(&self, buffer: wgpu::Buffer) {
-        buffer.destroy();
-    }
+    // Such functions are not needed since wgpu deallocates them on drop
+    // pub fn destroy_buffer(&self, buffer: wgpu::Buffer) {
+    //     buffer.destroy();
+    // }
 
-    pub fn destroy_buffer_ring(&self, buffers: Ring<wgpu::Buffer>) {
-        for buffer in buffers.data {
-            self.destroy_buffer(buffer);
-        }
-    }
-
-    // Creates a GPU-only buffer, uploads provided data into it, and returns the buffer.
-    //
-    // The provided `usage` is OR‑ed with COPY_DST.
-    // This method requires that the data type T implements Pod from bytemuck.
+    /// Creates a GPU buffer and uploads provided data into it
     #[inline]
     pub fn create_and_upload_buffer<T>(
         &self,
@@ -305,56 +255,46 @@ impl<'window> Wal<'window> {
 
         let size = std::mem::size_of_val(elements);
 
-        // Upload the data to the buffer using queue.write_buffer.
         // no bytemuck
         let data: &[u8] =
             unsafe { std::slice::from_raw_parts(elements.as_ptr() as *const u8, size) };
 
-        // Create the destination (GPU-only) buffer
-        let buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        // This is wgpu convenience function which handles copy to GPU memory automatically
+        self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("GPU Buffer from create_and_upload_buffer"),
             usage,
             contents: data,
-        });
-        buffer
-    }
-
-    pub fn create_command_encoder_ring(&self) -> Ring<wgpu::CommandEncoder> {
-        Ring::new_with(self.config.desired_maximum_frame_latency as usize, |_| {
-            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("command_encoder_ring"),
-            })
         })
     }
 
-    pub fn create_image_ring(
+    /// creates Ring of Images (textures & views)
+    pub fn create_images(
         &self,
         ring_size: usize,
         dimension: wgpu::TextureDimension,
         format: wgpu::TextureFormat,
         usage: wgpu::TextureUsages,
         extent: wgpu::Extent3d,
-        mip_level_count: u32,
         label: Option<&str>,
     ) -> Ring<Image> {
         (0..ring_size)
-            .map(|_| self.create_image(dimension, format, usage, extent, mip_level_count, label))
+            .map(|_| self.create_image(dimension, format, usage, extent, label))
             .collect()
     }
 
+    /// creates Single of Image (texture & view)
     pub fn create_image(
         &self,
         dimension: wgpu::TextureDimension,
         format: wgpu::TextureFormat,
         usage: wgpu::TextureUsages,
         extent: wgpu::Extent3d,
-        mip_level_count: u32,
         label: Option<&str>,
     ) -> Image {
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label,
             size: extent,
-            mip_level_count,
+            mip_level_count: 1, // we dont need mipmaps in Lum
             sample_count: 1,
             dimension,
             format,
@@ -374,7 +314,7 @@ impl<'window> Wal<'window> {
         Image { texture, view }
     }
 
-    pub fn create_shader_module(&self, wgsl_code: &str, label: Option<&str>) -> wgpu::ShaderModule {
+    fn create_shader_module(&self, wgsl_code: &str, label: Option<&str>) -> wgpu::ShaderModule {
         self.device.create_shader_module(ShaderModuleDescriptor {
             label,
             source: ShaderSource::Wgsl(Cow::Borrowed(wgsl_code)),
@@ -383,13 +323,12 @@ impl<'window> Wal<'window> {
 
     pub fn create_raster_pipe(
         &self,
-        // you see, this is how you lose perfomance
-        // one would have shared array and separate it in runtime
-        // other would have them as separate arguments. Smaller, faster, simpler and less error prone code.
-        // make errors non-representable or keep fix them
+        // this could be single array, separated at runtime. But it never will be
         static_bind_descriptions: &[StaticBindGroupDescription],
         dynamic_bind_descriptions: &[DynamicBindGroupDescription],
-        shader_stages: &[ShaderStage],
+        // Lum does not need geometry/ mesh /rtx shaders
+        vertex_code: &str, // we could potentially make this Option too and give it meaning of `None = fullscreen triangle`
+        fragment_code: Option<&str>, // None means.. No fragment shader. Its perfectly legal
         vertex_buffer_layouts: &[VertexBufferLayout],
         primitive_topology: PrimitiveTopology,
         targets: Vec<Option<ColorTargetState>>,
@@ -399,6 +338,7 @@ impl<'window> Wal<'window> {
     ) -> RasterPipe {
         let frame_count = self.config.desired_maximum_frame_latency as usize;
 
+        // repacking memory for wgpu
         let static_bind_group_layout_entries: Vec<_> = static_bind_descriptions
             .iter()
             .map(|bind_desc| BindGroupLayoutEntry {
@@ -415,7 +355,7 @@ impl<'window> Wal<'window> {
                 entries: &static_bind_group_layout_entries,
             });
 
-        // Create static bind groups for each frame
+        // Create static bind group for each frame in flight
         let static_bind_groups: Vec<_> = (0..frame_count)
             .map(|frame| {
                 let bind_group_entries: Vec<_> = static_bind_descriptions
@@ -466,42 +406,33 @@ impl<'window> Wal<'window> {
             push_constant_ranges: &[],
         });
 
-        let shader_modules: HashMap<ShaderStages, ShaderModule> = shader_stages
-            .iter()
-            .map(|stage| {
-                let module = self.create_shader_module(stage.code, label);
-                (stage.stage, module)
-            })
-            .collect();
-
-        let vertex_shader = shader_modules.get(&ShaderStages::VERTEX);
-        let fragment_shader = shader_modules.get(&ShaderStages::FRAGMENT);
-
-        let targets_state: Vec<Option<ColorTargetState>> = targets;
+        let vertex_shader = self.create_shader_module(vertex_code, Some("Vertex shader module"));
+        let fragment_shader = fragment_code
+            .map(|fragment| self.create_shader_module(fragment, Some("Fragment shader module")));
 
         let primitive = PrimitiveState {
             topology: primitive_topology,
             strip_index_format: None,
             front_face: FrontFace::Ccw,
-            cull_mode: cull_mode,
+            cull_mode,
             unclipped_depth: false,
             polygon_mode: PolygonMode::Fill,
             conservative: false,
         };
 
-        let fragment = fragment_shader.map(|fs| FragmentState {
+        let fragment = fragment_shader.as_ref().map(|fs| FragmentState {
             module: fs,
             entry_point: Some("main"),
-            targets: &targets_state,
+            targets: &targets,
             compilation_options: Default::default(),
         });
 
-        let render_pipeline = if let Some(vs) = vertex_shader {
+        let render_pipeline = {
             self.device.create_render_pipeline(&RenderPipelineDescriptor {
                 label,
                 layout: Some(&pipeline_layout),
                 vertex: VertexState {
-                    module: vs,
+                    module: &vertex_shader,
                     entry_point: Some("main"),
                     buffers: vertex_buffer_layouts,
                     compilation_options: Default::default(),
@@ -513,13 +444,11 @@ impl<'window> Wal<'window> {
                 multiview: None,
                 cache: None,
             })
-        } else {
-            panic!("Error: Vertex shader not found for pipeline: {:?}", label)
         };
 
         RasterPipe {
-            pipeline: Some(render_pipeline),
-            pipeline_layout: Some(pipeline_layout),
+            line: Some(render_pipeline),
+            layout: Some(pipeline_layout),
             static_bind_groups: Some(Ring::from_vec(static_bind_groups)),
             dynamic_bind_group_layout,
         }
@@ -529,7 +458,7 @@ impl<'window> Wal<'window> {
         &self,
         static_bind_descriptions: &[StaticBindGroupDescription],
         dynamic_bind_descriptions: &[DynamicBindGroupDescription],
-        shader: &ShaderStage,
+        shader: &ShaderStageSource,
         label: Option<&str>,
     ) -> ComputePipe {
         let frame_count = self.config.desired_maximum_frame_latency as usize;
@@ -614,9 +543,10 @@ impl<'window> Wal<'window> {
         });
 
         ComputePipe {
-            pipeline: Some(compute_pipeline),
-            pipeline_layout: Some(pipeline_layout),
+            line: Some(compute_pipeline),
+            layout: Some(pipeline_layout),
             static_bind_groups: Some(Ring::from_vec(static_bind_groups)),
+            dynamic_bind_group_layout,
         }
     }
 
@@ -640,7 +570,7 @@ impl<'window> Wal<'window> {
         compute_pass: &mut wgpu::ComputePass<'a>,
         pipe: &ComputePipe,
     ) {
-        compute_pass.set_pipeline(&pipe.pipeline.as_ref().unwrap());
+        compute_pass.set_pipeline(&pipe.line.as_ref().unwrap());
 
         let mut bind_index = 0;
         if let Some(ref static_bind_groups) = pipe.static_bind_groups {

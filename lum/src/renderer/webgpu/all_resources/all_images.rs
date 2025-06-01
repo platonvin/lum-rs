@@ -2,7 +2,7 @@ use crate::renderer::{
     webgpu::{
         wal::Wal, AllIndependentImages, AllSwapchainDependentImages, InternalRendererWebGPU,
         BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, CHOSEN_DEPTH_FORMAT, CHOSEN_STENCIL_FORMAT,
-        FRAME_FORMAT, LIGHTMAPS_FORMAT, MATNORM_FORMAT, RADIANCE_FORMAT, SECONDARY_DEPTH_FORMAT,
+        FRAME_FORMAT, LIGHTMAPS_FORMAT, MATNORM_FORMAT, RADIANCE_FORMAT,
     },
     Settings,
 };
@@ -13,7 +13,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     pub fn create_independent_images(wal: &Wal, lum_settings: &Settings) -> AllIndependentImages {
         let fif = wal.config.desired_maximum_frame_latency as usize;
 
-        let world = wal.create_image_ring(
+        let world = wal.create_images(
             fif,
             wgpu::TextureDimension::D3,
             wgpu::TextureFormat::R32Sint,
@@ -24,12 +24,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: lum_settings.world_size.y,
                 depth_or_array_layers: lum_settings.world_size.z,
             },
-            1,
             Some("World"),
         );
 
-        let lightmap = wal.create_image_ring(
-            fif,
+        let lightmap = wal.create_image(
             wgpu::TextureDimension::D2,
             LIGHTMAPS_FORMAT,
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -38,11 +36,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: lum_settings.lightmap_extent.height,
                 depth_or_array_layers: 1,
             },
-            1,
             Some("Lightmap"),
         );
 
-        let radiance_cache = wal.create_image_ring(
+        let radiance_cache = wal.create_images(
             fif,
             wgpu::TextureDimension::D3,
             RADIANCE_FORMAT,
@@ -55,11 +52,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: lum_settings.world_size.y,
                 depth_or_array_layers: lum_settings.world_size.z,
             },
-            1,
             Some("Radiance Cache"),
         );
 
-        let origin_block_palette = wal.create_image_ring(
+        let origin_block_palette = wal.create_images(
             fif,
             wgpu::TextureDimension::D3,
             wgpu::TextureFormat::R32Sint,
@@ -72,12 +68,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: 16 * BLOCK_PALETTE_SIZE_Y,
                 depth_or_array_layers: 16,
             },
-            1,
             Some("Origin Block Palette"),
         );
 
-        let material_palette = wal.create_image_ring(
-            fif,
+        let material_palette = wal.create_image(
             wgpu::TextureDimension::D2,
             wgpu::TextureFormat::R32Float,
             wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -86,12 +80,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: 256,
                 depth_or_array_layers: 1,
             },
-            1,
             Some("Material Palette"),
         );
 
-        let grass_state = wal.create_image_ring(
-            fif,
+        let grass_state = wal.create_image(
             wgpu::TextureDimension::D2,
             wgpu::TextureFormat::Rg32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -100,12 +92,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: lum_settings.world_size.y * 2,
                 depth_or_array_layers: 1,
             },
-            1,
             Some("Grass State"),
         );
 
-        let water_state = wal.create_image_ring(
-            fif,
+        let water_state = wal.create_image(
             wgpu::TextureDimension::D2,
             wgpu::TextureFormat::Rgba32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -114,12 +104,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: lum_settings.world_size.y * 2,
                 depth_or_array_layers: 1,
             },
-            1,
             Some("Water State"),
         );
 
-        let perlin_noise2d = wal.create_image_ring(
-            fif,
+        let perlin_noise2d = wal.create_image(
             wgpu::TextureDimension::D2,
             wgpu::TextureFormat::Rg32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -128,12 +116,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: lum_settings.world_size.y,
                 depth_or_array_layers: 1,
             },
-            1,
             Some("Perlin Noise 2D"),
         );
 
-        let perlin_noise3d = wal.create_image_ring(
-            fif,
+        let perlin_noise3d = wal.create_image(
             wgpu::TextureDimension::D3,
             wgpu::TextureFormat::Rgba32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -142,7 +128,6 @@ impl<'window> InternalRendererWebGPU<'window> {
                 height: 32,
                 depth_or_array_layers: 32,
             },
-            1,
             Some("Perlin Noise 3D"),
         );
 
@@ -150,7 +135,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             world,
             lightmap,
             radiance_cache,
-            origin_block_palette,
+            block_palette: origin_block_palette,
             material_palette,
             grass_state,
             water_state,
@@ -172,8 +157,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         let fif = wal.config.desired_maximum_frame_latency as usize;
 
-        let highres_mat_norm = wal.create_image_ring(
-            fif,
+        let mat_norm = wal.create_image(
             wgpu::TextureDimension::D2,
             MATNORM_FORMAT,
             wgpu::TextureUsages::STORAGE_BINDING
@@ -182,12 +166,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             sextent,
-            1,
             Some("Highres Mat Norm"),
         );
 
-        let highres_depth = wal.create_image_ring(
-            fif,
+        let depth = wal.create_image(
             wgpu::TextureDimension::D2,
             unsafe { CHOSEN_DEPTH_FORMAT.unwrap() },
             wgpu::TextureUsages::TEXTURE_BINDING
@@ -195,12 +177,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 // | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             sextent,
-            1,
             Some("Highres Depth"),
         );
 
-        let highres_stencil = wal.create_image_ring(
-            fif,
+        let stencil = wal.create_image(
             wgpu::TextureDimension::D2,
             unsafe { CHOSEN_STENCIL_FORMAT.unwrap() },
             wgpu::TextureUsages::TEXTURE_BINDING
@@ -208,12 +188,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 // | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             sextent,
-            1,
             Some("Highres Stencil"),
         );
 
-        let highres_frame = wal.create_image_ring(
-            fif,
+        let frame = wal.create_image(
             wgpu::TextureDimension::D2,
             FRAME_FORMAT,
             // wgpu::TextureUsages::STORAGE_BINDING|
@@ -222,42 +200,11 @@ impl<'window> InternalRendererWebGPU<'window> {
                 | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             sextent,
-            1,
             Some("Highres Frame"),
         );
 
-        // let mut stencil_view_for_ds = Vec::with_capacity(fif);
-        // let mut full_view_for_ds = Vec::with_capacity(fif);
-        // for texture in & {
-        //     stencil_view_for_ds.push(texture.texture.create_view(&wgpu::TextureViewDescriptor {
-        //         label: Some("Stencil View for DS"),
-        //         format: None,
-        //         dimension: Some(wgpu::TextureViewDimension::D2),
-        //         aspect: wgpu::TextureAspect::StencilOnly,
-        //         base_mip_level: 0,
-        //         mip_level_count: Some(1),
-        //         base_array_layer: 0,
-        //         array_layer_count: Some(1),
-        //         usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
-        //     }));
-        //     full_view_for_ds.push(texture.texture.create_view(&wgpu::TextureViewDescriptor {
-        //         label: Some("Stencil View for DS"),
-        //         format: None,
-        //         dimension: Some(wgpu::TextureViewDimension::D2),
-        //         aspect: wgpu::TextureAspect::All,
-        //         base_mip_level: 0,
-        //         mip_level_count: Some(1),
-        //         base_array_layer: 0,
-        //         array_layer_count: Some(1),
-        //         usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
-        //     }));
-        // }
-        // let stencil_view_for_ds = lumal::ring::Ring::from_vec(stencil_view_for_ds);
-        // let full_view_for_ds = lumal::ring::Ring::from_vec(full_view_for_ds);
-
         // these are not native depth textures, they achive depth functionality via blend
-        let far_depth = wal.create_image_ring(
-            fif,
+        let far_depth = wal.create_image(
             wgpu::TextureDimension::D2,
             wgpu::TextureFormat::R16Float,
             wgpu::TextureUsages::TEXTURE_BINDING
@@ -265,11 +212,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                 | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             sextent,
-            1,
             Some(""),
         );
-        let near_depth = wal.create_image_ring(
-            fif,
+        let near_depth = wal.create_image(
             wgpu::TextureDimension::D2,
             wgpu::TextureFormat::R16Float,
             wgpu::TextureUsages::TEXTURE_BINDING
@@ -277,15 +222,14 @@ impl<'window> InternalRendererWebGPU<'window> {
                 | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             sextent,
-            1,
             Some(""),
         );
 
         AllSwapchainDependentImages {
-            highres_frame,
-            highres_depth,
-            highres_stencil,
-            highres_mat_norm,
+            frame,
+            depth,
+            stencil,
+            mat_norm,
             far_depth,
             near_depth,
         }

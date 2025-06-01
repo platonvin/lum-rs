@@ -23,16 +23,13 @@ const FRAME_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 const MATNORM_FORMAT: TextureFormat = TextureFormat::Rgba8Uint;
 const RADIANCE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
-const SECONDARY_DEPTH_FORMAT: TextureFormat = TextureFormat::R16Float;
 const BLOCK_PALETTE_SIZE_X: u32 = 64;
 const BLOCK_PALETTE_SIZE_Y: u32 = 64;
 const BLOCK_SIZE: u32 = 16;
 const FRAMES_IN_FLIGHT: usize = 2;
-const DEPTH_FORMAT_SPARE: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8; // TODO somehow D32 faster than wgpu::TextureFormat::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED: wgpu::TextureFormat = wgpu::TextureFormat::Depth32FloatStencil8;
-static mut CHOSEN_DEPTH_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Depth32Float); // TODO:
-static mut CHOSEN_STENCIL_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Stencil8); // TODO:
-static mut SWAPCHAIN_FORMAT: Option<wgpu::TextureFormat> = None;
+static mut CHOSEN_DEPTH_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Depth32Float);
+static mut CHOSEN_STENCIL_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Stencil8);
 
 #[derive(Default)]
 pub struct PipeWithPushConstants {
@@ -51,8 +48,8 @@ pub struct AllPipes {
     pub raygen_blocks_pipe: RasterPipe,
     pub raygen_models_pipe: RasterPipe,
     pub raygen_particles_pipe: RasterPipe,
-    pub raygen_water_pipe: PipeWithPushConstants, // i mean water is just grass but blue and flat
-    pub raygen_foliage_pipes: Vec<PipeWithPushConstants>,
+    pub raygen_water_pipe: PipeWithPushConstants,
+    pub raygen_foliage_pipes: Box<[PipeWithPushConstants]>,
 
     pub diffuse_pipe: RasterPipe,
     pub ao_pipe: RasterPipe,
@@ -74,38 +71,34 @@ pub struct AllPipes {
 }
 
 pub struct AllSamplers {
-    pub nearest_sampler: Option<wgpu::Sampler>,
-    pub linear_sampler: Option<wgpu::Sampler>,
-    pub linear_sampler_tiled: Option<wgpu::Sampler>,
-    pub linear_sampler_tiled_mirrored: Option<wgpu::Sampler>,
-    pub overlay_sampler: Option<wgpu::Sampler>,
-    pub shadow_sampler: Option<wgpu::Sampler>,
-    pub unnorm_linear: Option<wgpu::Sampler>,
-    pub unnorm_nearest: Option<wgpu::Sampler>,
+    pub nearest_sampler: wgpu::Sampler,
+    pub linear_sampler: wgpu::Sampler,
+    pub linear_sampler_tiled: wgpu::Sampler,
+    pub linear_sampler_tiled_mirrored: wgpu::Sampler,
+    pub shadow_sampler: wgpu::Sampler,
+    pub unnorm_linear: wgpu::Sampler,
 }
 
 // #[derive(Default)]
 pub struct AllSwapchainDependentImages {
-    pub highres_frame: Ring<Image>, // Ring equivalent will need careful management
-    pub highres_depth: Ring<Image>,
-    pub highres_stencil: Ring<Image>,
-    pub highres_mat_norm: Ring<Image>,
-    // pub full_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
-    // pub stencil_view_for_ds: Ring<wgpu::TextureView>, // Consider if this is needed in WebGPU
-    pub far_depth: Ring<Image>,
-    pub near_depth: Ring<Image>,
+    pub frame: Image, // Ring equivalent will need careful management
+    pub depth: Image,
+    pub stencil: Image,
+    pub mat_norm: Image,
+    pub far_depth: Image,
+    pub near_depth: Image,
 }
 
 pub struct AllIndependentImages {
-    pub grass_state: Ring<Image>, // Ring equivalent
-    pub water_state: Ring<Image>,
-    pub perlin_noise2d: Ring<Image>,
-    pub perlin_noise3d: Ring<Image>,
+    pub grass_state: Image, // Ring equivalent
+    pub water_state: Image,
+    pub perlin_noise2d: Image,
+    pub perlin_noise3d: Image,
     pub world: Ring<Image>,
     pub radiance_cache: Ring<Image>,
-    pub origin_block_palette: Ring<Image>,
-    pub material_palette: Ring<Image>,
-    pub lightmap: Ring<Image>,
+    pub block_palette: Ring<Image>,
+    pub material_palette: Image,
+    pub lightmap: Image,
 }
 
 pub struct AllBuffers {
@@ -117,55 +110,52 @@ pub struct AllBuffers {
     pub gpu_radiance_updates: Ring<wgpu::Buffer>,
     // we dont need staging buffers since thats not how WGPU works
     // pub staging_radiance_updates: Ring<wgpu::Buffer>,
-    pub gpu_particles_staged: Ring<wgpu::Buffer>,
+    // pub gpu_particles_staged: Ring<wgpu::Buffer>,
     pub gpu_particles: Ring<wgpu::Buffer>,
 }
 
-#[pub_fields::pub_fields]
 pub struct InternalRendererWebGPU<'window> {
-    wal: Wal<'window>,
-    current_encoder: Option<wgpu::CommandEncoder>,
-    counter: isize,
-    settings: Settings,
-    lightmap_extent: Extent3d,
+    pub wal: Wal<'window>,
+    pub current_encoder: Option<wgpu::CommandEncoder>,
+    pub counter: isize,
+    pub settings: Settings,
+    pub lightmap_extent: Extent3d,
 
-    pipes: AllPipes,
-    foliage_descriptions: Vec<MeshFoliageDesc>,
-    dependent_images: Option<AllSwapchainDependentImages>,
-    // rpasses: AllRenderPasses,
-    independent_images: AllIndependentImages,
-    buffers: AllBuffers,
-    samplers: AllSamplers,
-    // cmdbufs: AllCommandBuffers,
-    radiance_updates: Vec<ivec4>,
-    special_radiance_updates: Vec<ivec4>,
+    pub pipes: AllPipes,
+    pub foliage_descriptions: Vec<MeshFoliageDesc>,
+    pub dependent_images: Option<AllSwapchainDependentImages>,
+    pub independent_images: AllIndependentImages,
+    pub buffers: AllBuffers,
+    pub samplers: AllSamplers,
+    pub radiance_updates: Vec<ivec4>,
+    pub special_radiance_updates: Vec<ivec4>,
 
-    camera: Camera,
-    light: SunLight,
+    pub camera: Camera,
+    pub light: SunLight,
 
-    block_copies_queue: Vec<(
+    pub block_copies_queue: Vec<(
         wgpu::TexelCopyTextureInfo<'window>,
         wgpu::TexelCopyTextureInfo<'window>,
         wgpu::Extent3d,
     )>,
-    block_clear_queue: Vec<wgpu::ImageSubresourceRange>,
+    pub block_clear_queue: Vec<wgpu::ImageSubresourceRange>,
 
-    palette_counter: usize,
-    static_block_palette_size: u32,
+    pub palette_counter: usize,
+    pub static_block_palette_size: u32,
 
-    origin_world: Array3D<BlockId>,
-    current_world: Array3D<BlockId>,
+    pub origin_world: Array3D<BlockId>,
+    pub current_world: Array3D<BlockId>,
 
-    particles: Vec<Particle>,
+    pub particles: Vec<Particle>,
 
     // we update it right before doing rendering to have most accurate timestamp
-    delta_time: f32,
-    last_time: Instant,
+    pub delta_time: f32,
+    pub last_time: Instant,
 
-    has_palette: bool,
-    material_palette: Vec<Material>,
-    block_palette_voxels: Vec<BlockVoxels<Voxel>>,
-    block_palette_meshes: Vec<InternalMeshBlock<Option<wgpu::Buffer>, IndexedVerticesQueue>>,
+    pub has_palette: bool,
+    pub material_palette: Vec<Material>,
+    pub block_palette_voxels: Vec<BlockVoxels<Voxel>>,
+    pub block_palette_meshes: Vec<InternalMeshBlock<Option<wgpu::Buffer>, IndexedVerticesQueue>>,
 }
 
 impl<'window> InternalRendererWebGPU<'window> {
@@ -281,7 +271,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         self.wal.resize(window.inner_size());
 
         // 4. Recreate dependent resources.
-        let settings_copy = self.settings.clone();
+        let settings_copy = self.settings;
         let (dimages, pipes) = create_dependent(
             &self.wal,
             &self.settings,
@@ -304,7 +294,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 fn create_dependent(
     wal: &wal::Wal,
     settings: &Settings,
-    foliage_descriptions: &Vec<MeshFoliageDesc>,
+    foliage_descriptions: &[MeshFoliageDesc],
     lumal_settings: &Settings,
     independent_images: &AllIndependentImages,
     buffers: &AllBuffers,

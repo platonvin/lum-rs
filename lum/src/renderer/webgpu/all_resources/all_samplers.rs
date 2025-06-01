@@ -72,15 +72,6 @@ impl<'window> InternalRendererWebGPU<'window> {
         // In your original code, linear_sampler_tiled_mirrored used the same settings.
         let linear_sampler_tiled_mirrored = create_sampler(linear_sampler_tiled_desc);
 
-        // Overlay Sampler: reuse base but with nearest filtering.
-        let overlay_sampler_desc = SamplerDescriptor {
-            label: Some("overlay_sampler"),
-            mag_filter: FilterMode::Nearest,
-            min_filter: FilterMode::Nearest,
-            ..base_sampler_desc.clone()
-        };
-        let overlay_sampler = create_sampler(overlay_sampler_desc);
-
         // Unnormalized Linear Sampler: use REPEAT and linear filters.
         let unnorm_linear_desc = SamplerDescriptor {
             label: Some("unnorm_linear"),
@@ -123,14 +114,12 @@ impl<'window> InternalRendererWebGPU<'window> {
         let shadow_sampler = create_sampler(shadow_sampler_desc);
 
         AllSamplers {
-            nearest_sampler: Some(nearest_sampler),
-            linear_sampler: Some(linear_sampler),
-            linear_sampler_tiled: Some(linear_sampler_tiled),
-            linear_sampler_tiled_mirrored: Some(linear_sampler_tiled_mirrored),
-            overlay_sampler: Some(overlay_sampler),
-            shadow_sampler: Some(shadow_sampler),
-            unnorm_linear: Some(unnorm_linear),
-            unnorm_nearest: Some(unnorm_nearest),
+            nearest_sampler,
+            linear_sampler,
+            linear_sampler_tiled,
+            linear_sampler_tiled_mirrored,
+            shadow_sampler,
+            unnorm_linear,
         }
     }
 

@@ -129,172 +129,7 @@ pub fn get_shader(name: &str) -> Option<&'static [u8]> {
     unreachable!()
 }
 
-// pub fn get_glsl(name: &str) -> Option<&'static str> {
-//     match name {
-//         "diffuse.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "diffuse.frag.glsl"
-//         ))),
-//         "fillStencilGlossy.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "fillStencilGlossy.frag.glsl"
-//         ))),
-//         "fillStencilSmoke.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "fillStencilSmoke.frag.glsl"
-//         ))),
-//         "fillStencilSmoke.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "fillStencilSmoke.vert.glsl"
-//         ))),
-//         "fullscreenTriag.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "fullscreenTriag.vert.glsl"
-//         ))),
-//         "glossy.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "glossy.frag.glsl"
-//         ))),
-//         "grass.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "grass.frag.glsl"
-//         ))),
-//         "grass.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "grass.vert.glsl"
-//         ))),
-//         "hbao.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "hbao.frag.glsl"
-//         ))),
-//         "lightmapBlocks.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "lightmapBlocks.vert.glsl"
-//         ))),
-//         "lightmapModels.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "lightmapModels.vert.glsl"
-//         ))),
-//         "map.comp.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "map.comp.glsl"
-//         ))),
-//         "overlay.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "overlay.frag.glsl"
-//         ))),
-//         "overlay.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "overlay.vert.glsl"
-//         ))),
-//         "perlin2.comp.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "perlin2.comp.glsl"
-//         ))),
-//         "perlin3.comp.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "perlin3.comp.glsl"
-//         ))),
-//         "radiance.comp.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "radiance.comp.glsl"
-//         ))),
-//         "rayGenBlocks.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "rayGenBlocks.frag.glsl"
-//         ))),
-//         "rayGenBlocks.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "rayGenBlocks.vert.glsl"
-//         ))),
-//         "rayGenModels.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "rayGenModels.frag.glsl"
-//         ))),
-//         "rayGenModels.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "rayGenModels.vert.glsl"
-//         ))),
-//         "rayGenParticles.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "rayGenParticles.frag.glsl"
-//         ))),
-//         "rayGenParticles.geom.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "rayGenParticles.geom.glsl"
-//         ))),
-//         "rayGenParticles.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "rayGenParticles.vert.glsl"
-//         ))),
-//         "smoke.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "smoke.frag.glsl"
-//         ))),
-//         "tonemap.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "tonemap.frag.glsl"
-//         ))),
-//         "updateGrass.comp.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "updateGrass.comp.glsl"
-//         ))),
-//         "updateWater.comp.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "updateWater.comp.glsl"
-//         ))),
-//         "water.frag.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "water.frag.glsl"
-//         ))),
-//         "water.vert.glsl" => Some(include_str!(concat!(
-//             env!("COMPILED_SHADERS_PATH"),
-//             "water.vert.glsl"
-//         ))),
-//         _ => None,
-//     }
-// }
-
-// #[cfg(feature = "backend_opengl")]
-// pub fn get_glsl(name: &str) -> Option<&'static str> {
-//     match name {
-//         "diffuse.frag" => Some(include_str!("../shaders_gl/diffuse.frag")),
-//         "fillStencilGlossy.frag" => Some(include_str!("../shaders_gl/fillStencilGlossy.frag")),
-//         "fillStencilSmoke.frag" => Some(include_str!("../shaders_gl/fillStencilSmoke.frag")),
-//         "fillStencilSmoke.vert" => Some(include_str!("../shaders_gl/fillStencilSmoke.vert")),
-//         "fullscreenTriag.vert" => Some(include_str!("../shaders_gl/fullscreenTriag.vert")),
-//         "glossy.frag" => Some(include_str!("../shaders_gl/glossy.frag")),
-//         "grass.frag" => Some(include_str!("../shaders_gl/grass.frag")),
-//         "grass.vert" => Some(include_str!("../shaders_gl/grass.vert")),
-//         "hbao.frag" => Some(include_str!("../shaders_gl/hbao.frag")),
-//         "lightmapBlocks.vert" => Some(include_str!("../shaders_gl/lightmapBlocks.vert")),
-//         "lightmapModels.vert" => Some(include_str!("../shaders_gl/lightmapModels.vert")),
-//         "map.comp" => Some(include_str!("../shaders_gl/map.comp")),
-//         "overlay.frag" => Some(include_str!("../shaders_gl/overlay.frag")),
-//         "overlay.vert" => Some(include_str!("../shaders_gl/overlay.vert")),
-//         "perlin2.comp" => Some(include_str!("../shaders_gl/perlin2.comp")),
-//         "perlin3.comp" => Some(include_str!("../shaders_gl/perlin3.comp")),
-//         "radiance.comp" => Some(include_str!("../shaders_gl/radiance.comp")),
-//         "rayGenBlocks.frag" => Some(include_str!("../shaders_gl/rayGenBlocks.frag")),
-//         "rayGenBlocks.vert" => Some(include_str!("../shaders_gl/rayGenBlocks.vert")),
-//         "rayGenModels.frag" => Some(include_str!("../shaders_gl/rayGenModels.frag")),
-//         "rayGenModels.vert" => Some(include_str!("../shaders_gl/rayGenModels.vert")),
-//         "rayGenParticles.frag" => Some(include_str!("../shaders_gl/rayGenParticles.frag")),
-//         "rayGenParticles.geom" => Some(include_str!("../shaders_gl/rayGenParticles.geom")),
-//         "rayGenParticles.vert" => Some(include_str!("../shaders_gl/rayGenParticles.vert")),
-//         "smoke.frag" => Some(include_str!("../shaders_gl/smoke.frag")),
-//         "tonemap.frag" => Some(include_str!("../shaders_gl/tonemap.frag")),
-//         "updateGrass.comp" => Some(include_str!("../shaders_gl/updateGrass.comp")),
-//         "updateWater.comp" => Some(include_str!("../shaders_gl/updateWater.comp")),
-//         "water.frag" => Some(include_str!("../shaders_gl/water.frag")),
-//         "water.vert" => Some(include_str!("../shaders_gl/water.vert")),
-//         _ => None,
-//     }
-// }
-
 pub fn get_wgsl(name: &str) -> Option<&'static str> {
-    // unimplemented!();
-
     #[cfg(feature = "wgpu_backend")]
     match name {
         "diffuse.frag" => Some(include_str!("../shaders_wgpu/diffuse.frag")),
@@ -311,8 +146,6 @@ pub fn get_wgsl(name: &str) -> Option<&'static str> {
         "lightmap_blocks.vert" => Some(include_str!("../shaders_wgpu/lightmap_blocks.vert")),
         "lightmap_models.vert" => Some(include_str!("../shaders_wgpu/lightmap_models.vert")),
         "map.comp" => Some(include_str!("../shaders_wgpu/map.comp")),
-        // "overlay.frag" => Some(include_str!("../shaders_wgpu/overlay.frag")),
-        // "overlay.vert" => Some(include_str!("../shaders_wgpu/overlay.vert")),
         "perlin2.comp" => Some(include_str!("../shaders_wgpu/perlin2.comp")),
         "perlin3.comp" => Some(include_str!("../shaders_wgpu/perlin3.comp")),
         "radiance.comp" => Some(include_str!("../shaders_wgpu/radiance.comp")),
@@ -321,7 +154,6 @@ pub fn get_wgsl(name: &str) -> Option<&'static str> {
         "raygen_models.frag" => Some(include_str!("../shaders_wgpu/raygen_models.frag")),
         "raygen_models.vert" => Some(include_str!("../shaders_wgpu/raygen_models.vert")),
         "raygen_particles.frag" => Some(include_str!("../shaders_wgpu/raygen_particles.frag")),
-        // "raygen_particles.geom" => Some(include_str!("../shaders_wgpu/raygen_particles.geom")),
         "raygen_particles.vert" => Some(include_str!("../shaders_wgpu/raygen_particles.vert")),
         "smoke.frag" => Some(include_str!("../shaders_wgpu/smoke.frag")),
         "tonemap.frag" => Some(include_str!("../shaders_wgpu/tonemap.frag")),
@@ -333,5 +165,5 @@ pub fn get_wgsl(name: &str) -> Option<&'static str> {
     }
 
     #[cfg(not(feature = "wgpu_backend"))]
-    unreachable!()
+    unreachable!();
 }

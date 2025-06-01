@@ -6,11 +6,11 @@ use crate::{
         self,
         webgpu::{
             wal::{
-                DynamicBindGroupDescription, Image, ShaderStage, StaticBindGroupDescription, Wal,
+                DynamicBindGroupDescription, Image, ShaderStageSource, StaticBindGroupDescription,
+                Wal,
             },
             AllBuffers, AllIndependentImages, AllPipes, AllSamplers, AllSwapchainDependentImages,
             InternalRendererWebGPU, MeshFoliageDesc, FRAME_FORMAT, MATNORM_FORMAT,
-            SWAPCHAIN_FORMAT,
         },
         Settings,
     },
@@ -112,7 +112,7 @@ pub struct PackedVoxelCircuit {
 }
 
 impl<'window> InternalRendererWebGPU<'window> {
-    pub unsafe fn create_all_pipes(
+    pub fn create_all_pipes(
         wal: &Wal,
         lum_settings: &Settings,
         buffers: &AllBuffers,
@@ -122,7 +122,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         foliage_descriptions: &[MeshFoliageDesc],
     ) -> AllPipes {
         let lightmap_blocks_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::VERTEX_FRAGMENT,
@@ -143,10 +143,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            &[ShaderStage {
-                stage: ShaderStages::VERTEX,
-                code: shaders::get_wgsl("lightmap_blocks.vert").unwrap(),
-            }],
+            shaders::get_wgsl("lightmap_blocks.vert").unwrap(),
+            None,
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -169,7 +167,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             Some("lightmap blocks pipe"),
         );
         let lightmap_models_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::VERTEX,
@@ -200,10 +198,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     },
                 },
             ],
-            &[ShaderStage {
-                stage: ShaderStages::VERTEX,
-                code: shaders::get_wgsl("lightmap_models.vert").unwrap(),
-            }],
+            shaders::get_wgsl("lightmap_models.vert").unwrap(),
+            None,
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -227,7 +223,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let raygen_blocks_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -247,7 +243,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D3,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                    resources: images_to_binding_resources(&iimages.block_palette),
                 },
             ],
             &[DynamicBindGroupDescription {
@@ -260,16 +256,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("raygen_blocks.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("raygen_blocks.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("raygen_blocks.vert").unwrap(),
+            Some(shaders::get_wgsl("raygen_blocks.frag").unwrap()),
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -297,7 +285,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let raygen_models_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::VERTEX_FRAGMENT,
@@ -328,16 +316,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     }, // aka push descriptor sets in vk
                 },
             ],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("raygen_models.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("raygen_models.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("raygen_models.vert").unwrap(),
+            Some(shaders::get_wgsl("raygen_models.frag").unwrap()),
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -365,7 +345,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let raygen_particles_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::VERTEX_FRAGMENT,
@@ -377,16 +357,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 resources: buffers_to_binding_resources(&buffers.uniform),
             }],
             &[],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("raygen_particles.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("raygen_particles.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("raygen_particles.vert").unwrap(),
+            Some(shaders::get_wgsl("raygen_particles.frag").unwrap()),
             &[VertexBufferLayout {
                 array_stride: size_of::<Particle>() as u64,
                 step_mode: VertexStepMode::Instance,
@@ -431,7 +403,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let raygen_water_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -451,14 +423,16 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.water_state),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.water_state.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 2,
                     visibility: ShaderStages::VERTEX,
                     binding_type: BindingType::Sampler(SamplerBindingType::Filtering),
                     resources: sampler_to_binding_resources(
-                        samplers.linear_sampler_tiled_mirrored.as_ref().unwrap(),
+                        &samplers.linear_sampler_tiled_mirrored,
                     ),
                 },
             ],
@@ -471,16 +445,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("water.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("water.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("water.vert").unwrap(),
+            Some(shaders::get_wgsl("water.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleStrip,
             vec![Some(ColorTargetState {
@@ -518,11 +484,10 @@ impl<'window> InternalRendererWebGPU<'window> {
             let pc_buffer = wal.create_buffer(
                 wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
                 16 * 1024 * 20,
-                false,
-                Some(&format!("PC buffer for water")),
+                Some("PC buffer for water"),
             );
             let pc_bind_group = wal.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(&format!("PC buffer for water")),
+                label: Some("PC buffer for water"),
                 layout: &pc_buffer_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
@@ -540,7 +505,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         };
 
         let diffuse_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -560,7 +525,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.mat_norm.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 2,
@@ -570,7 +537,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.highres_depth),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.depth.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 3,
@@ -580,15 +549,15 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.material_palette),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.material_palette.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 4,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
                     binding_type: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.nearest_sampler),
                 },
                 StaticBindGroupDescription {
                     binding: 5,
@@ -604,9 +573,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     binding: 6,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
                     binding_type: BindingType::Sampler(SamplerBindingType::Filtering),
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_linear.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.unnorm_linear),
                 },
                 StaticBindGroupDescription {
                     binding: 7,
@@ -616,28 +583,20 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.lightmap),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.lightmap.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 8,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
                     binding_type: BindingType::Sampler(SamplerBindingType::Comparison),
-                    resources: sampler_to_binding_resources(
-                        samplers.shadow_sampler.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.shadow_sampler),
                 },
             ],
             &[],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("diffuse.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
+            Some(shaders::get_wgsl("diffuse.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -653,7 +612,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         // darkens certain areas on the frame image depending on screen-space normal variation of pixels
         // this is achieved by mixing black with current frame
         let ao_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -683,7 +642,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.mat_norm.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 3,
@@ -693,28 +654,20 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.highres_depth),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.depth.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 4,
                     visibility: ShaderStages::FRAGMENT,
                     binding_type: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.nearest_sampler),
                 },
             ],
             &[],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("hbao.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
+            Some(shaders::get_wgsl("hbao.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -727,7 +680,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             Some("Ambient Occlusion Pipe"),
         );
         let fill_stencil_glossy_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -737,7 +690,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.mat_norm.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 1,
@@ -747,20 +702,14 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.material_palette),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.material_palette.view,
+                    )]),
                 },
             ],
             &[],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("fill_stencil_glossy.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
+            Some(shaders::get_wgsl("fill_stencil_glossy.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleList,
             vec![],
@@ -791,7 +740,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let fill_stencil_smoke_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::VERTEX,
@@ -811,16 +760,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("fill_stencil_smoke.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("fill_stencil_smoke.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("fill_stencil_smoke.vert").unwrap(),
+            Some(shaders::get_wgsl("fill_stencil_smoke.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleList,
             // these are emulating depth in a single pass
@@ -905,11 +846,10 @@ impl<'window> InternalRendererWebGPU<'window> {
             let pc_buffer = wal.create_buffer(
                 wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
                 16 * 1024 * 20,
-                false,
-                Some(&format!("PC buffer for fill stencil smoke")),
+                Some("PC buffer for fill stencil smoke"),
             );
             let pc_bind_group = wal.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(&format!("PC buffer for fill stencil smoke")),
+                label: Some("PC buffer for fill stencil smoke"),
                 layout: &pc_buffer_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
@@ -927,7 +867,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         };
 
         let glossy_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -947,7 +887,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.highres_mat_norm),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.mat_norm.view,
+                    )]),
                 },
                 // StaticBindGroupDescription {
                 //     binding: 2,
@@ -955,7 +897,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 // binding_type: BindingType::
                 //     resources: ResourceType::Static(
                 //         BindingType::Sampler(SamplerBindingType::NonFiltering),
-                //         sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
+                //         sampler_to_binding_resources(&samplers.nearest_sampler),
                 //     ),
                 // },
                 StaticBindGroupDescription {
@@ -966,15 +908,15 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.highres_depth),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.depth.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 3,
                     visibility: ShaderStages::FRAGMENT,
                     binding_type: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    resources: sampler_to_binding_resources(
-                        samplers.nearest_sampler.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.nearest_sampler),
                 },
                 StaticBindGroupDescription {
                     binding: 4,
@@ -992,7 +934,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 // binding_type: BindingType::
                 //     resources: ResourceType::Static(
                 //         BindingType::Sampler(SamplerBindingType::NonFiltering),
-                //         sampler_to_binding_resources(samplers.unnorm_nearest.as_ref().unwrap()),
+                //         sampler_to_binding_resources(&samplers.unnorm_nearest),
                 //     ),
                 // },
                 StaticBindGroupDescription {
@@ -1003,7 +945,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D3,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                    resources: images_to_binding_resources(&iimages.block_palette),
                 },
                 // StaticBindGroupDescription {
                 //     binding: 7,
@@ -1011,7 +953,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 // binding_type: BindingType::
                 //     resources: ResourceType::Static(
                 //         BindingType::Sampler(SamplerBindingType::NonFiltering),
-                //         sampler_to_binding_resources(samplers.unnorm_nearest.as_ref().unwrap()),
+                //         sampler_to_binding_resources(&samplers.unnorm_nearest),
                 //     ),
                 // },
                 StaticBindGroupDescription {
@@ -1022,7 +964,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.material_palette),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.material_palette.view,
+                    )]),
                 },
                 // StaticBindGroupDescription {
                 //     binding: 9,
@@ -1030,7 +974,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 // binding_type: BindingType::
                 //     resources: ResourceType::Static(
                 //         BindingType::Sampler(SamplerBindingType::NonFiltering),
-                //         sampler_to_binding_resources(samplers.nearest_sampler.as_ref().unwrap()),
+                //         sampler_to_binding_resources(&samplers.nearest_sampler),
                 //     ),
                 // },
                 StaticBindGroupDescription {
@@ -1047,22 +991,12 @@ impl<'window> InternalRendererWebGPU<'window> {
                     binding: 8,
                     visibility: ShaderStages::FRAGMENT,
                     binding_type: BindingType::Sampler(SamplerBindingType::Filtering),
-                    resources: sampler_to_binding_resources(
-                        samplers.unnorm_linear.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.unnorm_linear),
                 },
             ],
             &[],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("glossy.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
+            Some(shaders::get_wgsl("glossy.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -1093,7 +1027,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         // Like AO, Volumetrics are just blending into frame with their color.
         let smoke_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -1113,7 +1047,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.far_depth),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.far_depth.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 2,
@@ -1123,7 +1059,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&dimages.near_depth),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &dimages.near_depth.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 3,
@@ -1143,28 +1081,20 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D3,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.perlin_noise3d),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.perlin_noise3d.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 5,
                     visibility: ShaderStages::FRAGMENT,
                     binding_type: BindingType::Sampler(SamplerBindingType::Filtering),
-                    resources: sampler_to_binding_resources(
-                        samplers.linear_sampler_tiled.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.linear_sampler_tiled),
                 },
             ],
             &[],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("smoke.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
+            Some(shaders::get_wgsl("smoke.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -1195,7 +1125,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         // Tonemap Pipe is also responsible for putting frame image into swapchain. It does some... well, tonemapping as well as any simple other color filters. TODO: LUT?
         let tonemap_pipe = Wal::create_raster_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::FRAGMENT,
@@ -1205,23 +1135,15 @@ impl<'window> InternalRendererWebGPU<'window> {
                     view_dimension: TextureViewDimension::D2,
                     multisampled: false,
                 },
-                resources: images_to_binding_resources(&dimages.highres_frame),
+                resources: Ring::from_vec(vec![BindingResource::TextureView(&dimages.frame.view)]),
             }],
             &[],
-            &[
-                ShaderStage {
-                    stage: ShaderStages::VERTEX,
-                    code: shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
-                },
-                ShaderStage {
-                    stage: ShaderStages::FRAGMENT,
-                    code: shaders::get_wgsl("tonemap.frag").unwrap(),
-                },
-            ],
+            shaders::get_wgsl("fullscreen_triag.vert").unwrap(),
+            Some(shaders::get_wgsl("tonemap.frag").unwrap()),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
-                format: SWAPCHAIN_FORMAT.unwrap(),
+                format: wal.swapchain_format,
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
@@ -1231,7 +1153,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let radiance_pipe = Wal::create_compute_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -1261,7 +1183,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D3,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                    resources: images_to_binding_resources(&iimages.block_palette),
                 },
                 StaticBindGroupDescription {
                     binding: 3,
@@ -1271,7 +1193,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.material_palette),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.material_palette.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 4,
@@ -1310,13 +1234,11 @@ impl<'window> InternalRendererWebGPU<'window> {
                     binding: 7,
                     visibility: ShaderStages::COMPUTE,
                     binding_type: BindingType::Sampler(SamplerBindingType::Filtering),
-                    resources: sampler_to_binding_resources(
-                        &samplers.linear_sampler.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.linear_sampler),
                 },
             ],
             &[],
-            &ShaderStage {
+            &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("radiance.comp").unwrap(),
             },
@@ -1324,7 +1246,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let update_grass_pipe = Wal::create_compute_pipe(
-            &wal,
+            wal,
             &[
                 // stuff that was previously in pc is now in ubo
                 StaticBindGroupDescription {
@@ -1345,7 +1267,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                         format: TextureFormat::Rg32Float,
                         view_dimension: TextureViewDimension::D2,
                     },
-                    resources: images_to_binding_resources(&iimages.grass_state),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.grass_state.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 2,
@@ -1355,19 +1279,19 @@ impl<'window> InternalRendererWebGPU<'window> {
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
-                    resources: images_to_binding_resources(&iimages.perlin_noise2d),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.perlin_noise2d.view,
+                    )]),
                 },
                 StaticBindGroupDescription {
                     binding: 3,
                     visibility: ShaderStages::COMPUTE,
                     binding_type: BindingType::Sampler(SamplerBindingType::Filtering),
-                    resources: sampler_to_binding_resources(
-                        samplers.linear_sampler_tiled.as_ref().unwrap(),
-                    ),
+                    resources: sampler_to_binding_resources(&samplers.linear_sampler_tiled),
                 },
             ],
             &[],
-            &ShaderStage {
+            &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("update_grass.comp").unwrap(),
             },
@@ -1375,7 +1299,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let update_water_pipe = Wal::create_compute_pipe(
-            &wal,
+            wal,
             &[
                 // stuff that was previously in pc is now in ubo
                 StaticBindGroupDescription {
@@ -1396,18 +1320,20 @@ impl<'window> InternalRendererWebGPU<'window> {
                         format: TextureFormat::Rgba32Float,
                         view_dimension: TextureViewDimension::D2,
                     },
-                    resources: images_to_binding_resources(&iimages.water_state),
+                    resources: Ring::from_vec(vec![BindingResource::TextureView(
+                        &iimages.water_state.view,
+                    )]),
                 },
             ],
             &[],
-            &ShaderStage {
+            &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("update_water.comp").unwrap(),
             },
             Some("Water Updates Pipe"),
         );
         let gen_perlin2d_pipe = Wal::create_compute_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::COMPUTE,
@@ -1416,17 +1342,19 @@ impl<'window> InternalRendererWebGPU<'window> {
                     format: TextureFormat::Rg32Float,
                     view_dimension: TextureViewDimension::D2,
                 },
-                resources: images_to_binding_resources(&iimages.perlin_noise2d),
+                resources: Ring::from_vec(vec![BindingResource::TextureView(
+                    &iimages.perlin_noise2d.view,
+                )]),
             }],
             &[],
-            &ShaderStage {
+            &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("perlin2.comp").unwrap(),
             },
             Some("Gen Perlin 2D Pipe"),
         );
         let gen_perlin3d_pipe = Wal::create_compute_pipe(
-            &wal,
+            wal,
             &[StaticBindGroupDescription {
                 binding: 0,
                 visibility: ShaderStages::COMPUTE,
@@ -1435,17 +1363,19 @@ impl<'window> InternalRendererWebGPU<'window> {
                     format: TextureFormat::Rgba32Float,
                     view_dimension: TextureViewDimension::D3,
                 },
-                resources: images_to_binding_resources(&iimages.perlin_noise3d),
+                resources: Ring::from_vec(vec![BindingResource::TextureView(
+                    &iimages.perlin_noise3d.view,
+                )]),
             }],
             &[],
-            &ShaderStage {
+            &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("perlin3.comp").unwrap(),
             },
             Some("Gen Perlin 3D Pipe"),
         );
         let map_pipe = Wal::create_compute_pipe(
-            &wal,
+            wal,
             &[
                 StaticBindGroupDescription {
                     binding: 0,
@@ -1466,7 +1396,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         format: TextureFormat::R32Sint,
                         view_dimension: TextureViewDimension::D3,
                     },
-                    resources: images_to_binding_resources(&iimages.origin_block_palette),
+                    resources: images_to_binding_resources(&iimages.block_palette),
                 },
             ],
             &[
@@ -1491,7 +1421,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     },
                 },
             ],
-            &ShaderStage {
+            &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("map.comp").unwrap(),
             },
@@ -1517,7 +1447,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             .iter()
             .map(|foliage_description| {
                 let pipe = Wal::create_raster_pipe(
-                    &wal,
+                    wal,
                     &[
                         StaticBindGroupDescription {
                             binding: 0,
@@ -1537,16 +1467,16 @@ impl<'window> InternalRendererWebGPU<'window> {
                                 view_dimension: TextureViewDimension::D2,
                                 multisampled: false,
                             },
-                            resources: images_to_binding_resources(&iimages.grass_state),
+                            resources: Ring::from_vec(vec![BindingResource::TextureView(
+                                &iimages.grass_state.view,
+                            )]),
                         },
                         StaticBindGroupDescription {
                             binding: 2,
                             visibility: ShaderStages::VERTEX,
                             binding_type: BindingType::Sampler(SamplerBindingType::Filtering),
 
-                            resources: sampler_to_binding_resources(
-                                &samplers.linear_sampler.as_ref().unwrap(),
-                            ),
+                            resources: sampler_to_binding_resources(&samplers.linear_sampler),
                         },
                     ],
                     &[DynamicBindGroupDescription {
@@ -1558,16 +1488,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                             min_binding_size: None,
                         },
                     }],
-                    &[
-                        ShaderStage {
-                            stage: ShaderStages::VERTEX,
-                            code: foliage_description.code,
-                        },
-                        ShaderStage {
-                            stage: ShaderStages::FRAGMENT,
-                            code: shaders::get_wgsl("grass.frag").unwrap(),
-                        },
-                    ],
+                    foliage_description.code,
+                    Some(shaders::get_wgsl("grass.frag").unwrap()),
                     &[], // no vertex buffers
                     PrimitiveTopology::TriangleList,
                     vec![Some(ColorTargetState {
@@ -1589,11 +1511,10 @@ impl<'window> InternalRendererWebGPU<'window> {
                 let pc_buffer = wal.create_buffer(
                     BufferUsages::COPY_DST | BufferUsages::STORAGE,
                     16 * 1024 * 20,
-                    false,
-                    Some(&format!("PC buffer for foliage")),
+                    Some("PC buffer for foliage"),
                 );
                 let pc_bind_group = wal.device.create_bind_group(&BindGroupDescriptor {
-                    label: Some(&format!("PC buffer for foliage")),
+                    label: Some("PC buffer for foliage"),
                     layout: &pc_buffer_bind_group_layout,
                     entries: &[BindGroupEntry {
                         binding: 0,

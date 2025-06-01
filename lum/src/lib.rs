@@ -6,6 +6,7 @@
 #![feature(slice_as_array)]
 #![feature(default_field_values)]
 #![allow(unused)]
+#![allow(clippy::too_many_arguments)]
 // This is a glue-file
 // files that start with "all_" are initializing / destroying resources (packed in structs)
 

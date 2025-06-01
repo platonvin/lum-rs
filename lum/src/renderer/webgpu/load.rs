@@ -84,7 +84,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                 buffer_size,
             )
         };
-        for bp in self.independent_images.origin_block_palette.iter() {
+        for bp in self.independent_images.block_palette.iter() {
             self.wal.queue.write_texture(
                 TexelCopyTextureInfo {
                     texture: &bp.texture,
@@ -126,29 +126,27 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
         let data_u8 = unsafe {
             std::slice::from_raw_parts(self.material_palette.as_ptr() as *const u8, buffer_size)
         };
-        for bp in self.independent_images.material_palette.iter() {
-            self.wal.queue.write_texture(
-                TexelCopyTextureInfo {
-                    texture: &bp.texture,
-                    mip_level: 0,
-                    origin: Origin3d { x: 0, y: 0, z: 0 },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                data_u8,
-                TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(size_of::<Material>() as u32),
-                    rows_per_image: None,
-                },
-                Extent3d {
-                    width: 6,
-                    height: 256,
-                    depth_or_array_layers: 1,
-                },
-            );
-            self.wal.queue.submit([]);
-        }
-        // self.wal.queue.submit([]);
+
+        self.wal.queue.write_texture(
+            TexelCopyTextureInfo {
+                texture: &self.independent_images.material_palette.texture,
+                mip_level: 0,
+                origin: Origin3d { x: 0, y: 0, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
+            data_u8,
+            TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(size_of::<Material>() as u32),
+                rows_per_image: None,
+            },
+            Extent3d {
+                width: 6,
+                height: 256,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.wal.queue.submit([]);
     }
 
     #[cold]
@@ -195,65 +193,10 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
 
         let mut triangles = self.make_contour_vertices(size, padded_voxel_data);
 
-        // TODO: reuse this
-        let raster_dynamic_bind_group_layout =
-            self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Dynamic per-Mesh Voxels Bind Group Layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                        ty: BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Sint,
-                            view_dimension: TextureViewDimension::D3,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-
-        let compute_dynamic_bind_group_layout =
-            self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Dynamic per-Mesh Voxels Bind Group Layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::COMPUTE,
-                        ty: BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::COMPUTE,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Sint,
-                            view_dimension: TextureViewDimension::D3,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-
         let create_face_bind_group = |face: &mut IndexedVerticesQueue| {
             let dynamic_bind_group = self.wal.device.create_bind_group(&BindGroupDescriptor {
                 label: Some("Dynamic per-face Voxels Bind Group"),
-                layout: &raster_dynamic_bind_group_layout,
+                layout: self.pipes.raygen_models_pipe.dynamic_bind_group_layout.as_ref().unwrap(),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
@@ -282,12 +225,14 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
         let compute_pc_buffer = self.wal.create_buffer(
             BufferUsages::COPY_DST | BufferUsages::STORAGE,
             16 * 1024 * 20,
-            false,
             Some("(per-mesh) pc buffer for compute"),
         );
+
+        // Per-model Bind Group of dynamic resources.
+        // So we can (and should) use dynamic bind group layout we declared earlier, stored in Pipe.
         let compute_dynamic_bind_group = self.wal.device.create_bind_group(&BindGroupDescriptor {
             label: Some("Dynamic per-Mesh Voxels Bind Group"),
-            layout: &compute_dynamic_bind_group_layout,
+            layout: self.pipes.map_pipe.dynamic_bind_group_layout.as_ref().unwrap(),
             // we bind same voxel image and 6 different pc buffers to 6 different bind groups
             entries: &[
                 BindGroupEntry {
@@ -309,8 +254,8 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
             size,
             compute_pc_buffer: Some(compute_pc_buffer),
             voxels_bind_group_compute: Some(compute_dynamic_bind_group),
-            compute_push_constants: vec![], // cause its empty
-            compute_pc_count: 0,            // cause its empty
+            compute_push_constants: vec![],
+            compute_pc_count: 0,
         }
     }
 
@@ -330,7 +275,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
             std::slice::from_raw_parts(voxels.as_ptr() as *const u8, buffer_size as usize)
         };
 
-        let texture = (&self.wal).device.create_texture_with_data(
+        let texture = self.wal.device.create_texture_with_data(
             &self.wal.queue,
             &wgpu::TextureDescriptor {
                 label: Some("Image Ring Texture"),
@@ -488,7 +433,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                 vec3 {x:  0.0, y:  0.0, z:  1.0} => {verts_idxs_zzP.push(index);},
                 vec3 {x:  0.0, y:  0.0, z: -1.0} => {verts_idxs_zzN.push(index);},
                 _ => {
-                    panic!("Unknown normal: {:?}", normal);
+                    panic!("Unknown normal: {normal:?}");
                 },
             }
         };
@@ -560,7 +505,6 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                     let buffer = $wal.create_buffer(
                         $buffer_usage,
                         $buffer_size,
-                        false,
                         Some(&format!("PC buffer for {}", $label_suffix)),
                     );
                     // let bind_group = $wal.device.create_bind_group(&BindGroupDescriptor {

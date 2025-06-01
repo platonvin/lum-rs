@@ -6,14 +6,14 @@ r = "run"
 br = "build --release"
 brr = "run --release"  # yes one extra r.
 
-nv = "run --profile nv --package examples --bin demo_vk --features vk_backend"
-nw = "run --profile nw --package examples --bin demo_wgpu --features wgpu_backend"
+nv = "run --profile native --package examples --bin demo_vk --features vk_backend"
+nw = "run --profile native --package examples --bin demo_wgpu --features wgpu_backend"
 
-rv = "run --profile rv --package examples --bin demo_vk --features vk_backend"
-rw = "run --profile rw --package examples --bin demo_wgpu --features wgpu_backend"
+rv = "run --profile release --package examples --bin demo_vk --features vk_backend"
+rw = "run --profile release --package examples --bin demo_wgpu --features wgpu_backend"
 
-dv = "run --profile dv --package examples --bin demo_vk --features vk_backend"
-dw = "run --profile dw --package examples --bin demo_wgpu --features wgpu_backend"
+dv = "run --profile debug --package examples --bin demo_vk --features vk_backend"
+dw = "run --profile debug --package examples --bin demo_wgpu --features wgpu_backend"
 
 [build]
 [target.x86_64-pc-windows-gnu]
@@ -26,21 +26,7 @@ RUST_BACKTRACE = "short" # this is what i love in Rust
 
 # native is highest perfomance build
 [profile.native.build-override]
-rustflags = [
-    "-C",
-    "target-cpu=native",
-    # "-C", "link-arg=-fuse-ld=lld",
-    # "-Z", "threads=8"
-    "-Zlocation-detail=none",
-    "-Zfmt-debug=none",
-]
-# nw and nv are native for wgpu and vk respectively
-# native is highest perfomance build
-[profile.nw.build-override]
 rustflags = ["-C", "target-cpu=native"]
-[profile.nv.build-override]
-rustflags = ["-C", "target-cpu=native"]
-
 
 # natsize is smallest build
 [profile.natsize.build-override]
@@ -57,8 +43,4 @@ codegen-backend = true
 # dev is a normal debug build, almost unused
 # rv/rw are (Release Vulkan/Wgpu), they are just "debug but fast" and separate for convinience
 # [profile.dev]
-# codegen-backend = "cranelift"
-# [profile.dv]
-# codegen-backend = "cranelift"
-# [profile.dw]
 # codegen-backend = "cranelift"
