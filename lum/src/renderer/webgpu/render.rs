@@ -1,56 +1,39 @@
 use super::InternalRendererWebGPU;
-use crate::renderer::{render_interface::FoliageDescriptionBuilder, webgpu::MeshFoliageDesc};
-use crate::renderer::{types::*, webgpu};
 use crate::{
     assert_assume,
-    containers::BitArray3d,
-    renderer::{
-        webgpu::{types::*, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y},
-        *,
-    },
-};
-use crate::{
-    containers::Arena,
+    containers::{Arena, Array3D, BitArray3d},
     renderer::{
         aabb::{get_shift, iAABB},
         ao_lut,
         load_interface::LoadInterface,
-        render_interface::RendererInterface,
+        render_interface::{FoliageDescriptionBuilder, RendererInterface},
         types::{
-            i16vec4, i8vec3, ivec3, ivec4, quat, u8vec4, uvec3, vec2, vec4, AoLut, IndexedVertices,
-            InternalMeshVolumetric,
+            i16vec3, i8vec3, ivec3, ivec4, mat4, quat, u8vec3, u8vec4, uvec3, vec2, vec3, vec4,
+            AoLut, IndexedVertices, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel,
+            InternalMeshVolumetric, MeshTransform, *,
         },
         webgpu::{
+            self,
             all_resources::all_types::UboData,
-            types::{BlockId, MatId, Particle, Voxel},
-            wal::{Image, RasterPipe, Wal},
+            types::{BlockId, MatId, Particle, Voxel, *},
+            wal::{Image, Wal},
+            MeshFoliageDesc, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y,
         },
         Settings,
     },
 };
-use crate::{
-    containers::Array3D,
-    renderer::types::{
-        i16vec3, mat4, u8vec3, vec3, InternalMeshFoliage, InternalMeshLiquid, InternalMeshModel,
-        MeshTransform,
-    },
-};
 use as_u8_slice_derive::AsU8Slice;
-use lumal::atrace;
-use lumal::ring::Ring;
-use lumal::vk::Instance;
-use qvek::vek::num_traits::{ToPrimitive, Zero};
-use qvek::vek::Vec3;
-use qvek::{i16vec3, i16vec4, vec2, vec3, vec4, vek::Clamp};
-use qvek::{ivec3, ivec4, uvec2, uvec3};
-use std::mem::{size_of, transmute};
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::time::Instant;
-use wgpu::{BindGroup, BufferSize, Color, ComputePassDescriptor};
+use qvek::{
+    i16vec3, ivec3, ivec4, uvec2, uvec3, vec2, vec3, vec4,
+    vek::{Clamp, Vec3},
+};
+use std::{
+    mem::{size_of, transmute},
+    time::Instant,
+};
 use wgpu::{
-    Extent3d, Origin3d, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo,
-    COPY_BYTES_PER_ROW_ALIGNMENT,
+    BufferSize, Color, ComputePassDescriptor, Extent3d, Origin3d, TexelCopyBufferInfo,
+    TexelCopyTextureInfo, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 use winit::window::Window;
 
@@ -58,12 +41,13 @@ use winit::window::Window;
 // if someone has a good idea on how to do it, message me (or just make a PR)
 impl<'window> InternalRendererWebGPU<'window> {
     pub fn update_camera(&mut self) {
-        self.camera.update_camera(true);
+        self.camera.update_camera(true); // wgpu has worst possible y orientation
+                                         // like, why would we have Y flipped for UV coords relative to clip space?
+                                         // Whats next - make (0,0) at (0.23, -0.55) and rotate each axis by 5.01∘ ?
     }
 
     pub fn update_light_transform(&mut self) {
         self.light.update_light_transform(self.settings.world_size, false);
-        // let horizon =
     }
 
     pub fn start_blockify(&mut self) {
@@ -83,15 +67,17 @@ impl<'window> InternalRendererWebGPU<'window> {
 
     // i love the fact that none of these does anything
     #[optimize(speed)]
-    // Note: this is the last function that can be called before Vulkan interraction
-    // which means that you HAVE to wait at most after it
+    /// CPU-only function that determines which blocks need light to be updated and adds them to queue (of which blocks to update)
+    /// Note: this is the last function that can be called before Vulkan interraction
+    /// which means that you HAVE to wait at most after it
     pub fn find_radiance_to_update(&mut self) {
         // separation for multiverse
-        // let self = &mut *__self;
         flame::start("prepare");
-        // somehow caching allocated is slower...
-        // let mut visited = &mut self.m_ru_visited;
-        // visited.fill(false);
+
+        // somehow caching allocated is slower... TODO:
+        // explanation: i used to avoid new allocation by reusing memory but somehow thats slower than freeing and allocating new Vec every frame
+
+        // TODO: optimize with "spreading" / "blurring" apporach where we do 3 (X,Y,Z) passes with 1x1x3 kernel
 
         // like a hash_set, but optimized (no hashing, no collisions)
         // its literally 3d array of bools, each corresponding to "if set"
@@ -148,36 +134,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                             }
                         }
                     }
-
-                    // so, the idea is to make less checks, and also .set() only once (in asm)
-                    // let found_non_empty = Self::function_i_had_to_write_to_be_able_to_use_goto(
-                    //     &self.settings.world_size,
-                    //     &self.current_world,
-                    //     &mut visited,
-                    //     zz,
-                    //     yy,
-                    //     xx,
-                    // );
-                    // if found_non_empty {
-                    //     let offset = (xx + yy + zz) as i32 % magic_number;
-                    //     visited.set(xx as usize, yy as usize, zz as usize, true);
-                    //     pushed_radiance_count += 1;
-                    // }
                 }
             }
         }
-
-        // self.radiance_updates.clear();
-
-        // for zz in 0..self.settings.world_size.z {
-        //     for yy in 0..self.settings.world_size.y {
-        //         for xx in 0..self.settings.world_size.x {
-        //             if visited.get(xx as usize, yy as usize, zz as usize) {
-        //                 self.radiance_updates.push(i8vec4::new(xx as i8, yy as i8, zz as i8, 0));
-        //             }
-        //         }
-        //     }
-        // }
 
         self.radiance_updates.resize(pushed_radiance_count as usize, ivec4::zero());
 
@@ -197,38 +156,31 @@ impl<'window> InternalRendererWebGPU<'window> {
         flame::end("algorithm");
         flame::start("special");
 
-        // special updates are ones requested via API
-        for u in &self.special_radiance_updates {
-            // if not already updated in loop before, add it to the queue
-            if !visited.get(u.x as usize, u.y as usize, u.z as usize) {
-                self.radiance_updates.push(*u);
-            }
-        }
+        // Special updates are ones requested via API
+        // If not already picked for an update, add it to the queue
+        self.radiance_updates.extend(
+            self.special_radiance_updates
+                .iter()
+                .filter(|u| !visited.get(u.x as usize, u.y as usize, u.z as usize)),
+        );
+
         flame::end("special");
 
         drop(visited);
     }
 
-    #[optimize(speed)]
-    pub fn update_radiance(&mut self) {
-        // separation for multiverse
-        Self::internal_update_radiance(self);
-    }
-
-    // starts the stage where you can "request drawing" things
-    // under the hood it prepares Vulkan for recording draw calls
-    /// Begins the frame—updates camera/light transforms and creates a new command encoder.
+    /// Starts the stage where you can "request drawing" things
     pub fn start_frame(&mut self) {
         let now = Instant::now();
         let delta = now - self.last_time;
-        self.delta_time = (delta.subsec_nanos() as f64 / 1e9 as f64) as f32;
+        self.delta_time = (delta.subsec_nanos() as f64 / 1e9_f64) as f32;
         self.last_time = now;
 
         self.update_camera();
         self.update_light_transform();
 
-        // In WGPU you typically create one command encoder per frame.
-        // Save the encoder to a field (assumed to be Option<wgpu::CommandEncoder>).
+        // we use single encoder for the entire frame
+        // this is essentially just a command buffer
         self.current_encoder = Some(self.wal.device.create_command_encoder(
             &wgpu::CommandEncoderDescriptor {
                 label: Some("Frame Command Encoder"),
@@ -236,16 +188,12 @@ impl<'window> InternalRendererWebGPU<'window> {
         ));
     }
 
-    // #[multiversion(targets("x86_64+avx2"))]
     #[optimize(speed)]
-    /// Updates the radiance field by copying staging data, dispatching compute work, and setting push constants.
-    fn internal_update_radiance(&mut self) {
-        // Get the current command encoder.
-        let encoder = self.current_encoder.as_mut().unwrap();
-
+    /// Updates the radiance field (per-block lighting) by copying staging data and dispatching compute work.
+    fn update_radiance(&mut self) {
         // Copy radiance_updates from CPU memory to staging buffer.
         let count_to_copy = self.radiance_updates.len();
-        let size_to_copy = (count_to_copy * size_of::<ivec4>()) as usize;
+        let size_to_copy = count_to_copy * size_of::<ivec4>();
         let data: &[u8] = unsafe {
             std::slice::from_raw_parts(self.radiance_updates.as_ptr() as *const u8, size_to_copy)
         };
@@ -264,19 +212,21 @@ impl<'window> InternalRendererWebGPU<'window> {
         }
 
         // Begin a compute pass.
-        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Radiance Compute Pass"),
-            timestamp_writes: None,
-        });
-        // Bind the compute pipeline.
-        // let bind_group = self.pipes.radiance_pipe.bind_groups.as_ref().unwrap().current();
-        // compute_pass.set_pipeline(self.pipes.radiance_pipe.pipeline.as_ref().unwrap());
-        // compute_pass.set_bind_group(0, Some(bind_group), &[]);
-        self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.radiance_pipe);
+        let mut compute_pass = self
+            .current_encoder
+            .as_mut()
+            .unwrap()
+            .begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Radiance Compute Pass"),
+                timestamp_writes: None,
+            })
+            .forget_lifetime();
 
         // Dispatch the compute work.
+
+        self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.radiance_pipe);
+
         let workgroup_count = count_to_copy as u32;
-        // println!("{workgroup_count}");
 
         self.wal.dispatch_with_params(
             &mut compute_pass,
@@ -290,14 +240,11 @@ impl<'window> InternalRendererWebGPU<'window> {
 
     /// Shifts the radiance cache texture content by copying a region from the "current" image
     /// to the "previous" image and then copying it back with an offset.
+    /// This exists because Lum operates on small-size world
+    /// and you are supposed to project your big world to Lum world (and also position camera relative to projection)
+    /// and moving this "sliding window" makes light move in opposite direction, which we fix by shifting it back
+    /// (this leaves gaps in light on borders, but we kinda just hope they will get updated)
     pub fn shift_radiance(&mut self, radiance_shift: ivec3) {
-        // Retrieve the command encoder (assumed to be stored in self.current_encoder).
-        let encoder = self
-            .current_encoder
-            .as_mut()
-            .expect("Must have a command encoder active during shift_radiance");
-
-        // Compute the effective shift.
         let cam_shift = radiance_shift;
 
         // If the shift in any axis is greater than or equal to world size, nothing is done.
@@ -320,7 +267,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             process_axis(cam_shift.z, self.settings.world_size.z as i32).y
         );
 
-        // Compute the intersection size.
+        // Compute the intersection size of new "sliding window" position and old one
         let intersection_size = self.settings.world_size
             - uvec3!(
                 cam_shift.x.unsigned_abs(),
@@ -334,8 +281,12 @@ impl<'window> InternalRendererWebGPU<'window> {
             depth_or_array_layers: intersection_size.z,
         };
 
-        // First, copy from the current radiance cache to the previous one.
-        // In WGPU, we use copy_texture_to_texture. (No explicit barriers are needed.)
+        // We have just "move_next"ed, and updated (most recent) radiance_cache image is previous().
+        // Not updated (so outdated) is current() and we can safely overwrite it (use as temp storage as we do here).
+        // previous() will be used for generating new current(),
+        // and then they will be swapped in the end of the frame (with move_next()).
+
+        // First, copy the previous() (aka latest) radiance cache to the current() (aka temp storage) one
         let src_copy = TexelCopyTextureInfo {
             texture: &self.independent_images.radiance_cache.previous().texture,
             mip_level: 0,
@@ -352,9 +303,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         };
-        encoder.copy_texture_to_texture(src_copy, dst_copy, copy_extent);
+        self.current_encoder.as_mut().unwrap().copy_texture_to_texture(
+            src_copy,
+            dst_copy,
+            copy_extent,
+        );
 
-        // Then, copy back from the previous image to the current one with a destination offset.
+        // Then, copy back from the current() (aka temp storage) image to the previous() (aka latest) one with a destination offset.
         let src_back = TexelCopyTextureInfo {
             texture: &self.independent_images.radiance_cache.current().texture,
             mip_level: 0,
@@ -371,203 +326,123 @@ impl<'window> InternalRendererWebGPU<'window> {
             },
             aspect: wgpu::TextureAspect::All,
         };
-        encoder.copy_texture_to_texture(src_back, dst_back, copy_extent);
+
+        self.current_encoder.as_mut().unwrap().copy_texture_to_texture(
+            src_back,
+            dst_back,
+            copy_extent,
+        );
     }
 
-    /// Executes various copies:
-    /// 1. Clears the current origin block palette texture.
-    /// 2. Copies a static block palette region.
-    /// 3. Executes a queue of additional block copies.
-    /// 4. Copies the world buffer to the world texture.
     pub fn exec_copies(&mut self) {
-        let encoder = self
-            .current_encoder
+        assert!(self.static_block_palette_size < BLOCK_PALETTE_SIZE_X);
+
+        // At this point, we have written to block_palette.current() in map_meshes
+        // then we "move_next"ed the block_palette.
+        // (cause its faster to zero entire image and copy static block_palette part back)
+        // so we put data back by copying current() to previous() and now both are purely static palette
+
+        // Copy the static block palette region from untouched image .
+        let copy_extent = Extent3d {
+            // TODO: we assume that static block palettes only take the first raw, which is a bad assumption
+            width: 16 * self.static_block_palette_size,
+            height: 16,
+            depth_or_array_layers: 16,
+        };
+        // at this point, current block_palette texture is
+        let src = TexelCopyTextureInfo {
+            texture: &self.independent_images.block_palette.previous().texture,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        };
+        let dst = TexelCopyTextureInfo {
+            texture: &self.independent_images.block_palette.current().texture,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        };
+        self.current_encoder
             .as_mut()
-            .expect("Command encoder should be active during exec_copies");
+            .unwrap()
+            .copy_texture_to_texture(src, dst, copy_extent);
 
-        // Clear the current origin block palette.
-        // In WGPU, a texture can be cleared via a render pass.
-        {
-            let clear_color = wgpu::Color::default();
-            // Assume self.independent_images.origin_block_palette.current_view() returns a &wgpu::TextureView.
-            let view = &self.independent_images.block_palette.current().view;
-            let rp_desc = wgpu::RenderPassDescriptor {
-                label: Some("Clear OriginBlockPalette"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            };
-            {
-                //TODO:
-                // encoder.clear_texture();
-            }
-        }
-
-        // Copy the static block palette region.
-        {
-            let copy_extent = Extent3d {
-                width: 16 * self.static_block_palette_size,
-                height: 16,
-                depth_or_array_layers: 16,
-            };
-            let src = TexelCopyTextureInfo {
-                texture: &self.independent_images.block_palette.previous().texture,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            };
-            let dst = TexelCopyTextureInfo {
-                texture: &self.independent_images.block_palette.current().texture,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            };
-            encoder.copy_texture_to_texture(src, dst, copy_extent);
-        }
-
-        // Execute additional block copy commands if any.
-        if !self.block_copies_queue.is_empty() {
-            for (src, dst, region) in self.block_copies_queue.iter() {
-                encoder.copy_texture_to_texture(*src, *dst, *region);
-            }
+        // Execute all the requested copies (for "duplicating" blocks data in block palette.
+        // We need this to write model voxels to world)
+        for (src, dst, region) in self.block_copies_queue.iter() {
+            self.current_encoder
+                .as_mut()
+                .unwrap()
+                .copy_texture_to_texture(*src, *dst, *region);
         }
 
         // Finally, copy the world buffer to the world texture.
-        {
-            let bytes_per_row = self.settings.world_size.x * std::mem::size_of::<BlockId>() as u32;
+        let bytes_per_row = self.settings.world_size.x * std::mem::size_of::<BlockId>() as u32;
 
-            //TODO: idk pad this
-            let padded_bytes_per_row = bytes_per_row.next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT);
+        //TODO: idk pad this
+        let padded_bytes_per_row = bytes_per_row.next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT);
 
-            let layout = wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(self.settings.world_size.y),
-                // rows_per_image: None, // not required?
-            };
-            let buffer_copy = TexelCopyBufferInfo {
-                buffer: self.buffers.staging_world.current(),
-                layout,
-            };
-            let dst = TexelCopyTextureInfo {
-                texture: &self.independent_images.world.current().texture,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            };
-            let extent = Extent3d {
-                width: self.settings.world_size.x,
-                height: self.settings.world_size.y,
-                depth_or_array_layers: self.settings.world_size.z,
-            };
+        let layout = wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(padded_bytes_per_row),
+            rows_per_image: Some(self.settings.world_size.y),
+            // rows_per_image: None, // not required?
+        };
+        let buffer_copy = TexelCopyBufferInfo {
+            buffer: self.buffers.staging_world.current(),
+            layout,
+        };
+        let dst = TexelCopyTextureInfo {
+            texture: &self.independent_images.world.current().texture,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        };
+        let extent = Extent3d {
+            width: self.settings.world_size.x,
+            height: self.settings.world_size.y,
+            depth_or_array_layers: self.settings.world_size.z,
+        };
 
-            encoder.copy_buffer_to_texture(buffer_copy, dst, extent);
-        }
-        // let (dim_x, dim_y, dim_z) = (&mut self.renderer).current_world.dimensions();
-        // let count_to_copy = dim_x * dim_y * dim_z;
-        // // Cast the current world data to a byte slice.
-        // let data: &[u8] = unsafe {
-        //     std::slice::from_raw_parts(
-        //         (&mut self.renderer).current_world.data.as_ptr() as *const u8,
-        //         count_to_copy * size_of::<BlockId>(),
-        //     )
-        // };
-        // self.wal.queue.write_texture(
-        //     TexelCopyTextureInfo {
-        //         texture: todo!(),
-        //         mip_level: todo!(),
-        //         origin: todo!(),
-        //         aspect: todo!(),
-        //     },
-        //     data,
-        //     TexelCopyBufferLayout {
-        //         offset: 0,
-        //         bytes_per_row: todo!(),
-        //         rows_per_image: todo!(),
-        //     },
-        //     Extent3d {
-        //         width: dim_x,
-        //         height: dim_y,
-        //         depth_or_array_layers: dim_z,
-        //     },
-        // );
+        self.current_encoder
+            .as_mut()
+            .unwrap()
+            .copy_buffer_to_texture(buffer_copy, dst, extent);
     }
 
     pub fn gen_perlin_noises(&mut self) {
-        //
-
         let mut encoder = self.wal.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("perlin noise encoder"),
         });
 
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("perlin noise generation pass"),
-                timestamp_writes: None,
-            });
+        let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("perlin noise generation pass"),
+            timestamp_writes: None,
+        });
 
-            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin2d_pipe);
+        self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin2d_pipe);
 
-            self.wal.dispatch_with_params(
-                &mut compute_pass,
-                &mut self.pipes.gen_perlin2d_pipe,
-                None,
-                (self.origin_world.x_size as u32 + 7) / 8,
-                (self.origin_world.y_size as u32 + 7) / 8,
-                1,
-            );
+        self.wal.dispatch_with_params(
+            &mut compute_pass,
+            &mut self.pipes.gen_perlin2d_pipe,
+            None,
+            self.origin_world.x_size.div_ceil(8) as u32,
+            self.origin_world.y_size.div_ceil(8) as u32,
+            1,
+        );
 
-            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin3d_pipe);
+        self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin3d_pipe);
 
-            self.wal.dispatch_with_params(
-                &mut compute_pass,
-                &mut self.pipes.gen_perlin3d_pipe,
-                None,
-                32 / 4,
-                32 / 4,
-                32 / 4,
-            );
-        };
+        self.wal.dispatch_with_params(
+            &mut compute_pass,
+            &mut self.pipes.gen_perlin3d_pipe,
+            None,
+            32 / 4,
+            32 / 4,
+            32 / 4,
+        );
 
-        self.pipes.gen_perlin2d_pipe.static_bind_groups.as_mut().unwrap().move_next();
-        self.pipes.gen_perlin3d_pipe.static_bind_groups.as_mut().unwrap().move_next();
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("perlin noise generation pass"),
-                timestamp_writes: None,
-            });
-
-            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin2d_pipe);
-
-            self.wal.dispatch_with_params(
-                &mut compute_pass,
-                &mut self.pipes.gen_perlin2d_pipe,
-                None,
-                (self.origin_world.x_size as u32 + 7) / 8,
-                (self.origin_world.y_size as u32 + 7) / 8,
-                1,
-            );
-
-            self.wal.bind_compute_pipeline(&mut compute_pass, &self.pipes.gen_perlin3d_pipe);
-
-            self.wal.dispatch_with_params(
-                &mut compute_pass,
-                &mut self.pipes.gen_perlin3d_pipe,
-                None,
-                32 / 4,
-                32 / 4,
-                32 / 4,
-            );
-        };
+        drop(compute_pass);
         self.wal.queue.submit([encoder.finish()]);
     }
 }
@@ -690,32 +565,11 @@ impl<'window> RendererWgpu<'window> {
 
         let pipe = &mut self.renderer.pipes.diffuse_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
         );
-
-        #[repr(C)]
-        #[derive(Clone, Copy, AsU8Slice)]
-        struct PushConstant {
-            v1: vec4,
-            v2: vec4,
-            lp: mat4,
-        }
-
-        let transmuted_frame = unsafe { f32::from_bits(i32::cast_unsigned(666)) };
-        let push_constant = PushConstant {
-            v1: vec4!(self.renderer.camera.camera_pos, transmuted_frame),
-            v2: vec4!(self.renderer.camera.camera_dir, 0),
-            lp: self.renderer.light.light_transform,
-        };
-
-        // rpass.set_push_constants(
-        //     wgpu::ShaderStages::VERTEX_FRAGMENT,
-        //     0,
-        //     push_constant.as_u8_slice(),
-        // );
 
         // Draw fullscreen triangle
         rpass.draw(0..3, 0..1);
@@ -741,7 +595,7 @@ impl<'window> RendererWgpu<'window> {
         );
         let pipe = &mut self.renderer.pipes.ao_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
@@ -778,7 +632,7 @@ impl<'window> RendererWgpu<'window> {
 
         let pipe = &mut self.renderer.pipes.fill_stencil_glossy_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
@@ -849,8 +703,6 @@ impl<'window> RendererWgpu<'window> {
         rpass.set_stencil_reference(0x02);
 
         for vrr in &self.volumetric_que {
-            let volumetric_mesh = self.storage.volumetrics.get(vrr.mesh.0).unwrap();
-
             #[repr(C)]
             #[derive(Clone, Copy, AsU8Slice)]
             struct PushConstant {
@@ -871,14 +723,12 @@ impl<'window> RendererWgpu<'window> {
                 0,
                 std::num::NonZero::new(count as u64).unwrap(),
             );
-            let src_pc_slice_u8 = unsafe {
-                std::slice::from_raw_parts(pipe.push_constants.as_ptr() as *const u8, count)
-            };
+            let src_pc_slice_u8 =
+                unsafe { std::slice::from_raw_parts(pipe.push_constants.as_ptr(), count) };
             write.unwrap().copy_from_slice(src_pc_slice_u8);
 
             self.renderer.wal.draw_with_params(
                 &mut rpass,
-                pipe.pipe.line.as_ref().unwrap(),
                 Some(pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
                 pipe.pc_bg.as_ref(),
                 0..36,
@@ -920,7 +770,7 @@ impl<'window> RendererWgpu<'window> {
 
         let pipe = &mut self.renderer.pipes.glossy_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
@@ -958,7 +808,7 @@ impl<'window> RendererWgpu<'window> {
 
         let pipe = &mut self.renderer.pipes.smoke_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
@@ -1014,7 +864,7 @@ impl<'window> RendererWgpu<'window> {
 
             let pipe = &mut self.renderer.pipes.tonemap_pipe;
 
-            let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+            self.renderer.wal.bind_raster_pipeline(
                 &mut rpass,
                 pipe.line.as_ref().unwrap(),
                 pipe.static_bind_groups.as_ref(),
@@ -1184,14 +1034,7 @@ impl<'window> RendererWgpu<'window> {
     }
 
     fn blockify_models(&mut self) {
-        {
-            let this = &mut self.renderer;
-            this.block_copies_queue.clear();
-            this.palette_counter = this.static_block_palette_size as usize;
-
-            // reset the current world to the origin
-            this.current_world.copy_data_from(&this.origin_world);
-        };
+        self.renderer.start_blockify();
         for mrr in &self.model_que {
             let model_mesh = self.storage.models.get(mrr.mesh.0).unwrap();
             {
@@ -1297,7 +1140,7 @@ impl<'window> RendererWgpu<'window> {
             };
         }
         {
-            let (dim_x, dim_y, dim_z) = (&mut self.renderer).current_world.dimensions();
+            let (dim_x, dim_y, dim_z) = self.renderer.current_world.dimensions();
             let padded_dim_x = (dim_x)
                 .next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT as usize / size_of::<BlockId>());
             let padded_count_to_copy = padded_dim_x * dim_y * dim_z;
@@ -1306,9 +1149,8 @@ impl<'window> RendererWgpu<'window> {
             for zz in 0..dim_z {
                 for yy in 0..dim_y {
                     for xx in 0..dim_x {
-                        let index = (xx + yy * padded_dim_x + zz * padded_dim_x * dim_y) as usize;
-                        padded_data[index] =
-                            self.renderer.current_world[(xx as usize, yy as usize, zz as usize)];
+                        let index = xx + yy * padded_dim_x + zz * padded_dim_x * dim_y;
+                        padded_data[index] = self.renderer.current_world[(xx, yy, zz)];
                     }
                 }
             }
@@ -1330,7 +1172,7 @@ impl<'window> RendererWgpu<'window> {
         };
     }
 
-    fn updade_grass(&mut self, wind_direction: vec2) {
+    fn updade_grass(&mut self, _wind_direction: vec2) {
         let mut encoder =
             self.renderer
                 .wal
@@ -1395,7 +1237,7 @@ impl<'window> RendererWgpu<'window> {
 
         // Update the buffer via the queue
         self.renderer.wal.queue.write_buffer(
-            &self.renderer.buffers.ao_lut_uniform.current(),
+            self.renderer.buffers.ao_lut_uniform.current(),
             0,
             unsafe {
                 std::slice::from_raw_parts(
@@ -1449,7 +1291,6 @@ impl<'window> RendererWgpu<'window> {
         const QUALITY_SIZE: u32 = 32;
 
         for lrr in &self.liquid_que {
-            let liquid_mesh = self.storage.liquids.get_mut(lrr.mesh.0).unwrap();
             let pos: &vec3 = &lrr.pos;
 
             #[repr(C)] // for push constants
@@ -1484,14 +1325,12 @@ impl<'window> RendererWgpu<'window> {
                 0,
                 std::num::NonZero::new(count as u64).unwrap(),
             );
-            let src_pc_slice_u8 = unsafe {
-                std::slice::from_raw_parts(water_pipe.push_constants.as_ptr() as *const u8, count)
-            };
+            let src_pc_slice_u8 =
+                unsafe { std::slice::from_raw_parts(water_pipe.push_constants.as_ptr(), count) };
             write.unwrap().copy_from_slice(src_pc_slice_u8);
 
             self.renderer.wal.draw_with_params(
                 &mut rpass,
-                water_pipe.pipe.line.as_ref().unwrap(),
                 Some(water_pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
                 water_pipe.pc_bg.as_ref(),
                 0..verts_per_water_tape,
@@ -1576,10 +1415,10 @@ impl<'window> RendererWgpu<'window> {
                 foliage_pipe.pc_count += 1;
             }
 
-            let desc = &self.renderer.foliage_descriptions[foliage_index as usize];
+            let desc = &self.renderer.foliage_descriptions[foliage_index];
             let verts_per_blade = desc.vertices;
             let blade_per_instance = 1; //for triangle strip
-            let instances_per_batch = (size * size + (blade_per_instance - 1)) / blade_per_instance;
+            let instances_per_batch = ((size * size) as u32).div_ceil(blade_per_instance);
             let batch_count = foliage_pipe.pc_count as u32;
 
             // only render batch if it has anything to render
@@ -1591,16 +1430,12 @@ impl<'window> RendererWgpu<'window> {
                     std::num::NonZero::new(count as u64).unwrap(),
                 );
                 let src_pc_slice_u8 = unsafe {
-                    std::slice::from_raw_parts(
-                        foliage_pipe.push_constants.as_ptr() as *const u8,
-                        count,
-                    )
+                    std::slice::from_raw_parts(foliage_pipe.push_constants.as_ptr(), count)
                 };
                 write.unwrap().copy_from_slice(src_pc_slice_u8);
 
                 self.renderer.wal.draw_with_params(
                     &mut rpass,
-                    foliage_pipe.pipe.line.as_ref().unwrap(),
                     Some(foliage_pipe.pipe.static_bind_groups.as_ref().unwrap().current()),
                     foliage_pipe.pc_bg.as_ref(),
                     0..verts_per_blade * blade_per_instance,
@@ -1812,7 +1647,7 @@ impl<'window> RendererWgpu<'window> {
 
         let pipe = &mut self.renderer.pipes.lightmap_models_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
@@ -1849,7 +1684,6 @@ impl<'window> RendererWgpu<'window> {
 
                             self.renderer.wal.draw_indexed_with_params(
                                 &mut rpass,
-                                pipe.line.as_ref().unwrap(),
                                 Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                                 buff.pc_bg.as_ref(),
                                 buff.iv.offset..buff.iv.offset + buff.iv.icount,
@@ -1973,23 +1807,10 @@ impl<'window> RendererWgpu<'window> {
 
             let mut draw_indexed_block_face = |face: &mut IndexedVerticesQueue| {
                 if face.pc_bg.is_some() {
-                    // we dont need to update memory since we reuse old one
-
-                    // let count = face.push_constants.len();
-                    // let size = count;
-                    // let write = self.renderer.wal.queue.write_buffer_with(
-                    //     face.pc_buffer.as_ref().unwrap(),
-                    //     0,
-                    //     std::num::NonZero::new(size as u64).unwrap(),
-                    // );
-                    // let src_pc_slice_u8 = unsafe {
-                    //     std::slice::from_raw_parts(face.push_constants.as_ptr() as *const u8, size)
-                    // };
-                    // write.unwrap().copy_from_slice(src_pc_slice_u8);
+                    // we dont need to update push constants memory since we reuse old one
 
                     self.renderer.wal.draw_indexed_with_params(
                         &mut rpass,
-                        pipe.line.as_ref().unwrap(),
                         Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                         face.pc_bg.as_ref(),
                         face.iv.offset..face.iv.offset + face.iv.icount,
@@ -2182,7 +2003,6 @@ impl<'window> RendererWgpu<'window> {
 
                     self.renderer.wal.draw_indexed_with_params(
                         &mut rpass,
-                        pipe.line.as_ref().unwrap(),
                         Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                         face.pc_bg.as_ref(),
                         face.iv.offset..face.iv.offset + face.iv.icount,
@@ -2276,7 +2096,7 @@ impl<'window> RendererWgpu<'window> {
 
         let pipe = &mut self.renderer.pipes.raygen_models_pipe;
 
-        let mut pc_write_view = self.renderer.wal.bind_raster_pipeline(
+        self.renderer.wal.bind_raster_pipeline(
             &mut rpass,
             pipe.line.as_ref().unwrap(),
             pipe.static_bind_groups.as_ref(),
@@ -2353,7 +2173,6 @@ impl<'window> RendererWgpu<'window> {
 
                     self.renderer.wal.draw_indexed_with_params(
                         &mut rpass,
-                        pipe.line.as_ref().unwrap(),
                         Some(pipe.static_bind_groups.as_ref().unwrap().current()),
                         face.pc_bg.as_ref(),
                         face.iv.offset..face.iv.offset + face.iv.icount,
@@ -2729,7 +2548,7 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
 
         // you may wonder why is start_frame here, and not in the beginning
         // this is because it contains GPU-sync, which im trying to delay as much as possible
-        // sadly, it does not help when you are CPU-bound (which is the case here). But still a bit useful
+        // it does not help much when you are CPU-bound (which is the case). But still a bit useful
         self.renderer.start_frame();
         self.update_ubo();
 

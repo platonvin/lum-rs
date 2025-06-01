@@ -1,14 +1,8 @@
 #![allow(non_camel_case_types)]
 //! module with types for wgpu backend, including Push Constant structs (PcName)
 
-use as_u8_slice_derive::AsU8Slice; // cast struct to u8 slice
-use block_mesh::VoxelVisibility;
-use qvek::vek::{
-    self,
-    num_traits::{One, Zero},
-};
-
 use crate::renderer::types::*;
+use as_u8_slice_derive::AsU8Slice; // cast struct to u8 slice
 
 #[allow(non_camel_case_types)]
 pub type BlockId = i32;

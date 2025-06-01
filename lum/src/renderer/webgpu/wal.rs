@@ -3,17 +3,15 @@
 //! Provides abstractions over raw wgpu types to simplify rendering operations of Lum
 
 use lumal::ring::Ring;
-use std::ops::{Deref, DerefMut};
-use std::{borrow::Cow, collections::HashMap, num::NonZero};
+use std::borrow::Cow;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BufferBinding, BufferBindingType, ColorTargetState,
-    ComputePipelineDescriptor, Features, FragmentState, FrontFace, MultisampleState,
-    PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology,
-    RenderPipelineDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource,
+    BindGroupLayoutEntry, ColorTargetState, ComputePipelineDescriptor, Features, FragmentState,
+    FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState,
+    PrimitiveTopology, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource,
     VertexBufferLayout, VertexState,
 };
-use wgpu::{BindingResource, BindingType, Buffer, DepthStencilState, Limits, Queue, ShaderStages};
+use wgpu::{DepthStencilState, Limits};
 use winit::window::Window;
 
 /// Manages the core wgpu state and resources required for rendering.
@@ -238,11 +236,6 @@ impl<'window> Wal<'window> {
         (0..ring_size).map(|_| self.create_buffer(usage, buffer_size, label)).collect()
     }
 
-    // Such functions are not needed since wgpu deallocates them on drop
-    // pub fn destroy_buffer(&self, buffer: wgpu::Buffer) {
-    //     buffer.destroy();
-    // }
-
     /// Creates a GPU buffer and uploads provided data into it
     #[inline]
     pub fn create_and_upload_buffer<T>(
@@ -356,23 +349,29 @@ impl<'window> Wal<'window> {
             });
 
         // Create static bind group for each frame in flight
-        let static_bind_groups: Vec<_> = (0..frame_count)
-            .map(|frame| {
-                let bind_group_entries: Vec<_> = static_bind_descriptions
-                    .iter()
-                    .map(|b| BindGroupEntry {
-                        binding: b.binding,
-                        resource: b.resources[frame].clone(),
-                    })
-                    .collect();
+        let static_bind_groups = if static_bind_descriptions.is_empty() {
+            None
+        } else {
+            Some(Ring::from_vec(
+                (0..frame_count)
+                    .map(|frame| {
+                        let bind_group_entries: Vec<_> = static_bind_descriptions
+                            .iter()
+                            .map(|b| BindGroupEntry {
+                                binding: b.binding,
+                                resource: b.resources[frame].clone(),
+                            })
+                            .collect();
 
-                self.device.create_bind_group(&BindGroupDescriptor {
-                    label,
-                    layout: &static_bind_group_layout,
-                    entries: &bind_group_entries,
-                })
-            })
-            .collect();
+                        self.device.create_bind_group(&BindGroupDescriptor {
+                            label,
+                            layout: &static_bind_group_layout,
+                            entries: &bind_group_entries,
+                        })
+                    })
+                    .collect(),
+            ))
+        };
 
         // Create layout for dynamic bind groups
         let dynamic_bind_group_layout = (!dynamic_bind_descriptions.is_empty()).then(|| {
@@ -449,7 +448,7 @@ impl<'window> Wal<'window> {
         RasterPipe {
             line: Some(render_pipeline),
             layout: Some(pipeline_layout),
-            static_bind_groups: Some(Ring::from_vec(static_bind_groups)),
+            static_bind_groups,
             dynamic_bind_group_layout,
         }
     }
@@ -474,7 +473,7 @@ impl<'window> Wal<'window> {
             })
             .collect();
 
-        let mut all_bind_group_layout_entries = static_bind_group_layout_entries.clone();
+        let all_bind_group_layout_entries = static_bind_group_layout_entries.clone();
 
         let static_bind_group_layout =
             self.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -482,9 +481,9 @@ impl<'window> Wal<'window> {
                 entries: &all_bind_group_layout_entries,
             });
 
-        let mut static_bind_groups: Vec<_> = (0..frame_count)
+        let static_bind_groups: Vec<_> = (0..frame_count)
             .map(|frame| {
-                let mut bind_group_entries: Vec<_> = static_bind_descriptions
+                let bind_group_entries: Vec<_> = static_bind_descriptions
                     .iter()
                     .map(|b| BindGroupEntry {
                         binding: b.binding,
@@ -583,14 +582,14 @@ impl<'window> Wal<'window> {
     pub fn draw_with_params<'a>(
         &self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        pipeline: &'a wgpu::RenderPipeline, // Now passed individually
         static_bind_groups: Option<&BindGroup>,
         dynamic_bind_group: Option<&BindGroup>,
         vertices: core::ops::Range<u32>,
         instances: core::ops::Range<u32>,
     ) {
         let mut bind_index = 0;
-        if let Some(ref static_bind_groups) = static_bind_groups {
+        if let Some(_static_bind_groups) = static_bind_groups {
+            // already bound
             bind_index += 1;
         }
 
@@ -605,7 +604,6 @@ impl<'window> Wal<'window> {
     pub fn draw_indexed_with_params<'a>(
         &self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        pipeline: &'a wgpu::RenderPipeline, // Now passed individually
         static_bind_groups: Option<&BindGroup>,
         dynamic_bind_group: Option<&BindGroup>,
         indices: core::ops::Range<u32>,
@@ -613,7 +611,8 @@ impl<'window> Wal<'window> {
         instances: core::ops::Range<u32>,
     ) {
         let mut bind_index = 0;
-        if let Some(ref static_bind_groups) = static_bind_groups {
+        if let Some(_static_bind_groups) = static_bind_groups {
+            // already bound
             bind_index += 1;
         }
 
@@ -635,8 +634,8 @@ impl<'window> Wal<'window> {
         workgroup_count_z: u32,
     ) {
         let mut bind_index = 0;
-        if let Some(ref static_bind_groups) = pipe.static_bind_groups {
-            // compute_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+        if let Some(ref _static_bind_groups) = pipe.static_bind_groups {
+            // already bound
             bind_index += 1;
         }
 
@@ -648,10 +647,3 @@ impl<'window> Wal<'window> {
         compute_pass.dispatch_workgroups(workgroup_count_x, workgroup_count_y, workgroup_count_z);
     }
 }
-
-/*
-order goes like this:
-static bind group
-push_constants
-dynamic bind group
-*/

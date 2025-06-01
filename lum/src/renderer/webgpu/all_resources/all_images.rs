@@ -147,15 +147,13 @@ impl<'window> InternalRendererWebGPU<'window> {
     // dependent = swapchain dependent
     pub fn create_dependent_images(
         wal: &Wal,
-        lum_settings: &Settings,
+        _lum_settings: &Settings,
     ) -> AllSwapchainDependentImages {
         let sextent = wgpu::Extent3d {
             width: wal.config.width,
             height: wal.config.height,
             depth_or_array_layers: 1,
         };
-
-        let fif = wal.config.desired_maximum_frame_latency as usize;
 
         let mat_norm = wal.create_image(
             wgpu::TextureDimension::D2,

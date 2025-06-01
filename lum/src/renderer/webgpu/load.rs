@@ -1,26 +1,21 @@
-use std::mem;
-
-use block_mesh::{greedy_quads, ilattice::extent, GreedyQuadsBuffer, VoxelVisibility};
-use lumal::atrace;
-use qvek::{vec3, vek::Vec3};
-use renderer::*;
-use wgpu::{
-    naga::valid::TypeFlags, util::DeviceExt, BindGroupDescriptor, BindGroupEntry,
-    BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Extent3d, Origin3d,
-    SamplerBindingType, ShaderStages, TexelCopyBufferLayout, TexelCopyTextureInfo,
-    TextureSampleType, TextureViewDimension,
-};
-use wgpu::{BufferBinding, BufferUsages};
-// use rand::Rng;
 use crate::renderer::types::*;
 use crate::{
     containers::Array3D,
     renderer::webgpu::types::*,
     renderer::{
         load_interface::LoadInterface,
-        webgpu::{BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, BLOCK_SIZE, FRAMES_IN_FLIGHT},
+        webgpu::{BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y, BLOCK_SIZE},
     },
     *,
+};
+use block_mesh::{greedy_quads, GreedyQuadsBuffer};
+use qvek::vec3;
+use renderer::*;
+use wgpu::BufferUsages;
+use wgpu::{
+    util::DeviceExt, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntry, BindingType, Extent3d, Origin3d, ShaderStages, TexelCopyBufferLayout,
+    TexelCopyTextureInfo,
 };
 
 #[repr(C)]
@@ -485,21 +480,6 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
             let (vertexes, indices) =
                 self.create_and_upload_contour_buffers(&circ_verts, &all_indices);
 
-            let pc_buffer_bind_group_layout =
-                self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                    label: Some("Layout of fake PC for block mesh side"),
-                    entries: &[BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                        ty: BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                });
-
             macro_rules! create_indexed_vertices_queue {
                 ($wal:expr, $pc_layout:expr, $triangles:expr, $label_suffix:expr, $buffer_usage:expr, $buffer_size:expr) => {{
                     let buffer = $wal.create_buffer(
@@ -507,22 +487,11 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                         $buffer_size,
                         Some(&format!("PC buffer for {}", $label_suffix)),
                     );
-                    // let bind_group = $wal.device.create_bind_group(&BindGroupDescriptor {
-                    //     label: Some(&format!("PC buffer for {}", $label_suffix)),
-                    //     layout: $pc_layout,
-                    //     entries: &[BindGroupEntry {
-                    //         binding: 0,
-                    //         resource: wgpu::BindingResource::Buffer(
-                    //             buffer.as_entire_buffer_binding(),
-                    //         ),
-                    //     }],
-                    // });
                     IndexedVerticesQueue {
                         iv: $triangles,
                         push_constants: vec![],
                         pc_count: 0,
                         pc_buffer: Some(buffer),
-                        // pc_bg: Some(bind_group),
                         // we dont create bind group here cause we want it to also contain Voxel data, which comes into play later. So None for now
                         pc_bg: None,
                     }

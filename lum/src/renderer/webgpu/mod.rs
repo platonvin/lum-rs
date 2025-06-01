@@ -5,19 +5,16 @@ pub mod render;
 pub mod types;
 pub mod wal;
 
-use std::future::IntoFuture;
-use std::time::Instant;
-
+use super::Settings;
 use super::{Camera, SunLight};
+use crate::renderer::types::*;
+use crate::{containers::Array3D, renderer::webgpu::types::*};
 use futures::executor;
 use lumal::ring::Ring;
+use std::time::Instant;
 use wal::{ComputePipe, Image, RasterPipe, Wal};
 use wgpu::{Extent3d, TextureFormat};
 use winit::window::Window;
-
-use super::Settings;
-use crate::renderer::types::*;
-use crate::{containers::Array3D, renderer::webgpu::types::*};
 
 const FRAME_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth32Float;
@@ -265,7 +262,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     /// Called when the window is resized. This method recreates dependent resources.
     pub fn recreate_window(&mut self, window: &Window) {
         // poll the device to make sure work is finished:
-        self.wal.device.poll(wgpu::MaintainBase::Wait);
+        self.wal.device.poll(wgpu::MaintainBase::Wait).unwrap();
 
         // 2. Reconfigure the surface (swapchain) using our Wal's resize method.
         self.wal.resize(window.inner_size());
@@ -295,27 +292,22 @@ fn create_dependent(
     wal: &wal::Wal,
     settings: &Settings,
     foliage_descriptions: &[MeshFoliageDesc],
-    lumal_settings: &Settings,
+    _lumal_settings: &Settings,
     independent_images: &AllIndependentImages,
     buffers: &AllBuffers,
     samplers: &AllSamplers,
 ) -> (AllSwapchainDependentImages, AllPipes) {
-    let mut dependent_images = InternalRendererWebGPU::create_dependent_images(wal, settings);
-    // let mut pipes: AllPipes = AllPipes::default();
-    // pipes
-    //     .raygen_foliage_pipes
-    //     .resize_with(foliage_descriptions.len(), || RasterPipe::default());
+    let dependent_images = InternalRendererWebGPU::create_dependent_images(wal, settings);
 
-    let pipes = unsafe {
-        InternalRendererWebGPU::create_all_pipes(
-            wal,
-            settings,
-            buffers,
-            independent_images,
-            &dependent_images,
-            samplers,
-            foliage_descriptions,
-        )
-    };
+    let pipes = InternalRendererWebGPU::create_all_pipes(
+        wal,
+        settings,
+        buffers,
+        independent_images,
+        &dependent_images,
+        samplers,
+        foliage_descriptions,
+    );
+
     (dependent_images, pipes)
 }

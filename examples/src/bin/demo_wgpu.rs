@@ -140,7 +140,13 @@ impl<'renderer> AppState<'renderer> {
             // window,
             lum,
             meshes,
-            transforms: Default::default(),
+            transforms: AllTransforms {
+                tank_body: MeshTransform {
+                    rotation: Default::default(),
+                    translation: vec3::new(13.1, 14.1, 3.1) * 16.0,
+                },
+                ..Default::default()
+            },
             about_to_close: false,
         }
     }
@@ -219,7 +225,7 @@ impl<'renderer> AppState<'renderer> {
     }
 
     pub fn render(&mut self) {
-        self.transforms.tank_body.translation = vec3::new(13.1, 14.1, 3.1) * 16.0;
+        self.transforms.tank_body.translation.x -= 10.0 * self.lum.renderer.delta_time;
 
         self.lum.start_frame();
 

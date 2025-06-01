@@ -1,9 +1,7 @@
-use crate::renderer::types::*;
-use crate::renderer::webgpu::PipeWithPushConstants;
+use crate::renderer::{types::*, webgpu::PipeWithPushConstants};
 use crate::{
     renderer::webgpu::types::*,
     renderer::{
-        self,
         webgpu::{
             wal::{
                 DynamicBindGroupDescription, Image, ShaderStageSource, StaticBindGroupDescription,
@@ -41,72 +39,77 @@ pub fn images_to_binding_resources<'a>(images: &'a Ring<Image>) -> Ring<BindingR
 pub fn images_to_binding_resources_previous<'a>(
     images: &'a Ring<Image>,
 ) -> Ring<BindingResource<'a>> {
-    // let resources = images.iter().map(|img| BindingResource::TextureView(&img.view)).collect();
-    let mut resources = vec![];
-    for i in 0..images.len() {
-        let src_i = if i == 0 { images.len() - 1 } else { i - 1 };
-        resources.push(BindingResource::TextureView(&images[src_i].view));
-    }
-    Ring::from_vec(resources)
+    Ring::from_vec(
+        (0..images.len())
+            .map(|i| {
+                let src_i = if i == 0 { images.len() - 1 } else { i - 1 };
+                BindingResource::TextureView(&images[src_i].view)
+            })
+            .collect(),
+    )
 }
 pub fn sampler_to_binding_resources<'a>(sampler: &'a wgpu::Sampler) -> Ring<BindingResource<'a>> {
     let resources = vec![BindingResource::Sampler(sampler)];
     Ring::from_vec(resources)
 }
+
 pub fn rings_of_buffers_to_ring_of_buffer_bindings<'a>(
     rings_of_buffers: &[Ring<&'a wgpu::Buffer>],
 ) -> Option<Ring<Vec<BindingResource<'a>>>> {
     if rings_of_buffers.is_empty() {
         return None;
     }
+
     let first_length = rings_of_buffers[0].len();
-    for ring in rings_of_buffers.iter().skip(1) {
-        if ring.len() != first_length {
-            eprintln!("Error: Input rings have inconsistent lengths.");
-            return None;
-        }
+
+    // Check for consistent lengths using `all`
+    if !rings_of_buffers.iter().all(|ring| ring.len() == first_length) {
+        panic!("Error: Input rings have inconsistent lengths.");
     }
-    let num_rings = rings_of_buffers.len();
-    let output_ring_length = first_length;
-    let mut output_data: Vec<Vec<BindingResource<'a>>> = Vec::with_capacity(output_ring_length);
-    for i in 0..output_ring_length {
-        let mut inner_vec: Vec<BindingResource<'a>> = Vec::with_capacity(num_rings);
-        for ring in rings_of_buffers.iter() {
-            inner_vec.push(BindingResource::Buffer(BufferBinding {
-                buffer: ring.get(i),
-                offset: 0,
-                size: None,
-            }));
-        }
-        output_data.push(inner_vec);
-    }
-    Some(Ring::from_vec(output_data))
+
+    Some(Ring::from_vec(
+        (0..first_length)
+            .map(|i| {
+                rings_of_buffers
+                    .iter()
+                    .map(|ring| {
+                        BindingResource::Buffer(BufferBinding {
+                            buffer: ring.get(i),
+                            offset: 0,
+                            size: None,
+                        })
+                    })
+                    .collect()
+            })
+            .collect(),
+    ))
 }
+
 pub fn rings_of_texture_views_to_ring_of_texture_view_bindings<'a>(
     rings_of_texture_views: &[Ring<&'a wgpu::TextureView>],
 ) -> Option<Ring<Vec<BindingResource<'a>>>> {
     if rings_of_texture_views.is_empty() {
         return None;
     }
+
     let first_length = rings_of_texture_views[0].len();
-    for ring in rings_of_texture_views.iter().skip(1) {
-        if ring.len() != first_length {
-            eprintln!("Error: Input rings have inconsistent lengths.");
-            return None;
-        }
+
+    if !rings_of_texture_views.iter().all(|ring| ring.len() == first_length) {
+        panic!("Input rings have inconsistent lengths.");
     }
-    let num_rings = rings_of_texture_views.len();
-    let output_ring_length = first_length;
-    let mut output_data: Vec<Vec<BindingResource<'a>>> = Vec::with_capacity(output_ring_length);
-    for i in 0..output_ring_length {
-        let mut inner_vec: Vec<BindingResource<'a>> = Vec::with_capacity(num_rings);
-        for ring in rings_of_texture_views.iter() {
-            inner_vec.push(BindingResource::TextureView(ring.get(i)));
-        }
-        output_data.push(inner_vec);
-    }
-    Some(Ring::from_vec(output_data))
+
+    Some(Ring::from_vec(
+        (0..first_length)
+            .map(|i| {
+                rings_of_texture_views
+                    .iter()
+                    .map(|ring| BindingResource::TextureView(ring.get(i)))
+                    .collect()
+            })
+            .collect(),
+    ))
 }
+
 pub struct PackedVoxelCircuit {
     pub pos: u8vec4,
 }
@@ -114,7 +117,7 @@ pub struct PackedVoxelCircuit {
 impl<'window> InternalRendererWebGPU<'window> {
     pub fn create_all_pipes(
         wal: &Wal,
-        lum_settings: &Settings,
+        _lum_settings: &Settings,
         buffers: &AllBuffers,
         iimages: &AllIndependentImages,
         dimages: &AllSwapchainDependentImages,

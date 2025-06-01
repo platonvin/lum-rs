@@ -1,9 +1,6 @@
-use std::mem;
-
-use wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-
+use super::all_types::UboData;
 use crate::renderer::{
-    types::{i8vec4, ivec4, mat4, AoLut},
+    types::{i8vec4, mat4, AoLut},
     webgpu::{
         types::{BlockId, Particle},
         wal::Wal,
@@ -11,9 +8,8 @@ use crate::renderer::{
     },
     Settings,
 };
-
-use super::all_types::UboData;
-// use internal_renderer::{InternalRendererVulkan, *};
+use std::mem;
+use wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
 
 impl<'window> InternalRendererWebGPU<'window> {
     #[cold]
@@ -53,15 +49,6 @@ impl<'window> InternalRendererWebGPU<'window> {
                 * (lum_settings.world_size.z as usize),
             Some("Radiance Updates"),
         ); // TODO test extra mem
-        let staging_radiance_updates = wal.create_buffers(
-            wal.config.desired_maximum_frame_latency as usize,
-            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
-            mem::size_of::<ivec4>()
-                * (lum_settings.world_size.x as usize)
-                * (lum_settings.world_size.y as usize)
-                * (lum_settings.world_size.z as usize),
-            Some("Staging Radiance Updates"),
-        ); // TODO test extra mem
 
         let padded_x_size =
             lum_settings.world_size.x.next_multiple_of(
@@ -79,22 +66,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             Some("Staging World"),
         );
 
-        let gpu_particles_staged = wal.create_buffers(
-            wal.config.desired_maximum_frame_latency as usize,
-            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
-            (lum_settings.max_particle_count as usize) * mem::size_of::<Particle>(),
-            Some("Particles Staged"),
-        );
-
         AllBuffers {
             staging_world,
             light_uniform,
             uniform,
             ao_lut_uniform,
             gpu_radiance_updates,
-            // staging_radiance_updates,
             gpu_particles,
-            // gpu_particles_staged,
         }
     }
 }

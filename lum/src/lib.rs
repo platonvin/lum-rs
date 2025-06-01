@@ -5,8 +5,9 @@
 #![feature(associated_type_defaults)] // what the fuck how is this language so incomplete in some cases? Whats next - all const?
 #![feature(slice_as_array)]
 #![feature(default_field_values)]
-#![allow(unused)]
+// #![allow(unused)]
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::option_map_unit_fn)]
 // This is a glue-file
 // files that start with "all_" are initializing / destroying resources (packed in structs)
 

@@ -1,7 +1,5 @@
 use as_u8_slice_derive::AsU8Slice;
-use qvek::vek::vec2::Vec2;
-use qvek::vek::vec4::Vec4;
-use qvek::vek::Mat4;
+use qvek::vek::{vec2::Vec2, vec4::Vec4, Mat4};
 
 #[repr(C)]
 #[derive(Clone, Copy, AsU8Slice)]

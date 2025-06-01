@@ -2,36 +2,5 @@
     "recommendations": [
         "nolanderc.glsl-analyzer",
         "rust-lang.rust-analyzer",
-        // There is actually a lot of good vscode extensions, like these ones, its just im unsure they need to be there
-        // e.g. errorlens is very useful but its more of a user choise to use or not to use it
-        // also, glsl extensions might be required all together to work with GLSL (they provide different features)
-            // "usernamehw.errorlens",
-            // "akankshasingh872.case-change",
-            // "fill-labs.dependi",
-            // "kevinkyang.auto-comment-blocks",
-            // "tamasfe.even-better-toml",
-            // "mhutchie.git-graph",
-            // "michelemelluso.gitignore",
-            // "dustypomerleau.rust-syntax",
-            // "slevesque.shader",
-            // "majicdave.vscode-shaderc",
-            // "idanp.smartmulticursor",
-            // "cyansprite.smoothscroll"
     ]
-    // copy-pasted cause im afraid of it being deleted by vscode
-        // There is actually a lot of good vscode extensions, like these ones, its just im unsure they need to be there
-        // e.g. errorlens is very useful but its more of a user choise to use or not to use it
-        // also, glsl extensions might be required all together to work with GLSL (they provide different features)
-            // "usernamehw.errorlens",
-            // "akankshasingh872.case-change",
-            // "fill-labs.dependi",
-            // "kevinkyang.auto-comment-blocks",
-            // "tamasfe.even-better-toml",
-            // "mhutchie.git-graph",
-            // "michelemelluso.gitignore",
-            // "dustypomerleau.rust-syntax",
-            // "slevesque.shader",
-            // "majicdave.vscode-shaderc",
-            // "idanp.smartmulticursor",
-            // "cyansprite.smoothscroll"
 }

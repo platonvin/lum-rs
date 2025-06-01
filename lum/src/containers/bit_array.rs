@@ -5,7 +5,7 @@ pub struct BitArray3d<T> {
     x_size: usize,
     y_size: usize,
     z_size: usize,
-    data: Vec<T>,
+    data: Box<[T]>,
 }
 
 impl<T> BitArray3d<T>
@@ -34,7 +34,7 @@ where
             x_size,
             y_size,
             z_size,
-            data: vec![T::default(); total_chunks],
+            data: vec![T::default(); total_chunks].into_boxed_slice(),
         }
     }
 
@@ -49,13 +49,16 @@ where
             x_size,
             y_size,
             z_size,
-            data: vec![if value { !T::default() } else { T::default() }; total_chunks],
+            data: vec![if value { !T::default() } else { T::default() }; total_chunks]
+                .into_boxed_slice(),
         }
     }
 
     pub fn fill(&mut self, value: bool) {
         let fill_value = if value { !T::default() } else { T::default() };
-        self.data.fill(fill_value);
+        for slot in self.data.iter_mut() {
+            *slot = fill_value;
+        }
     }
 
     pub fn linear_index(&self, x: usize, y: usize, z: usize) -> usize {
@@ -64,7 +67,6 @@ where
             "Index out of bounds"
         );
         x + y * self.x_size + z * self.x_size * self.y_size
-        // x * self.y_size * self.z_size + y * self.z_size + z
     }
 
     pub fn get(&self, x: usize, y: usize, z: usize) -> bool {
