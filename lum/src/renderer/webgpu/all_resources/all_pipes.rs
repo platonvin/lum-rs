@@ -469,21 +469,6 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let raygen_water_pipe = {
-            let pc_buffer_bind_group_layout =
-                wal.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Layout of fake PC for raygen water pipe"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                });
-
             let pc_buffer = wal.create_buffer(
                 wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
                 16 * 1024 * 20,
@@ -491,7 +476,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             );
             let pc_bind_group = wal.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("PC buffer for water"),
-                layout: &pc_buffer_bind_group_layout,
+                layout: raygen_water_pipe.dynamic_bind_group_layout.as_ref().unwrap(),
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(pc_buffer.as_entire_buffer_binding()),
@@ -831,21 +816,6 @@ impl<'window> InternalRendererWebGPU<'window> {
         );
 
         let fill_stencil_smoke_pipe = {
-            let pc_buffer_bind_group_layout =
-                wal.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Layout of fake PC for raygen fill stencil smoke pipe"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                });
-
             let pc_buffer = wal.create_buffer(
                 wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
                 16 * 1024 * 20,
@@ -853,7 +823,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             );
             let pc_bind_group = wal.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("PC buffer for fill stencil smoke"),
-                layout: &pc_buffer_bind_group_layout,
+                layout: fill_stencil_smoke_pipe.dynamic_bind_group_layout.as_ref().unwrap(),
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(pc_buffer.as_entire_buffer_binding()),
@@ -1431,24 +1401,26 @@ impl<'window> InternalRendererWebGPU<'window> {
             Some("Mapping Models Voxels Pipe"),
         );
 
-        let pc_buffer_bind_group_layout =
-            wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Layout of fake PC for foliages (they all share the same one)"),
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
+        // let pc_buffer_bind_group_layout =
+        //     wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        //         label: Some("Layout of fake PC for foliages (they all share the same one)"),
+        //         entries: &[BindGroupLayoutEntry {
+        //             binding: 0,
+        //             visibility: ShaderStages::VERTEX,
+        //             ty: BindingType::Buffer {
+        //                 ty: wgpu::BufferBindingType::Storage { read_only: true },
+        //                 has_dynamic_offset: false,
+        //                 min_binding_size: None,
+        //             },
+        //             count: None,
+        //         }],
+        //     });
 
         let raygen_foliage_pipes = foliage_descriptions
             .iter()
             .map(|foliage_description| {
+                // we can actually create only one dynamic bind groups layout
+                // but for more consistancy we will not
                 let pipe = Wal::create_raster_pipe(
                     wal,
                     &[
@@ -1518,7 +1490,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 );
                 let pc_bind_group = wal.device.create_bind_group(&BindGroupDescriptor {
                     label: Some("PC buffer for foliage"),
-                    layout: &pc_buffer_bind_group_layout,
+                    layout: pipe.dynamic_bind_group_layout.as_ref().unwrap(),
                     entries: &[BindGroupEntry {
                         binding: 0,
                         resource: wgpu::BindingResource::Buffer(

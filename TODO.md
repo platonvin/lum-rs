@@ -5,9 +5,8 @@ todoy:
   less magic constants
   static(?) rings
   better traits
-  more division (divide in crates)
+  divide into more crates
   formats
-  reuse bind group layouts
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
 wgpui better pcnherit TODO from lum++

@@ -699,26 +699,10 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
 
         let mut triangles = self.make_contour_vertices(size, padded_voxel_data);
 
-        // TODO: reuse this
-        let raster_dynamic_bind_group_layout =
-            self.wal.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Dynamic per-Mesh Voxels Bind Group Layout"),
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
         let create_face_bind_group = |face: &mut IndexedVerticesQueue| {
             let dynamic_bind_group = self.wal.device.create_bind_group(&BindGroupDescriptor {
                 label: Some("Dynamic per-face Voxels Bind Group"),
-                layout: &raster_dynamic_bind_group_layout,
+                layout: self.pipes.raygen_blocks_pipe.dynamic_bind_group_layout.as_ref().unwrap(),
                 entries: &[BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(

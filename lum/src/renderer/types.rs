@@ -199,12 +199,9 @@ pub struct InternalMeshModel<BufferType, ImageType, IndexedVerticesType = Indexe
     // size of voxels. So if only one sprite, equal to its size, but when multiple - equal to sum of sizes
     // integer because in voxels
     pub size: uvec3,
-    // // array of offset + size for all the sprites in a spritesheet
-    // pub sprites: Vec<SpriteDescription>,
 
     // this is not needed since bind groups are now per-face and include what this used to bind
     // pub voxels_bind_group_fragment: Option<wgpu::BindGroup>,
-    //
     pub compute_push_constants: Vec<u8>,
     // pub compute_metadata: Vec<MetadataMapModel>,
     // separate from faces cause thats what i came up with.

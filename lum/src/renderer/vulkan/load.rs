@@ -193,11 +193,10 @@ impl LoadInterface for InternalRendererVulkan {
             voxels,
             size,
             voxels_bind_group_compute: None,
-            compute_push_constants: todo!(),
-            compute_pc_buffer: todo!(),
-            compute_pc_count: todo!(),
-            // voxels_bind_group_fragment: None,
-            // sprites: vec![],
+
+            compute_push_constants: vec![],
+            compute_pc_buffer: None,
+            compute_pc_count: 0,
         }
     }
 
