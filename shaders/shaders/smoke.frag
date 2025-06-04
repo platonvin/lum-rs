@@ -14,7 +14,7 @@ precision highp int;
 layout(location = 0) out vec4 smoke_color;
 layout(input_attachment_index = 0, set = 0, binding = 1) uniform subpassInput smoke_depth_far;
 layout(input_attachment_index = 0, set = 0, binding = 2) uniform subpassInput smoke_depth_near;
-layout(set = 0, binding = 3, rgba16) uniform restrict readonly image3D radianceCache;
+layout(set = 0, binding = 3, rgb10_a2) uniform restrict readonly image3D radianceCache;
 layout(set = 0, binding = 4) uniform sampler3D noise;
 
 // const ivec3 world_size = ivec3(48,48,16);

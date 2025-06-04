@@ -7,8 +7,6 @@ edition = "2021"
 default = ["wgpu_backend"]
 vk_backend = ["shaders/vk_backend"]
 wgpu_backend = ["shaders/wgpu_backend"]
-# currently abandoned
-gl_backend = []
 # controls wether Lum uses Lumal feature for validation layer names
 debug_validation_names = ["lumal/debug_validation_names"]
 
@@ -16,21 +14,18 @@ debug_validation_names = ["lumal/debug_validation_names"]
 # enable debug names for validation_layers use in Lum
 features = ["debug_validation_names"]
 
+
 [dependencies]
 # lumal is lum's abstraction layer over vulkan
-# lumal = { git = "https://github.com/platonvin/lumal-rs.git", branch = "master"} 
 lumal = { path = "../lumal" }
 shaders = { path = "../shaders" }
-as_u8_slice_derive = { path = "../as_u8_slice_derive" }                     # derive macro for AsU8Slice, needed by Vulkanalia
+# derive macro for AsU8Slice
+as_u8_slice_derive = { path = "../as_u8_slice_derive" }
 winit = "0.30.9"
 qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
 pub-fields = "0.1.1"
 block-mesh = "0.2.0"
 flame = "0.2.2"
-# glow = "0.16.0"
-# glutin = "0.32.2"
-# glutin-winit = "0.5.0"
-# raw-window-handle = "0.6.2"
 wgpu = "25.0.0"
 futures = "0.3.31"
 
@@ -53,4 +48,8 @@ harness = false
 
 [[bench]]
 name = "radiance"
+harness = false
+
+[[bench]]
+name = "hmap_vs_iter"
 harness = false

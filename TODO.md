@@ -209,3 +209,5 @@ example of good error message:
 can be improved by specifying what index is and where limit comes from
 
 debug asserts for games are just built-in tests
+
+problem of functional (take self return self) vs mut self

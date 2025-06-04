@@ -1,3 +1,4 @@
+use ash::vk::DescriptorType;
 use ash::{vk, Device};
 
 use crate::{
@@ -5,6 +6,7 @@ use crate::{
     MAX_FRAMES_IN_FLIGHT,
 };
 use crate::{set_debug_name, Renderer};
+use std::ops::Index;
 use std::{any::TypeId, cell::UnsafeCell};
 use std::{option, ptr::null};
 
@@ -68,8 +70,39 @@ impl PartialEq for LoadStoreOp {
     }
 }
 
-pub struct AttachmentDescription {
-    pub images: *const Ring<Image>,
+pub enum MaybeRing<'a, T> {
+    Ring(&'a Ring<T>),
+    Single(&'a T),
+}
+impl<'a, T> MaybeRing<'a, T> {
+    pub fn get_first(&self) -> &T {
+        match self {
+            MaybeRing::Ring(ring) => &ring[0],
+            MaybeRing::Single(elem) => elem,
+        }
+    }
+
+    /// Returns number of elements hold (len for Ring, 1 for Single)
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            MaybeRing::Ring(ring) => ring.len(),
+            MaybeRing::Single(_) => 1,
+        }
+    }
+}
+impl<'a, T> Index<usize> for MaybeRing<'a, T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match self {
+            MaybeRing::Ring(ring) => &ring[index],
+            MaybeRing::Single(elem) => elem,
+        }
+    }
+}
+
+pub struct AttachmentDescription<'a> {
+    pub images: MaybeRing<'a, Image>,
     pub load: LoadStoreOp,
     pub store: LoadStoreOp,
     pub sload: LoadStoreOp,
@@ -81,9 +114,9 @@ pub struct AttachmentDescription {
 // everything is a a pointer to be able to compare them later
 pub struct SubpassDescription<'lt> {
     pub pipes: &'lt mut [&'lt mut RasterPipe],
-    pub a_input: &'lt [*const Ring<Image>], // Input images for the subpass
-    pub a_color: &'lt [*const Ring<Image>], // Color images for the subpass
-    pub a_depth: Option<*const Ring<Image>>, // Depth image for the subpass
+    pub a_input: &'lt [MaybeRing<'lt, Image>], // Input images for the subpass
+    pub a_color: &'lt [MaybeRing<'lt, Image>], // Color images for the subpass
+    pub a_depth: Option<MaybeRing<'lt, Image>>, // Depth image for the subpass
 }
 
 #[derive(Clone, Default, Debug)]
@@ -117,34 +150,57 @@ pub struct AttrFormOffs {
 }
 
 #[derive(Debug, Default)]
+pub enum RelativeResource<'a, T> {
+    #[default]
+    None,
+    /// Resource is Ring of things and we bind current() (most resource)
+    Current(&'a Ring<T>),
+    /// Resource is Ring of things and we bind previous()
+    /// (e.g. reading old for reading and current for writing in case of radiance cache)
+    Previous(&'a Ring<T>),
+    // Resource is a single thing (and is the same for all binds)
+    Single(&'a T),
+}
+
+impl<'a, T> RelativeResource<'a, T> {
+    fn get_matching_resource(&'a self, current_frame_i: usize, previous_frame_i: usize) -> &'a T {
+        match self {
+            RelativeResource::None => panic!(),
+            RelativeResource::Current(ring) => &ring[current_frame_i],
+            RelativeResource::Previous(ring) => &ring[previous_frame_i],
+            RelativeResource::Single(resource) => resource,
+        }
+    }
+}
+
+/// Typed subset of bundles of Vulkan types and my objects
+/// this moves work from runtime to compile time by enforcing relative presentance of descriptor information with type system
+#[derive(Debug, Default)]
+pub enum DescriptorResource<'a> {
+    #[default]
+    None,
+    StorageImage(RelativeResource<'a, Image>, vk::ImageLayout),
+    SampledImage(RelativeResource<'a, Image>, vk::ImageLayout, vk::Sampler),
+    InputAttachment(RelativeResource<'a, Image>, vk::ImageLayout),
+    UniformBuffer(RelativeResource<'a, Buffer>),
+    StorageBuffer(RelativeResource<'a, Buffer>),
+}
+
+#[derive(Debug, Default)]
 pub struct DescriptorInfo<'a> {
-    pub descriptor_type: vk::DescriptorType,
-    pub relative_pos: RelativeDescriptorPos,
-    pub buffers: Option<&'a Ring<Buffer>>,
-    pub images: Option<&'a Ring<Image>>,
-    pub image_sampler: vk::Sampler,
-    pub image_layout: vk::ImageLayout, // Image layout for use (not current)
+    pub resources: DescriptorResource<'a>,
     pub specified_stages: vk::ShaderStageFlags,
 }
 
 impl<'a> DescriptorInfo<'a> {
-    pub fn make_new(
-        descriptor_type: vk::DescriptorType,
-        relative_pos: RelativeDescriptorPos,
-        buffers: Option<&'a Ring<Buffer>>,
-        images: Option<&'a Ring<Image>>,
-        image_sampler: vk::Sampler,
-        image_layout: vk::ImageLayout,
-        stages: vk::ShaderStageFlags,
-    ) -> Self {
-        Self {
-            descriptor_type,
-            relative_pos,
-            buffers,
-            images,
-            image_sampler,
-            image_layout,
-            specified_stages: stages,
+    pub fn get_type(&self) -> DescriptorType {
+        match self.resources {
+            DescriptorResource::StorageImage(_, _) => DescriptorType::STORAGE_IMAGE,
+            DescriptorResource::SampledImage(_, _, _) => DescriptorType::COMBINED_IMAGE_SAMPLER,
+            DescriptorResource::InputAttachment(_, _) => DescriptorType::INPUT_ATTACHMENT,
+            DescriptorResource::UniformBuffer(_) => DescriptorType::UNIFORM_BUFFER,
+            DescriptorResource::StorageBuffer(_) => DescriptorType::STORAGE_BUFFER,
+            DescriptorResource::None => todo!(),
         }
     }
 }
@@ -311,7 +367,8 @@ impl Renderer {
             let descriptor_infos: Vec<ShortDescriptorInfo> = descriptions
                 .iter()
                 .map(|desc| ShortDescriptorInfo {
-                    descriptor_type: desc.descriptor_type,
+                    descriptor_type: desc.get_type(),
+                    // default to generic stages if not specified
                     stages: if desc.specified_stages.is_empty() {
                         default_stages
                     } else {
@@ -360,6 +417,11 @@ impl Renderer {
                 .unwrap()[0];
         }
         assert!(descriptor_sets.len() == MAX_FRAMES_IN_FLIGHT);
+
+        // why FIF descriptors?
+        // tats because some resources are FIF count in Ring
+        // well, some are not, and there are pipelines that only need single reource to be bound
+        // we might only use single descriptor for them, but its not done right now for simplicity
         for frame_i in 0..descriptor_sets.len() {
             let previous_frame_i = if frame_i == 0 {
                 settings.fif - 1
@@ -367,59 +429,85 @@ impl Renderer {
                 frame_i - 1
             };
 
+            // we have to keep theese around untill end of the scope because Vulkan wants descriptions to be pointers
+            // and thus we need some sort of temporary memory
+            // We could wrap them in Options, but there is no reason for it. Essentially its like very fast/unsafe slot allocator
             let mut image_infos = vec![vk::DescriptorImageInfo::default(); descriptions.len()];
             let mut buffer_infos = vec![vk::DescriptorBufferInfo::default(); descriptions.len()];
-            let mut writes = vec![vk::WriteDescriptorSet::default(); descriptions.len()];
 
-            for (i, desc) in descriptions.iter().enumerate() {
-                writes[i] = vk::WriteDescriptorSet {
-                    s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-                    dst_set: descriptor_sets[frame_i],
-                    dst_binding: i as u32,
-                    dst_array_element: 0,
-                    descriptor_count: 1,
-                    descriptor_type: desc.descriptor_type,
-                    ..Default::default()
-                };
-
-                let descriptor_frame_id = match desc.relative_pos {
-                    RelativeDescriptorPos::Current => frame_i,
-                    RelativeDescriptorPos::Previous => previous_frame_i,
-                    RelativeDescriptorPos::First => 0,
-                    RelativeDescriptorPos::NotPresented => {
-                        writes[i].descriptor_count = 0;
-                        continue;
-                    }
-                };
-
-                if let Some(images) = &desc.images {
-                    assert!(images[descriptor_frame_id].view != vk::ImageView::null());
-                    image_infos[i] = vk::DescriptorImageInfo {
-                        image_view: images[descriptor_frame_id].view,
-                        image_layout: desc.image_layout,
-                        sampler: desc.image_sampler,
+            let writes: Vec<_> = descriptions
+                .iter()
+                .enumerate()
+                .map(|(i, desc)| {
+                    let mut write = vk::WriteDescriptorSet {
+                        s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+                        dst_set: descriptor_sets[frame_i],
+                        dst_binding: i as u32,
+                        dst_array_element: 0,
+                        descriptor_count: 1,
+                        descriptor_type: desc.get_type(),
+                        ..Default::default()
                     };
-                    writes[i].p_image_info = &image_infos[i];
 
-                    assert!(desc.buffers.is_none());
-                    if desc.image_sampler != vk::Sampler::null()
-                        && desc.descriptor_type != vk::DescriptorType::COMBINED_IMAGE_SAMPLER
-                    {
-                        panic!("Descriptor has sampler but type is not for sampler");
+                    // now we need to extract resource from a description and find corresponding element in Ring (or just use it if its Single (nor Ring))
+
+                    match &desc.resources {
+                        DescriptorResource::None => panic!(),
+                        // if descriptor is some type of image, we fill corresponding image slot in image_infos and point to it
+                        DescriptorResource::StorageImage(images, image_layout) => {
+                            let image = images.get_matching_resource(frame_i, previous_frame_i);
+                            // we do not explicitly allocate slot in infos, but all [i] are unique so its fine (and fast)
+                            image_infos[i] = vk::DescriptorImageInfo {
+                                image_view: image.view,
+                                image_layout: *image_layout,
+                                sampler: vk::Sampler::null(), // cause storage image
+                            };
+                            write.p_image_info = &image_infos[i];
+                        }
+                        DescriptorResource::SampledImage(images, image_layout, sampler) => {
+                            let image = images.get_matching_resource(frame_i, previous_frame_i);
+                            image_infos[i] = vk::DescriptorImageInfo {
+                                image_view: image.view,
+                                image_layout: *image_layout,
+                                sampler: *sampler,
+                            };
+                            write.p_image_info = &image_infos[i];
+                        }
+                        DescriptorResource::InputAttachment(images, image_layout) => {
+                            let image = images.get_matching_resource(frame_i, previous_frame_i);
+                            image_infos[i] = vk::DescriptorImageInfo {
+                                image_view: image.view,
+                                image_layout: *image_layout,
+                                sampler: vk::Sampler::null(), // imput attachments are not sampled
+                            };
+                            write.p_image_info = &image_infos[i];
+                        }
+                        // if descriptor is some type of buffer, we fill corresponding buffer slot in buffer_infos and point to it
+                        DescriptorResource::UniformBuffer(buffers) => {
+                            let buffer = buffers.get_matching_resource(frame_i, previous_frame_i);
+                            buffer_infos[i] = vk::DescriptorBufferInfo {
+                                buffer: buffer.buffer,
+                                offset: 0,
+                                range: vk::WHOLE_SIZE, // we bind entire buffer in most cases for simplicity
+                            };
+                            write.p_buffer_info = &buffer_infos[i];
+                        }
+                        DescriptorResource::StorageBuffer(buffers) => {
+                            let buffer = buffers.get_matching_resource(frame_i, previous_frame_i);
+                            buffer_infos[i] = vk::DescriptorBufferInfo {
+                                buffer: buffer.buffer,
+                                offset: 0,
+                                range: vk::WHOLE_SIZE, // we bind entire buffer in most cases for simplicity
+                            };
+                            write.p_buffer_info = &buffer_infos[i];
+                        }
                     }
-                } else if let Some(buffers) = &desc.buffers {
-                    buffer_infos[i] = vk::DescriptorBufferInfo {
-                        buffer: buffers[descriptor_frame_id].buffer,
-                        offset: 0,
-                        range: vk::WHOLE_SIZE as u64,
-                    };
-                    writes[i].p_buffer_info = &buffer_infos[i];
-                } else {
-                    panic!("Unknown descriptor type");
-                }
-            }
 
-            device.update_descriptor_sets(&writes, &[] as &[vk::CopyDescriptorSet]);
+                    write
+                })
+                .collect();
+
+            device.update_descriptor_sets(&writes, &[]);
         }
     }
 
@@ -449,7 +537,7 @@ impl Renderer {
                 &self.vulkan_data.descriptor_pool,
                 &self.settings,
                 &self.device,
-                &mut *dset_layout,
+                dset_layout,
                 descriptor_sets,
                 descriptions,
                 default_stages,

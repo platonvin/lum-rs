@@ -237,36 +237,9 @@ impl InternalRendererVulkan {
                             }
                         }
                     }
-
-                    // so, the idea is to make less checks, and also .set() only once (in asm)
-                    // let found_non_empty = Self::function_i_had_to_write_to_be_able_to_use_goto(
-                    //     &self.settings.world_size,
-                    //     &self.current_world,
-                    //     &mut visited,
-                    //     zz,
-                    //     yy,
-                    //     xx,
-                    // );
-                    // if found_non_empty {
-                    //     let offset = (xx + yy + zz) as i32 % magic_number;
-                    //     visited.set(xx as usize, yy as usize, zz as usize, true);
-                    //     pushed_radiance_count += 1;
-                    // }
                 }
             }
         }
-
-        // self.radiance_updates.clear();
-
-        // for zz in 0..self.settings.world_size.z {
-        //     for yy in 0..self.settings.world_size.y {
-        //         for xx in 0..self.settings.world_size.x {
-        //             if visited.get(xx as usize, yy as usize, zz as usize) {
-        //                 self.radiance_updates.push(i8vec4::new(xx as i8, yy as i8, zz as i8, 0));
-        //             }
-        //         }
-        //     }
-        // }
 
         self.radiance_updates.resize(pushed_radiance_count as usize, i8vec4::zero());
 
@@ -1583,7 +1556,7 @@ impl InternalRendererVulkan {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            self.independent_images.grass_state.current(),
+            &self.independent_images.grass_state,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::AccessFlags::SHADER_WRITE,
@@ -1630,7 +1603,7 @@ impl InternalRendererVulkan {
 
         self.lumal.image_memory_barrier(
             command_buffer,
-            self.independent_images.water_state.current(),
+            &self.independent_images.water_state,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::PipelineStageFlags::COMPUTE_SHADER,
             vk::AccessFlags::SHADER_WRITE,
@@ -2003,14 +1976,14 @@ impl InternalRendererVulkan {
         self.cmdbufs.lightmap_command_buffers.move_next();
         self.cmdbufs.graphics_command_buffers.move_next();
 
-        self.independent_images.lightmap.move_next();
-        self.dependent_images.highres_frame.move_next();
-        self.dependent_images.highres_depth_stencil.move_next();
-        self.dependent_images.highres_mat_norm.move_next();
-        self.dependent_images.stencil_view_for_ds.move_next();
-        self.dependent_images.far_depth.move_next(); //represents how much should smoke traversal for
-        self.dependent_images.near_depth.move_next(); //represents how much should smoke traversal for
-                                                      // self.dependent_images.mask_frame.move_next(); //where lowres renders to. Blends with highres afterwards
+        // self.independent_images.lightmap.move_next();
+        // self.dependent_images.highres_frame.move_next();
+        // self.dependent_images.highres_depth_stencil.move_next();
+        // self.dependent_images.highres_mat_norm.move_next();
+        // self.dependent_images.stencil_view_for_ds.move_next();
+        // self.dependent_images.far_depth.move_next(); //represents how much should smoke traversal for
+        // self.dependent_images.near_depth.move_next(); //represents how much should smoke traversal for
+        // self.dependent_images.mask_frame.move_next(); //where lowres renders to. Blends with highres afterwards
         self.buffers.staging_world.move_next();
         self.independent_images.world.move_next(); //can i really use just one?
         self.independent_images.origin_block_palette.move_next();
@@ -2023,11 +1996,11 @@ impl InternalRendererVulkan {
         self.buffers.gpu_radiance_updates.move_next();
         self.buffers.staging_radiance_updates.move_next();
         self.buffers.gpu_particles.move_next(); //multiple because cpu-related work
-        self.independent_images.perlin_noise2d.move_next(); //full-world grass shift (~direction) texture sampled in grass
-        self.independent_images.perlin_noise3d.move_next(); //full-world grass shift (~direction) texture sampled in grass
+                                                // self.independent_images.perlin_noise2d.move_next(); //full-world grass shift (~direction) texture sampled in grass
+                                                // self.independent_images.perlin_noise3d.move_next(); //full-world grass shift (~direction) texture sampled in grass
 
-        self.independent_images.grass_state.move_next(); //full-world grass shift (~direction) texture sampled in grass
-        self.independent_images.water_state.move_next(); //~same but water
+        // self.independent_images.grass_state.move_next(); //full-world grass shift (~direction) texture sampled in grass
+        // self.independent_images.water_state.move_next(); //~same but water
 
         let should_recreate = self.lumal.should_recreate;
         if should_recreate {

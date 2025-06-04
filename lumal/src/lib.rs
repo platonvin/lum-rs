@@ -1,7 +1,8 @@
 #![allow(dead_code, unused)]
 #![allow(unused_parens)]
 #![feature(optimize_attribute)]
-
+#![feature(const_type_id)]
+#![allow(clippy::missing_safety_doc)]
 // lumal is divided into files (aka modules)
 // this in needed for whole thing to compile
 // Rust is so good that figuring it out only took 1 hour
@@ -141,7 +142,7 @@ impl Default for Image {
 }
 
 // #[derive(Default)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RasterPipe {
     pub line: vk::Pipeline,
     pub line_layout: vk::PipelineLayout,
@@ -151,46 +152,14 @@ pub struct RasterPipe {
     pub render_pass: vk::RenderPass, // We don't need to store it in here but why not
     pub subpass_id: i32,
 }
-impl RasterPipe {
-    pub fn as_mut_ptr(&self) -> *mut RasterPipe {
-        self as *const RasterPipe as *mut RasterPipe
-    }
 
-    // fn as_mut(&self) -> &mut RasterPipe {
-    //     unsafe { &mut *self.as_mut_ptr() }
-    // }
-}
-impl Default for RasterPipe {
-    fn default() -> Self {
-        Self {
-            sets: Default::default(),
-            line: Default::default(),
-            line_layout: Default::default(),
-            set_layout: Default::default(),
-            render_pass: Default::default(),
-            subpass_id: Default::default(),
-        }
-    }
-}
-
-// Structure for ComputePipe (Compute pipeline)
 // #[derive(Default)]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ComputePipe {
     pub line: vk::Pipeline,
     pub line_layout: vk::PipelineLayout,
     pub sets: Ring<vk::DescriptorSet>,
     pub set_layout: vk::DescriptorSetLayout,
-}
-impl Default for ComputePipe {
-    fn default() -> Self {
-        Self {
-            line: Default::default(),
-            line_layout: Default::default(),
-            sets: Default::default(),
-            set_layout: Default::default(),
-        }
-    }
 }
 
 // Structure for RenderPass
@@ -917,21 +886,21 @@ impl Renderer {
 }
 
 #[rustfmt::skip]
-macro_rules! elif {
-    ($type_id:ident, $type_1:ident, $type_2:expr) => {
-        if $type_id == TypeId::of::<$type_1>() {
-            return Some($type_2);
-        }
-    };
-}
-
-#[rustfmt::skip]
 pub fn get_vulkan_object_type<T: Any>(_object: &T) -> Option<vk::ObjectType> {
     let type_id = TypeId::of::<T>();
-
+    
     // use vk::ObjectType::*;
     use vk::Buffer;
     use vk::*;
+    
+    #[rustfmt::skip]
+    macro_rules! elif {
+        ($type_id:ident, $type_1:ident, $type_2:expr) => {
+            if $type_id == TypeId::of::<$type_1>() {
+                return Some($type_2);
+            }
+        };
+    }
 
     elif!(type_id, Instance, vk::ObjectType::INSTANCE);
     elif!(type_id, PhysicalDevice, vk::ObjectType::PHYSICAL_DEVICE);
@@ -975,12 +944,6 @@ macro_rules! set_debug_name {
             if let Some(object_type_vk) = object_type_option {
                 let object_type_debug_report = object_type_vk;
                 $lumal.name_var(object_type_debug_report, object_handle, debug_name);
-            } else {
-                // WTF this is printed EVERYWHERE
-                // eprintln!(
-                //     " Warning: Could not automatically determine ObjectType for {} ",
-                //     stringify!($variable)
-                // );
             }
         }
     }};
@@ -1255,7 +1218,11 @@ unsafe fn create_swapchain(
     } else {
         u32::MAX
     };
-    let image_count = (support.capabilities.min_image_count + 1).min(max_image_count);
+    let image_count = ((support.capabilities.min_image_count).max(MAX_FRAMES_IN_FLIGHT as u32))
+        .min(max_image_count);
+    dbg!(support.capabilities.min_image_count);
+    dbg!(support.capabilities.max_image_count);
+    dbg!(image_count);
     let mut queue_family_indices = vec![];
     let image_sharing_mode = if indices.graphics != indices.present {
         queue_family_indices.push(indices.graphics);

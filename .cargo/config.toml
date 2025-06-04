@@ -14,10 +14,10 @@ rw = "run --profile release --package examples --bin demo_wgpu --features wgpu_b
 brv = "build --profile release --package examples --bin demo_vk --features vk_backend"
 brw = "build --profile release --package examples --bin demo_wgpu --features wgpu_backend"
 
-dv = "run --profile debug --package examples --bin demo_vk --features vk_backend"
-dw = "run --profile debug --package examples --bin demo_wgpu --features wgpu_backend"
-bdv = "build --profile debug --package examples --bin demo_vk --features vk_backend"
-bdw = "build --profile debug --package examples --bin demo_wgpu --features wgpu_backend"
+dv = "run --profile dev --package examples --bin demo_vk --features vk_backend"
+dw = "run --profile dev --package examples --bin demo_wgpu --features wgpu_backend"
+bdv = "build --profile dev --package examples --bin demo_vk --features vk_backend"
+bdw = "build --profile dev --package examples --bin demo_wgpu --features wgpu_backend"
 
 [build]
 [target.x86_64-pc-windows-gnu]

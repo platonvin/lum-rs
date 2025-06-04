@@ -7,9 +7,10 @@ pub mod types;
 // use crate::internal_renderer::vk::Extent2D;
 
 use super::{Camera, SunLight};
+use crate::renderer::vulkan::render::RendererVulkan;
 use crate::renderer::vulkan::types::*;
 use lumal::vk;
-use lumal::{ring::Ring, trace, RasterPipe};
+use lumal::{ring::Ring, RasterPipe};
 use render::MeshFoliageDescription;
 use winit::window::Window;
 
@@ -80,27 +81,28 @@ pub struct AllSamplers {
 pub struct AllSwapchainDependentImages {
     // my brain is too small to handle lifetimes
     // swapchain_images: Ring<lumal::Image>,
-    highres_frame: Ring<lumal::Image>,
-    highres_depth_stencil: Ring<lumal::Image>,
-    highres_mat_norm: Ring<lumal::Image>,
-    stencil_view_for_ds: Ring<vk::ImageView>,
-    far_depth: Ring<lumal::Image>, // represents how much should smoke traversal for
-    near_depth: Ring<lumal::Image>, /* represents how much should smoke traversal for
-                                    * mask_frame: Ring<lumal::Image>, //where lowres renders to. Blends with highres afterwards */
+    highres_frame: lumal::Image,
+    highres_depth_stencil: lumal::Image,
+    highres_mat_norm: lumal::Image,
+    // stencil and depth are special, and sometimes we need stencil only view to depth-stencil image
+    stencil_view_for_ds: vk::ImageView,
+    far_depth: lumal::Image, // represents how much should smoke traversal for
+    near_depth: lumal::Image, /* represents how much should smoke traversal for
+                              * mask_frame: Ring<lumal::Image>, //where lowres renders to. Blends with highres afterwards */
 }
 
 pub struct AllIndependentImages {
-    grass_state: Ring<lumal::Image>, /* full-world grass shift (~direction) texture sampled in grass */
-    water_state: Ring<lumal::Image>, //~same but water
-    perlin_noise2d: Ring<lumal::Image>, /* full-world grass shift (~direction) texture sampled in grass */
-    perlin_noise3d: Ring<lumal::Image>, /* 4 channels of different tileable noise for volumetrics */
-    world: Ring<lumal::Image>,          // can i really use just one?
+    /// full-world grass shift (~direction) texture sampled in grass
+    grass_state: lumal::Image,
+    /// full-world water heightmaps (multiple are combined to achive good tiling)
+    water_state: lumal::Image,
+    perlin_noise2d: lumal::Image, // full-world grass shift (~direction) texture sampled in grass
+    perlin_noise3d: lumal::Image, // 4 channels of different tileable noise for volumetrics
+    world: Ring<lumal::Image>,    // can i really use just one?
     radiance_cache: Ring<lumal::Image>,
     origin_block_palette: Ring<lumal::Image>,
     material_palette: Ring<lumal::Image>,
-    lightmap: Ring<lumal::Image>,
-    // distance_palette: Ring<lumal::Image>,
-    // bit_palette: Ring<lumal::Image>, //bitmask of originBlockPalette
+    lightmap: lumal::Image,
 }
 
 pub struct AllBuffers {
@@ -206,7 +208,7 @@ const DEPTH_FORMAT_PREFERED: vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
 
 impl InternalRendererVulkan {
     // Creates Lum::InternalRendererVulkan. You should use Renderer::create() and then .init() instead
-    pub unsafe fn create(
+    pub fn create(
         lum_settings: &Settings,
         window: &Window,
         // event_loop: &winit::event_loop::EventLoop<()>,
@@ -223,18 +225,20 @@ impl InternalRendererVulkan {
             height: 1024,
         };
 
-        CHOSEN_DEPTH_FORMAT = lumal
-            .find_supported_format(
-                &[DEPTH_FORMAT_PREFERED, DEPTH_FORMAT_SPARE],
-                vk::ImageType::TYPE_2D,
-                vk::ImageTiling::OPTIMAL,
-                vk::ImageUsageFlags::TRANSFER_SRC
-                    | vk::ImageUsageFlags::TRANSFER_DST
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
-                    | vk::ImageUsageFlags::INPUT_ATTACHMENT,
-            )
-            .unwrap();
+        unsafe {
+            CHOSEN_DEPTH_FORMAT = lumal
+                .find_supported_format(
+                    &[DEPTH_FORMAT_PREFERED, DEPTH_FORMAT_SPARE],
+                    vk::ImageType::TYPE_2D,
+                    vk::ImageTiling::OPTIMAL,
+                    vk::ImageUsageFlags::TRANSFER_SRC
+                        | vk::ImageUsageFlags::TRANSFER_DST
+                        | vk::ImageUsageFlags::SAMPLED
+                        | vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+                        | vk::ImageUsageFlags::INPUT_ATTACHMENT,
+                )
+                .unwrap()
+        };
 
         // section where most important (not init-related) vulkan resources are created. Some of them will be recreated on window resize
         let independent_images = InternalRendererVulkan::create_independent_images(
@@ -245,7 +249,7 @@ impl InternalRendererVulkan {
         let buffers =
             InternalRendererVulkan::create_all_buffers(&mut lumal, lum_settings, &lumal_settings);
         let samplers =
-            InternalRendererVulkan::create_all_samplers(&mut lumal, lum_settings, &lumal_settings);
+            InternalRendererVulkan::create_all_samplers(&lumal, lum_settings, &lumal_settings);
         let command_buffers = InternalRendererVulkan::create_all_command_buffers(
             &lumal,
             lum_settings,
@@ -334,7 +338,14 @@ impl InternalRendererVulkan {
     #[cold]
     #[optimize(size)]
     pub fn recreate_window(&mut self, window: &Window) {
+        // wait for GPU to complete all work so deleting resources wont break anything
         unsafe { self.lumal.device.device_wait_idle().unwrap() };
+
+        // we CANT disassemble Renderer to recreate parts of it
+        // this is due to mix of styles: functional (move self return Self)
+        // vs &mut self modifying fields
+        // TODO: converge on specific style
+
         unsafe {
             Self::destroy_dependent(
                 &mut self.lumal,
@@ -345,13 +356,14 @@ impl InternalRendererVulkan {
         };
         self.lumal.recreate_swapchain(window);
 
+        // in Vulkan, you can drop the entire pool or descriptors individually
+        // most of them are invalid after resizing anyways, so dropping pool is faster and easier
         unsafe {
             self.lumal
                 .device
                 .destroy_descriptor_pool(self.lumal.vulkan_data.descriptor_pool, None);
-            self.lumal.vulkan_data.descriptor_pool = vk::DescriptorPool::null();
+            self.lumal.vulkan_data.descriptor_pool = self.lumal.create_descriptor_pool();
         };
-        self.lumal.vulkan_data.descriptor_pool = unsafe { self.lumal.create_descriptor_pool() };
 
         let settings_copy = self.lumal.settings;
         let (dimages, pipes, rpasses) = create_dependent(

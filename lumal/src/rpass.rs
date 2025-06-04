@@ -2,6 +2,7 @@ use std::{collections::HashMap, f64::consts::E, ptr::null};
 
 use ash::vk;
 
+use crate::descriptors::MaybeRing;
 use crate::Renderer;
 use crate::{
     atrace,
@@ -39,20 +40,19 @@ impl Renderer {
     ) -> RenderPass {
         let mut rpass = RenderPass::default();
 
+        // no subpasses / attachments is invalid and i dont like returning errors
         assert!(!attachments.is_empty());
         assert!(!spass_attachs.is_empty());
 
         let mut adescs = vec![vk::AttachmentDescription::default(); attachments.len()];
         let mut arefs = vec![vk::AttachmentReference::default(); attachments.len()];
+        // instead of forcing user into specifying indices of attachments, we determine them from comparing references
         let mut img2ref = HashMap::new();
         let mut clears = Vec::new();
 
         for (i, attachment) in attachments.iter().enumerate() {
-            let images = attachment.images;
-
             // reference to first image in the Ring of images given by pointer
-            // Why do i work with pointers? To trick borrow checker and have a nicer syntax
-            let first_image = &unsafe { &*images }[0]; //
+            let first_image = attachment.images.get_first(); //
 
             adescs[i] = vk::AttachmentDescription {
                 format: first_image.format,
@@ -79,7 +79,8 @@ impl Renderer {
                 layout: vk::ImageLayout::GENERAL,
             };
 
-            img2ref.insert(images, i);
+            // we cast it to pointer because otherwise its implicitly dereferenced
+            img2ref.insert(first_image as *const _, i);
 
             clears.push(attachment.clear);
         }
@@ -92,18 +93,18 @@ impl Renderer {
         let mut sas_refs = vec![SubpassAttachmentRefs::default(); spass_attachs.len()];
 
         for (i, spass_attach) in spass_attachs.iter().enumerate() {
-            if let Some(depth) = spass_attach.a_depth {
-                let index = *img2ref.get(&depth).unwrap();
+            if let Some(depth) = &spass_attach.a_depth {
+                let index = *img2ref.get(&(depth.get_first() as *const _)).unwrap();
                 sas_refs[i].a_depth = Some(arefs[index])
             } else {
                 sas_refs[i].a_depth = None;
             };
             for color in spass_attach.a_color {
-                let index = *img2ref.get(&color).unwrap();
+                let index = *img2ref.get(&(color.get_first() as *const _)).unwrap();
                 sas_refs[i].a_color.push(arefs[index]);
             }
             for input in spass_attach.a_input {
-                let index = *img2ref.get(&input).unwrap();
+                let index = *img2ref.get(&(input.get_first() as *const _)).unwrap();
                 sas_refs[i].a_input.push(arefs[index]);
             }
         }
@@ -122,11 +123,18 @@ impl Renderer {
             }
         }
 
+        // for every subpass, set subpass_id of every pipe in that subpass to the subpass index
         for i in 0..spass_attachs.len() {
             for pipe in &mut *spass_attachs[i].pipes {
                 pipe.subpass_id = i as i32;
             }
         }
+
+        // alternative (how is that so complicated?)
+        // spass_attachs
+        //     .iter_mut()
+        //     .enumerate()
+        //     .map(|(i, spass)| spass.pipes.iter_mut().map(move |pipe| pipe.subpass_id = i as i32));
 
         // not real vulkan struct, just barriers inside a subpass (currently, dummy barriers)
         let dependencies = Self::create_subpass_dependencies(spass_attachs);
@@ -150,7 +158,6 @@ impl Renderer {
                 .create_render_pass(&create_info, None)
                 .expect("Failed to create render pass")
         };
-        assert!(render_pass != vk::RenderPass::null());
 
         // Pipes (which are abstractions of Vulkan pipelines) need to know the render pass
         for spass_attach in spass_attachs {
@@ -159,16 +166,16 @@ impl Renderer {
             }
         }
 
-        // This is the metadata i store in my render pass abstraction. It helps (me).
         rpass.render_pass = render_pass;
+        // This is the metadata i store in my render pass abstraction. It helps (me).
+        // TODO: atm we hope that they all match extent
         rpass.extent = vk::Extent2D {
-            width: (unsafe { attachments[0].images.as_ref().unwrap() })[0].extent.width,
-            height: (unsafe { attachments[0].images.as_ref().unwrap() })[0].extent.height,
+            width: attachments[0].images.get_first().extent.width,
+            height: attachments[0].images.get_first().extent.height,
         };
 
-        let binding: Vec<&Ring<Image>> =
-            attachments.iter().filter_map(|desc| Some(unsafe { &*desc.images })).collect();
-        let fb_images: &[&Ring<Image>] = binding.as_slice();
+        let binding: Vec<&MaybeRing<Image>> = attachments.iter().map(|desc| &desc.images).collect();
+        let fb_images = binding.as_slice();
 
         rpass.framebuffers = self.create_framebuffers(
             render_pass,
@@ -237,12 +244,12 @@ impl Renderer {
         &self,
         // device: &vulkanalia::Device,
         render_pass: vk::RenderPass,
-        imgs4views: &[&Ring<Image>],
+        imgs4views: &[&MaybeRing<Image>],
         width: u32,
         height: u32,
     ) -> Ring<vk::Framebuffer> {
         // Calculate Least Common Multiple (LCM) of the sizes of the image view rings
-        let lcm = imgs4views.iter().map(|v| (unsafe { (**v).len() }).clone()).fold(1, lcm_custom);
+        let lcm = imgs4views.iter().map(|imgs| imgs.len()).fold(1, lcm_custom);
         assert!(lcm != 0);
 
         let mut framebuffers = Ring::new(lcm);
@@ -251,8 +258,8 @@ impl Renderer {
             let mut attachment_views = Vec::new();
 
             for imgs in imgs4views {
-                let internal_iter = i % unsafe { (**imgs).len() };
-                attachment_views.push((unsafe { (**imgs)[internal_iter].view.clone() }));
+                let internal_iter = i % imgs.len();
+                attachment_views.push(imgs[internal_iter].view);
             }
 
             let framebuffer_info = vk::FramebufferCreateInfo {

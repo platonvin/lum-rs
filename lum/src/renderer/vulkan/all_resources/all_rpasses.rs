@@ -6,7 +6,10 @@ use crate::renderer::{
     Settings,
 };
 // use internal_renderer::{InternalRendererVulkan, *};
-use lumal::{descriptors::*, vk};
+use lumal::{
+    descriptors::{MaybeRing, *},
+    vk,
+};
 use lumal::{LumalSettings, Renderer};
 
 impl InternalRendererVulkan {
@@ -23,7 +26,7 @@ impl InternalRendererVulkan {
         println!("creating rpass: lightmap");
         let lightmap_rpass = lumal.create_renderpass(
             &[AttachmentDescription {
-                images: &iimages.lightmap,
+                images: MaybeRing::Single(&iimages.lightmap),
                 load: LoadStoreOp::Clear,
                 store: LoadStoreOp::Store,
                 sload: LoadStoreOp::DontCare,
@@ -43,7 +46,7 @@ impl InternalRendererVulkan {
                 ],
                 a_input: &[],
                 a_color: &[],
-                a_depth: Some(&iimages.lightmap),
+                a_depth: Some(MaybeRing::Single(&iimages.lightmap)),
             }],
         );
 
@@ -58,7 +61,7 @@ impl InternalRendererVulkan {
         let gbuffer_rpass = lumal.create_renderpass(
             &[
                 AttachmentDescription {
-                    images: &dimages.highres_mat_norm,
+                    images: MaybeRing::Single(&dimages.highres_mat_norm),
                     load: LoadStoreOp::DontCare,
                     store: LoadStoreOp::Store,
                     sload: LoadStoreOp::DontCare,
@@ -67,7 +70,7 @@ impl InternalRendererVulkan {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: &dimages.highres_depth_stencil,
+                    images: MaybeRing::Single(&dimages.highres_depth_stencil),
                     load: LoadStoreOp::Clear,
                     store: LoadStoreOp::Store,
                     sload: LoadStoreOp::Clear,
@@ -85,32 +88,32 @@ impl InternalRendererVulkan {
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_blocks_pipe],
                     a_input: &[],
-                    a_color: &[(&dimages.highres_mat_norm)],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_color: &[MaybeRing::Single(&dimages.highres_mat_norm)],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_models_pipe],
                     a_input: &[],
-                    a_color: &[(&dimages.highres_mat_norm)],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_color: &[MaybeRing::Single(&dimages.highres_mat_norm)],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_particles_pipe],
                     a_input: &[],
-                    a_color: &[(&dimages.highres_mat_norm)],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_color: &[MaybeRing::Single(&dimages.highres_mat_norm)],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut foliage_pipes,
                     a_input: &[],
-                    a_color: &[(&dimages.highres_mat_norm)],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_color: &[MaybeRing::Single(&dimages.highres_mat_norm)],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.raygen_water_pipe],
                     a_input: &[],
-                    a_color: &[(&dimages.highres_mat_norm)],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_color: &[MaybeRing::Single(&dimages.highres_mat_norm)],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
             ],
         );
@@ -122,7 +125,7 @@ impl InternalRendererVulkan {
         let shade_rpass = lumal.create_renderpass(
             &[
                 AttachmentDescription {
-                    images: &dimages.highres_mat_norm,
+                    images: MaybeRing::Single(&dimages.highres_mat_norm),
                     load: LoadStoreOp::Load,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -131,7 +134,7 @@ impl InternalRendererVulkan {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: &dimages.highres_frame,
+                    images: MaybeRing::Single(&dimages.highres_frame),
                     load: LoadStoreOp::DontCare,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -140,7 +143,7 @@ impl InternalRendererVulkan {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: &lumal.vulkan_data.swapchain_images,
+                    images: MaybeRing::Ring(&lumal.vulkan_data.swapchain_images),
                     load: LoadStoreOp::DontCare,
                     store: LoadStoreOp::Store,
                     sload: LoadStoreOp::DontCare,
@@ -149,7 +152,7 @@ impl InternalRendererVulkan {
                     final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 },
                 AttachmentDescription {
-                    images: &dimages.highres_depth_stencil,
+                    images: MaybeRing::Single(&dimages.highres_depth_stencil),
                     load: LoadStoreOp::Load,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::Load,
@@ -163,7 +166,7 @@ impl InternalRendererVulkan {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: &dimages.far_depth,
+                    images: MaybeRing::Single(&dimages.far_depth),
                     load: LoadStoreOp::Clear,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -176,7 +179,7 @@ impl InternalRendererVulkan {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: &dimages.near_depth,
+                    images: MaybeRing::Single(&dimages.near_depth),
                     load: LoadStoreOp::Clear,
                     store: LoadStoreOp::DontCare,
                     sload: LoadStoreOp::DontCare,
@@ -192,44 +195,56 @@ impl InternalRendererVulkan {
             &mut [
                 SubpassDescription {
                     pipes: &mut [&mut pipes.diffuse_pipe],
-                    a_input: &[&dimages.highres_mat_norm, &dimages.highres_depth_stencil],
-                    a_color: &[(&dimages.highres_frame)],
+                    a_input: &[
+                        MaybeRing::Single(&dimages.highres_mat_norm),
+                        MaybeRing::Single(&dimages.highres_depth_stencil),
+                    ],
+                    a_color: &[MaybeRing::Single(&dimages.highres_frame)],
                     a_depth: None,
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.ao_pipe],
-                    a_input: &[&dimages.highres_mat_norm, &dimages.highres_depth_stencil],
-                    a_color: &[(&dimages.highres_frame)],
+                    a_input: &[
+                        MaybeRing::Single(&dimages.highres_mat_norm),
+                        MaybeRing::Single(&dimages.highres_depth_stencil),
+                    ],
+                    a_color: &[MaybeRing::Single(&dimages.highres_frame)],
                     a_depth: None,
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.fill_stencil_glossy_pipe],
-                    a_input: &[&dimages.highres_mat_norm],
+                    a_input: &[MaybeRing::Single(&dimages.highres_mat_norm)],
                     a_color: &[],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.fill_stencil_smoke_pipe],
                     a_input: &[],
-                    a_color: &[&dimages.far_depth, &dimages.near_depth],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_color: &[
+                        MaybeRing::Single(&dimages.far_depth),
+                        MaybeRing::Single(&dimages.near_depth),
+                    ],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.glossy_pipe],
                     a_input: &[],
-                    a_color: &[(&dimages.highres_frame)],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_color: &[MaybeRing::Single(&dimages.highres_frame)],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.smoke_pipe],
-                    a_input: &[&dimages.near_depth, &dimages.far_depth],
-                    a_color: &[(&dimages.highres_frame)],
-                    a_depth: Some(&dimages.highres_depth_stencil),
+                    a_input: &[
+                        MaybeRing::Single(&dimages.near_depth),
+                        MaybeRing::Single(&dimages.far_depth),
+                    ],
+                    a_color: &[MaybeRing::Single(&dimages.highres_frame)],
+                    a_depth: Some(MaybeRing::Single(&dimages.highres_depth_stencil)),
                 },
                 SubpassDescription {
                     pipes: &mut [&mut pipes.tonemap_pipe],
-                    a_input: &[&dimages.highres_frame],
-                    a_color: &[(&lumal.vulkan_data.swapchain_images)],
+                    a_input: &[MaybeRing::Single(&dimages.highres_frame)],
+                    a_color: &[MaybeRing::Ring(&lumal.vulkan_data.swapchain_images)],
                     a_depth: None,
                 },
                 // SubpassDescription {
@@ -248,6 +263,7 @@ impl InternalRendererVulkan {
             gbuffer_rpass,
             shade_rpass,
         }
+        // todo!()
     }
 
     pub fn destroy_all_rpasses(lumal: &mut Renderer, rpasses: AllRenderPasses) {

@@ -61,11 +61,6 @@ fn main() {
             continue;
         }
 
-        // println!(
-        //     "Compiling shader: {} -> {}",
-        //     path.display(),
-        //     out_spv.display()
-        // );
         // current SPIR‑V pass:
         let status_spv = Command::new("glslc")
             .arg(&path)
@@ -82,57 +77,6 @@ fn main() {
             panic!("Failed to compile shader: {}", path.display());
         }
     }
-
-    // for entry in fs::read_dir("shaders_gl").expect("Failed to read shaders directory") {
-    //     let entry = entry.expect("Failed to read shader entry");
-    //     let path = entry.path();
-
-    //     if !path.is_file() {
-    //         continue;
-    //     }
-
-    //     // for OpenGL
-    //     let mut out_glsl = out_dir.join(path.file_name().unwrap());
-    //     add_extension(&mut out_glsl, "glsl");
-
-    //     if !needs_recompile(&path, &out_glsl) {
-    //         // println!("Skipping up-to-date shader: {}", path.display());
-    //         continue;
-    //     }
-
-    //     let status_glsl = Command::new("glslangValidator")
-    //         .arg("-E") // only run the preprocessor
-    //         .arg("-DOPENGL") // define OPENGL
-    //         .arg("--client opengl") // define OPENGL
-    //         // .arg("--target-env=opengl")
-    //         // .arg("--glsl-version")
-    //         // .arg("300es")
-    //         // .arg("OPENGL")
-    //         .arg(&path)
-    //         .arg("-o")
-    //         .arg(&out_glsl)
-    //         .status()
-    //         .expect("Failed to preprocess GLSL");
-    //     // let status_glsl = Command::new("glslangValidator")
-    //     //     .arg("-E") // only run the preprocessor
-    //     //     .arg("-DOPENGL") // define OPENGL
-    //     //     .arg("-G300") // define OPENGL
-    //     //     // .arg("--target-env=opengl")
-    //     //     // .arg("--glsl-version")
-    //     //     // .arg("300es")
-    //     //     // .arg("OPENGL")
-    //     //     .arg(&path)
-    //     //     .arg("-o")
-    //     //     .arg(&out_glsl)
-    //     //     .status()
-    //     //     .expect("Failed to preprocess GLSL");
-
-    //     if !status_glsl.success() {
-    //         panic!("Failed to preprocess GLSL: {}", path.display());
-    //     }
-    // }
-
-    // inform Cargo about the compiled shaders directory so it can be included later
 
     println!(
         "cargo:rustc-env=COMPILED_SHADERS_PATH={}/",
