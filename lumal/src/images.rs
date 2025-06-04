@@ -16,20 +16,20 @@ impl Renderer {
         // vma_flags: vma::AllocationCreateFlags,
         aspect: vk::ImageAspectFlags,
         extent: vk::Extent3D,
-        mipmaps: u32,
+        // mipmaps: u32,
         sample_count: vk::SampleCountFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) -> Image {
         let image_aspect = aspect;
         let image_format = format;
         let image_extent = extent;
-        let image_mip_levels = mipmaps;
+        // let image_mip_levels = mipmaps;
 
         let image_info = vk::ImageCreateInfo {
             image_type,
             format,
             extent,
-            mip_levels: mipmaps,
+            mip_levels: 1,
             array_layers: 1,
             samples: sample_count,
             tiling: vk::ImageTiling::OPTIMAL,
@@ -45,13 +45,13 @@ impl Renderer {
 
         let alloc_info = vma::AllocationCreateDesc {
             name: "",
-            requirements: requirements,
+            requirements,
             location: gpu_allocator::MemoryLocation::GpuOnly,
             linear: false,
             allocation_scheme: vma::AllocationScheme::GpuAllocatorManaged,
         };
 
-        let allocation = unsafe { self.allocator.allocate(&alloc_info) }.unwrap();
+        let allocation = self.allocator.allocate(&alloc_info).unwrap();
 
         unsafe {
             self.device
@@ -63,10 +63,10 @@ impl Renderer {
             vk::ImageType::TYPE_1D => vk::ImageViewType::TYPE_1D,
             vk::ImageType::TYPE_2D => vk::ImageViewType::TYPE_2D,
             vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
-            _ => return panic!("Unsupported image type"),
+            _ => panic!("Unsupported image type"),
         };
 
-        let mut view_info = vk::ImageViewCreateInfo {
+        let view_info = vk::ImageViewCreateInfo {
             flags: vk::ImageViewCreateFlags::empty(),
             image: vk_image,
             view_type,
@@ -81,7 +81,7 @@ impl Renderer {
                     aspect
                 },
                 base_mip_level: 0,
-                level_count: mipmaps,
+                level_count: 1,
                 base_array_layer: 0,
                 layer_count: 1,
             },
@@ -90,28 +90,28 @@ impl Renderer {
 
         let image_view = unsafe { self.device.create_image_view(&view_info, None).unwrap() };
 
-        let mut image_mip_views = vec![];
-        if mipmaps > 1 {
-            image_mip_views = (0..mipmaps)
-                .map(|mip| {
-                    view_info.subresource_range.base_mip_level = mip;
-                    view_info.subresource_range.level_count = 1;
-                    let view = unsafe { self.device.create_image_view(&view_info, None).unwrap() };
-                    set_debug_names!(self, Some("Stencil View for DS"), (&view, "Image View"));
-                    view
-                })
-                .collect::<Vec<_>>();
-        }
+        // let mut image_mip_views = vec![];
+        // if mipmaps > 1 {
+        //     image_mip_views = (0..mipmaps)
+        //         .map(|mip| {
+        //             view_info.subresource_range.base_mip_level = mip;
+        //             view_info.subresource_range.level_count = 1;
+        //             let view = unsafe { self.device.create_image_view(&view_info, None).unwrap() };
+        //             set_debug_names!(self, Some("Stencil View for DS"), (&view, "Image View"));
+        //             view
+        //         })
+        //         .collect::<Vec<_>>();
+        // }
 
         let image = Image {
             image: vk_image,
-            allocation: allocation,
+            allocation,
             view: image_view,
-            mip_views: image_mip_views,
+            // mip_views: image_mip_views,
             format: image_format,
             aspect: image_aspect,
             extent: image_extent,
-            mip_levels: image_mip_levels,
+            // mip_levels: image_mip_levels,
         };
 
         self.transition_image_layout_single_time(
@@ -142,7 +142,7 @@ impl Renderer {
         // vma_flags: vma::AllocationCreateFlags,
         aspect: vk::ImageAspectFlags,
         extent: vk::Extent3D,
-        mipmaps: u32,
+        // mipmaps: u32,
         sample_count: vk::SampleCountFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) -> Ring<Image> {
@@ -159,7 +159,7 @@ impl Renderer {
                 // vma_flags,
                 aspect,
                 extent,
-                mipmaps,
+                // mipmaps,
                 sample_count,
                 #[cfg(feature = "debug_validation_names")]
                 debug_name,

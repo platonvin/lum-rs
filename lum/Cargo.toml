@@ -4,7 +4,7 @@ version = "0.1.4"
 edition = "2021"
 
 [features]
-default = ["wgpu_backend"]
+default = []
 vk_backend = ["shaders/vk_backend"]
 wgpu_backend = ["shaders/wgpu_backend"]
 # controls wether Lum uses Lumal feature for validation layer names

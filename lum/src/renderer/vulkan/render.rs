@@ -1020,8 +1020,8 @@ impl InternalRendererVulkan {
             global_light_dir: vec4!(self.light.light_dir, 0),
             lightmap_proj: self.light.light_transform,
             size: qvek::vec2!(
-                self.lumal.vulkan_data.swapchain_extent.width,
-                self.lumal.vulkan_data.swapchain_extent.height
+                self.lumal.swapchain_extent.width,
+                self.lumal.swapchain_extent.height
             ),
             timeseed: self.lumal.frame,
         };
@@ -1730,8 +1730,8 @@ impl InternalRendererVulkan {
         let ao_lut = ao_lut::generate_lut::<8>(
             16.0 / 1000.0,
             vec2::new(
-                self.lumal.vulkan_data.swapchain_extent.width as f32,
-                self.lumal.vulkan_data.swapchain_extent.height as f32,
+                self.lumal.swapchain_extent.width as f32,
+                self.lumal.swapchain_extent.height as f32,
             ),
             self.camera.horizline * self.camera.view_size.x / 2.0,
             self.camera.vertiline * self.camera.view_size.y / 2.0,

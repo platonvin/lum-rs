@@ -1,14 +1,12 @@
-use ash::vk;
-
 use crate::{ring::Ring, Buffer, Renderer}; // Import the LumalRenderer struct
+use ash::vk;
 use std::ptr;
 
 impl Renderer {
     #[cold]
     #[optimize(size)]
     pub fn create_sampler(&self, sampler_info: &vk::SamplerCreateInfo) -> vk::Sampler {
-        let sampler = unsafe { self.device.create_sampler(sampler_info, None) }.unwrap();
-        sampler
+        unsafe { self.device.create_sampler(sampler_info, None) }.unwrap()
     }
 
     #[cold]

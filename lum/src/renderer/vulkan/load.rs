@@ -222,7 +222,7 @@ impl LoadInterface for InternalRendererVulkan {
             // vulkanalia_vma::AllocationCreateFlags::empty(),
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(size),
-            1,
+            // 1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Rayrace Voxels"),
@@ -328,7 +328,7 @@ impl LoadInterface for InternalRendererVulkan {
             image: mesh.voxels.image,
             view: mesh.voxels.view,
             allocation: mesh.voxels.allocation,
-            mip_views: mesh.voxels.mip_views,
+            // mip_views: mesh.voxels.mip_views,
             lifetime: FRAMES_IN_FLIGHT as i32,
         });
     }

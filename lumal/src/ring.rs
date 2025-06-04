@@ -1,7 +1,6 @@
 // vector that has index that moves by one untile reaches the end and then wraps
 // primarly used for CPU-GPU resources, where GPU operates on previous frame resources, and CPU operates on current (frame resources)
 
-use crate::MAX_FRAMES_IN_FLIGHT;
 use std::ops::{Index, IndexMut}; // lol
 
 #[derive(Debug)]
@@ -163,10 +162,6 @@ impl<T> Ring<T> {
         self
     }
 
-    pub fn as_ref(&self) -> &Ring<T> {
-        self
-    }
-
     pub fn as_ptr(&self) -> *const Ring<T> {
         self as *const Ring<T>
     }
@@ -194,7 +189,7 @@ impl<T> Ring<T> {
 impl<T> Ring<T> {
     /// Creates a new `Ring` with a given size and initializes all elements with `T::default()`.
     pub fn new_with(size: usize, lambda: impl Fn(usize) -> T) -> Self {
-        let data = (0..size).map(|i| lambda(i)).collect::<Vec<_>>().into_boxed_slice();
+        let data = (0..size).map(lambda).collect::<Vec<_>>().into_boxed_slice();
         Self { data, index: 0 }
     }
     pub fn from_vec(data: Vec<T>) -> Self {
@@ -206,7 +201,7 @@ impl<T> Ring<T> {
     /// Resizes the `Ring` and initializes new elements with `T::default()`.
     /// Existing elements are moved to the new `data` array.
     pub fn resize_with(&mut self, size: usize, lambda: impl Fn(usize) -> T) {
-        let mut new_data = (0..size).map(|i| lambda(i)).collect::<Vec<_>>();
+        let mut new_data = (0..size).map(&lambda).collect::<Vec<_>>();
         // Move existing data, up to the smaller of the old and new sizes.
         let len = std::cmp::min(self.data.len(), size);
 

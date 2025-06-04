@@ -4,13 +4,16 @@ use qvek::vek::num_traits::{One, Zero};
 
 use crate::{
     containers::Array3D,
-    renderer::types::{
-        u8vec3, u8vec4, uvec3, vec3, FaceBuffers, IndexedVertices, InternalMeshBlock,
-        InternalMeshModel, VoxelForContour,
+    renderer::{
+        ogt_vox,
+        types::{
+            u8vec3, u8vec4, uvec3, vec3, FaceBuffers, IndexedVertices, InternalMeshBlock,
+            InternalMeshModel, VoxelForContour,
+        },
     },
 };
 
-use super::{ogt_vox, webgpu::types::IndexedVerticesQueue};
+// use super::{ogt_vox, webgpu::types::IndexedVerticesQueue};
 
 pub trait LoadInterface {
     type BufferType;

@@ -6,7 +6,7 @@ use qvek::vek::{
     num_traits::{One, Zero},
 };
 
-use super::webgpu::types::IndexedVerticesQueue;
+// use super::webgpu::types::IndexedVerticesQueue;
 
 // // my glsl brain dictaited me to do this
 pub type uvec4 = vek::Vec4<u32>;

@@ -13,12 +13,8 @@ impl Renderer {
     #[optimize(speed)]
     pub fn start_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
         unsafe {
-            self.device.wait_for_fences(
-                &[*self.vulkan_data.in_flight_fences.current()],
-                true,
-                u64::MAX,
-            );
-            self.device.reset_fences(&[*self.vulkan_data.in_flight_fences.current()]);
+            self.device.wait_for_fences(&[*self.in_flight_fences.current()], true, u64::MAX);
+            self.device.reset_fences(&[*self.in_flight_fences.current()]);
         };
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -39,9 +35,9 @@ impl Renderer {
             // this is index of swapchain image that we should render to
             // it is not just incremented-wrapped because driver might (and will) juggle them around for perfomance reasons
             self.swapchain_loader.acquire_next_image(
-                self.vulkan_data.swapchain,
+                self.swapchain,
                 u64::MAX,
-                *self.vulkan_data.image_available_semaphores.current(),
+                *self.image_available_semaphores.current(),
                 vk::Fence::null(), // no fence
             )
         };
@@ -52,8 +48,8 @@ impl Renderer {
     #[cold]
     #[optimize(speed)]
     pub fn present_frame(&mut self, window: &Window) {
-        let wait_semaphores = [*self.vulkan_data.render_finished_semaphores.current()];
-        let swapchains = [self.vulkan_data.swapchain];
+        let wait_semaphores = [*self.render_finished_semaphores.current()];
+        let swapchains = [self.swapchain];
         let image_indices = [self.image_index];
         let present_info = vk::PresentInfoKHR {
             wait_semaphore_count: wait_semaphores.len() as u32,
@@ -64,10 +60,8 @@ impl Renderer {
             ..Default::default()
         };
 
-        let error_code = unsafe {
-            self.swapchain_loader
-                .queue_present(self.vulkan_data.graphics_queue, &present_info)
-        };
+        let error_code =
+            unsafe { self.swapchain_loader.queue_present(self.graphics_queue, &present_info) };
 
         self.process_success_code(error_code, window);
     }
@@ -80,8 +74,8 @@ impl Renderer {
                 self.device.end_command_buffer(*command_buffer).unwrap();
             }
         }
-        let signal_semaphores = [*self.vulkan_data.render_finished_semaphores.current()];
-        let wait_semaphores = [*self.vulkan_data.image_available_semaphores.current()];
+        let signal_semaphores = [*self.render_finished_semaphores.current()];
+        let wait_semaphores = [*self.image_available_semaphores.current()];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
         let submit_info = vk::SubmitInfo {
             wait_semaphore_count: wait_semaphores.len() as u32,
@@ -98,18 +92,18 @@ impl Renderer {
             // ask a queue to exectue the commands in command buffer
             self.device
                 .queue_submit(
-                    self.vulkan_data.graphics_queue,
+                    self.graphics_queue,
                     &[submit_info],
-                    *self.vulkan_data.in_flight_fences.current(),
+                    *self.in_flight_fences.current(),
                 )
                 .unwrap();
         }
 
         self.present_frame(window);
 
-        self.vulkan_data.image_available_semaphores.move_next();
-        self.vulkan_data.render_finished_semaphores.move_next();
-        self.vulkan_data.in_flight_fences.move_next();
+        self.image_available_semaphores.move_next();
+        self.render_finished_semaphores.move_next();
+        self.in_flight_fences.move_next();
         // counter for internal purposes
         self.frame += 1;
     }
@@ -134,7 +128,7 @@ impl Renderer {
                         self.should_recreate = true;
                     }
                     _ => {
-                        panic!("unknown error code on aquire_next_image_khr: {:?}", vk_res);
+                        panic!("unknown error code on aquire_next_image_khr: {vk_res:?}");
                     }
                 }
             }
@@ -163,7 +157,7 @@ impl Renderer {
                     // self.recreate_swapchain(window);
                 }
                 _ => {
-                    panic!("unknown error code on queue_present_khr: {:?}", vk_res);
+                    panic!("unknown error code on queue_present_khr: {vk_res:?}");
                 }
             },
         }

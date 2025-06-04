@@ -7,6 +7,8 @@ todoy:
   better traits
   divide into more crates
   formats
+  fix smoke
+  fix particles (remove geom)
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
 wgpui better pcnherit TODO from lum++

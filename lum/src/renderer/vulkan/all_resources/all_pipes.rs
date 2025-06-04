@@ -209,7 +209,7 @@ impl InternalRendererVulkan {
             std::mem::size_of::<PackedVoxelCircuit>() as u32,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             12, // push size
             DepthTesting::DT_ReadWrite,
@@ -241,7 +241,7 @@ impl InternalRendererVulkan {
             std::mem::size_of::<PackedVoxelCircuit>() as u32,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() * 3) as u32,
             DepthTesting::DT_ReadWrite,
@@ -294,7 +294,7 @@ impl InternalRendererVulkan {
             std::mem::size_of::<Particle>() as u32,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::POINT_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0,
             DepthTesting::DT_ReadWrite,
@@ -322,7 +322,7 @@ impl InternalRendererVulkan {
             0,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_STRIP,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() + (std::mem::size_of::<i32>() * 2)) as u32,
             DepthTesting::DT_ReadWrite,
@@ -357,7 +357,7 @@ impl InternalRendererVulkan {
                 std::mem::size_of::<PackedVoxelCircuit>() as u32,
                 vk::VertexInputRate::VERTEX,
                 vk::PrimitiveTopology::TRIANGLE_LIST,
-                lumal.vulkan_data.swapchain_extent,
+                lumal.swapchain_extent,
                 &[BlendAttachment::NoBlend],
                 (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32, // push size
                 DepthTesting::DT_ReadWrite,
@@ -386,7 +386,7 @@ impl InternalRendererVulkan {
             0,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<ivec4>()
                 + (std::mem::size_of::<vec4>() * 4)
@@ -416,7 +416,7 @@ impl InternalRendererVulkan {
             0,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0,
             DepthTesting::DT_None,
@@ -444,7 +444,7 @@ impl InternalRendererVulkan {
             0,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
             DepthTesting::DT_None,
@@ -480,7 +480,7 @@ impl InternalRendererVulkan {
             0,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[
                 BlendAttachment::BlendReplaceIfGreater,
                 BlendAttachment::BlendReplaceIfLess,
@@ -520,7 +520,7 @@ impl InternalRendererVulkan {
             0,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::BlendMix],
             (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32,
             DepthTesting::DT_None,
@@ -556,7 +556,7 @@ impl InternalRendererVulkan {
             0,
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0, // No push constants
             DepthTesting::DT_None,
@@ -592,7 +592,7 @@ impl InternalRendererVulkan {
             0,   // No vk::ShaderStageFlags::vertex size
             vk::VertexInputRate::VERTEX,
             vk::PrimitiveTopology::TRIANGLE_LIST,
-            lumal.vulkan_data.swapchain_extent,
+            lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
             DepthTesting::DT_None,
@@ -638,7 +638,7 @@ impl InternalRendererVulkan {
         //     std::mem::size_of::<Rmlvk::ShaderStageFlags::Vertex>() as u32,
         //     vk::VertexInputRate::VERTEX,
         //     vk::PrimitiveTopology::TRIANGLE_LIST,
-        //     lumal.vulkan_data.swapchain_extent,
+        //     lumal.swapchain_extent,
         //     &[BlendAttachment::BlendMix],
         //     (std::mem::size_of::<vec4>() + std::mem::size_of::<mat4>()) as u32, // Push size
         //     DepthTesting::DT_None,

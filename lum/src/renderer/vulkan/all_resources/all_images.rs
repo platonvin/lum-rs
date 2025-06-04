@@ -28,7 +28,6 @@ impl InternalRendererVulkan {
                 | vk::ImageUsageFlags::SAMPLED,
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(lum_settings.world_size),
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("World"),
@@ -44,7 +43,6 @@ impl InternalRendererVulkan {
                 height: lum_settings.lightmap_extent.height,
                 depth: 1,
             },
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Lightmap"),
@@ -60,7 +58,6 @@ impl InternalRendererVulkan {
                 | vk::ImageUsageFlags::TRANSFER_DST,
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(lum_settings.world_size),
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Radiance Cache"),
@@ -79,7 +76,6 @@ impl InternalRendererVulkan {
                 height: 16 * BLOCK_PALETTE_SIZE_Y,
                 depth: 16,
             },
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Origin Block Palette"),
@@ -95,7 +91,6 @@ impl InternalRendererVulkan {
                 height: 256,
                 depth: 1,
             },
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Material Palette"),
@@ -112,7 +107,6 @@ impl InternalRendererVulkan {
                 height: lum_settings.world_size.y * 2,
                 depth: 1,
             },
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Grass State"),
@@ -127,7 +121,6 @@ impl InternalRendererVulkan {
                 height: lum_settings.world_size.y * 2,
                 depth: 1,
             },
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Water State"),
@@ -144,7 +137,6 @@ impl InternalRendererVulkan {
                 height: lum_settings.world_size.y,
                 depth: 1,
             },
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Perlin Noise 2D"),
@@ -161,7 +153,6 @@ impl InternalRendererVulkan {
                 height: 32,
                 depth: 32,
             },
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Perlin Noise 3D"),
@@ -189,8 +180,8 @@ impl InternalRendererVulkan {
         lumal_settings: &LumalSettings,
     ) -> AllSwapchainDependentImages {
         let sextent = uvec3::new(
-            lumal.vulkan_data.swapchain_extent.width,
-            lumal.vulkan_data.swapchain_extent.height,
+            lumal.swapchain_extent.width,
+            lumal.swapchain_extent.height,
             1,
         );
 
@@ -205,7 +196,6 @@ impl InternalRendererVulkan {
                 | vk::ImageUsageFlags::INPUT_ATTACHMENT,
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(sextent),
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Highres Frame"),
@@ -221,7 +211,6 @@ impl InternalRendererVulkan {
                 | vk::ImageUsageFlags::INPUT_ATTACHMENT,
             vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
             uvec3_to_extent3d(sextent),
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Highres Depth Stencil"),
@@ -238,7 +227,6 @@ impl InternalRendererVulkan {
                 | vk::ImageUsageFlags::COLOR_ATTACHMENT,
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(sextent),
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Highres Material Norm"),
@@ -283,7 +271,6 @@ impl InternalRendererVulkan {
                 | vk::ImageUsageFlags::COLOR_ATTACHMENT,
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(sextent),
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Far Depth"),
@@ -300,7 +287,6 @@ impl InternalRendererVulkan {
                 | vk::ImageUsageFlags::COLOR_ATTACHMENT,
             vk::ImageAspectFlags::COLOR,
             uvec3_to_extent3d(sextent),
-            1,
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Near Depth"),

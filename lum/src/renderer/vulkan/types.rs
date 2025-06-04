@@ -1,10 +1,7 @@
 #![allow(non_camel_case_types)]
 
-use block_mesh::VoxelVisibility;
-use lumal::vk;
-use qvek::vek;
-
 use crate::renderer::types::*;
+use lumal::vk;
 
 #[allow(non_camel_case_types)]
 pub type BlockId = i16;

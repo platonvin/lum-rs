@@ -1,12 +1,7 @@
-use crate::{read_file, ring::Ring, ComputePipe, RasterPipe, RenderPass};
-
 use crate::*;
-use descriptors::*;
-
+use crate::{ring::Ring, ComputePipe, RasterPipe};
 use ash::vk::{self, CompareOp, DynamicState, StencilOp};
-use std::{error, ffi::CStr, ptr::slice_from_raw_parts};
-
-// const PREFIXES: &[&str] = &["../shaders/", "../../shaders/", "shaders/compiled/"];
+use descriptors::*;
 
 impl Renderer {
     #[cold]
@@ -20,7 +15,7 @@ impl Renderer {
             self.device.destroy_pipeline_layout(pipe.line_layout, None);
             self.device.destroy_descriptor_set_layout(pipe.set_layout, None);
             self.device
-                .free_descriptor_sets(self.vulkan_data.descriptor_pool, pipe.sets.as_slice())
+                .free_descriptor_sets(self.descriptor_pool, pipe.sets.as_slice())
                 .unwrap();
         }
         // reset the whole thing. Its like raii but explicit
@@ -42,7 +37,7 @@ impl Renderer {
             self.device.destroy_pipeline_layout(pipe.line_layout, None);
             self.device.destroy_descriptor_set_layout(pipe.set_layout, None);
             self.device
-                .free_descriptor_sets(self.vulkan_data.descriptor_pool, pipe.sets.as_slice())
+                .free_descriptor_sets(self.descriptor_pool, pipe.sets.as_slice())
                 .unwrap();
         }
         // reset the whole thing. Its like raii but explicit
@@ -73,7 +68,7 @@ impl Renderer {
         // Shader stage info
         let (module, comp_shader_stage_info) = {
             // Create Vulkan compute shader module
-            let module = Self::load_shader_module(&self.device, &spirv_code);
+            let module = Self::load_shader_module(&self.device, spirv_code);
 
             set_debug_names!(self, debug_name, (&module, "Shader Module"));
 
@@ -84,7 +79,7 @@ impl Renderer {
                 vk::PipelineShaderStageCreateInfo {
                     stage: vk::ShaderStageFlags::COMPUTE,
                     module,
-                    p_name: c"main".as_ptr() as *const i8,
+                    p_name: c"main".as_ptr(),
                     ..Default::default()
                 },
             )
@@ -192,13 +187,13 @@ impl Renderer {
         let pipeline_shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = shader_stages
             .iter()
             .map(|stage| {
-                let module = Self::load_shader_module(&self.device, &stage.spirv_code);
+                let module = Self::load_shader_module(&self.device, stage.spirv_code);
                 modules_to_destroy.push(module);
 
                 vk::PipelineShaderStageCreateInfo {
                     stage: stage.stage,
                     module,
-                    p_name: c"main".as_ptr() as *const i8,
+                    p_name: c"main".as_ptr(),
                     ..Default::default()
                 }
             })
@@ -466,7 +461,7 @@ impl Renderer {
 
         let create_info = vk::ShaderModuleCreateInfo {
             code_size: code.len(),
-            p_code: code_u32.as_ptr() as *const u32,
+            p_code: code_u32.as_ptr(),
             ..Default::default()
         };
 

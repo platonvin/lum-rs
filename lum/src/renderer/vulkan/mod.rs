@@ -214,7 +214,7 @@ impl InternalRendererVulkan {
         // event_loop: &winit::event_loop::EventLoop<()>,
         foliage_descriptions: Vec<MeshFoliageDescription>,
     ) -> InternalRendererVulkan {
-        let mut lumal_settings = lumal::LumalSettings::create_default();
+        let mut lumal_settings = lumal::LumalSettings::default();
         if cfg!(debug_assertions) {
             lumal_settings.debug = true;
         }
@@ -359,10 +359,8 @@ impl InternalRendererVulkan {
         // in Vulkan, you can drop the entire pool or descriptors individually
         // most of them are invalid after resizing anyways, so dropping pool is faster and easier
         unsafe {
-            self.lumal
-                .device
-                .destroy_descriptor_pool(self.lumal.vulkan_data.descriptor_pool, None);
-            self.lumal.vulkan_data.descriptor_pool = self.lumal.create_descriptor_pool();
+            self.lumal.device.destroy_descriptor_pool(self.lumal.descriptor_pool, None);
+            self.lumal.descriptor_pool = self.lumal.create_descriptor_pool();
         };
 
         let settings_copy = self.lumal.settings;

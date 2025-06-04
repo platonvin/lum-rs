@@ -50,15 +50,16 @@ overflow-checks = true # TODO: unchecked math (UB on overflow)
 # dont forget to build std lib with the project to see good size
 [profile.native]
 inherits = "release"
-opt-level = 3
+opt-level = "s"
 codegen-units = 1
 lto = "fat"
 debug = false
 panic = "abort"
 overflow-checks = false
 strip = true
-[profile.native.package."*"]
-opt-level = "s"
+debug-assertions = false
+# [profile.native.package."*"]
+# opt-level = "s"
 
 [profile.bench]
 inherits = "release"

@@ -1,7 +1,6 @@
-use std::ptr::null;
-
 use crate::{Buffer, Image, Renderer};
 use ash::vk::{self, BufferMemoryBarrier, MemoryBarrier, WHOLE_SIZE};
+use std::ptr::null;
 
 // just a wrapper for barriers that suits my needs
 // it is missing a lot but it does not matter anyways - drivers dont give a fuck about precise barriers
@@ -67,7 +66,7 @@ impl Renderer {
             dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
             buffer: buffer.buffer,
             offset: 0,
-            size: WHOLE_SIZE as u64,
+            size: vk::WHOLE_SIZE,
             src_access_mask,
             dst_access_mask,
             ..Default::default()

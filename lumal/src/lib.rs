@@ -1,11 +1,13 @@
-#![allow(dead_code, unused)]
-#![allow(unused_parens)]
 #![feature(optimize_attribute)]
 #![feature(const_type_id)]
+#![feature(default_field_values)]
 #![allow(clippy::missing_safety_doc)]
+#![allow(clippy::too_many_arguments)]
+
 // lumal is divided into files (aka modules)
 // this in needed for whole thing to compile
 // Rust is so good that figuring it out only took 1 hour
+
 pub mod barriers;
 pub mod blit_copy;
 pub mod buffers;
@@ -18,49 +20,41 @@ pub mod ring; // circular Vec
 pub mod rpass;
 pub mod samplers;
 
-use ring::*;
-
 pub use ash::vk;
 use ash::{
     ext::debug_utils,
     khr::{push_descriptor, surface, swapchain},
     prelude::VkResult,
     vk::{
-        ConformanceVersion, DebugUtilsObjectNameInfoEXT, ImageAspectFlags, EXT_DEBUG_UTILS_NAME,
-        KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_NAME, KHR_PORTABILITY_ENUMERATION_NAME,
+        CommandPool, ConformanceVersion, DebugUtilsObjectNameInfoEXT, DescriptorPool, Extent2D,
+        Fence, Format, ImageAspectFlags, PhysicalDevice, Queue, Semaphore, SurfaceKHR,
+        SwapchainKHR, EXT_DEBUG_UTILS_NAME, KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_NAME,
+        KHR_PORTABILITY_ENUMERATION_NAME,
     },
     Device, Entry, Instance,
 };
-use core::error;
 use gpu_allocator::vulkan::{self as vma, Allocator, AllocatorCreateDesc};
-use std::{any::type_name, os::raw::c_void};
+use ring::*;
 use std::{
-    any::Any,
-    mem::{size_of, size_of_val},
+    any::{Any, TypeId},
+    collections::HashSet,
+    ffi::CStr,
+    os::raw::c_void,
+    process::exit,
 };
-use std::{any::TypeId, ffi::CStr};
-use std::{collections::HashSet, default};
-use std::{ffi::c_char, process::exit};
 use winit::{
-    application::ApplicationHandler,
-    dpi::LogicalSize,
-    event::{DeviceEvent, DeviceId, WindowEvent},
-    event_loop::{ActiveEventLoop, EventLoop},
-    raw_window_handle::HasWindowHandle,
-    window::{WindowAttributes, WindowId},
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
+    window::Window,
 };
-use winit::{raw_window_handle::HasDisplayHandle, window::Window};
 
 const VALIDATION_LAYERS: &CStr = c"VK_LAYER_KHRONOS_validation";
 const LUNARG_MONITOR_LAYER: &CStr = c"VK_LAYER_LUNARG_monitor";
-
 /// The required device extensions.
 const DEVICE_EXTENSIONS: &[&CStr] = &[
     vk::KHR_SWAPCHAIN_NAME,
     vk::EXT_HOST_QUERY_RESET_NAME,
     vk::KHR_PUSH_DESCRIPTOR_NAME,
 ];
-
 /// Vulkan SDK version that started requiring the portability subset extension for macOS.
 const PORTABILITY_MACOS_VERSION: ConformanceVersion = ConformanceVersion {
     major: 1,
@@ -68,25 +62,8 @@ const PORTABILITY_MACOS_VERSION: ConformanceVersion = ConformanceVersion {
     patch: 216,
     subminor: 0,
 };
-
 /// number of frames that will be processed concurrently. 2 is perferct - CPU prepares frame N, GPU renders frame N-1
-const MAX_FRAMES_IN_FLIGHT: usize = 2;
-
-// unsafe fn unsafe_clone_on_stack<T>(value: &T) -> T {
-//     const SIZE: usize = std::mem::size_of::<T>();
-//     // Create an uninitialized array on the stack
-//     let mut buffer: std::mem::MaybeUninit<[u8; SIZE]> = std::mem::MaybeUninit::uninit();
-
-//     // Get a mutable pointer to the start of the buffer
-//     let buffer_ptr = buffer.as_mut_ptr() as *mut u8;
-
-//     // Copy the bytes from the value to the buffer
-//     std::ptr::copy_nonoverlapping(value as *const T as *const u8, buffer_ptr, SIZE);
-
-//     // Transmute the buffer to the target type T
-//     let cloned_value: T = buffer.assume_init_ref().as_ptr().cast::<T>().read_unaligned();
-//     cloned_value
-// }
+const DEFAULT_FRAMES_IN_FLIGHT: usize = 2;
 
 #[derive(Debug)]
 pub struct Buffer {
@@ -94,16 +71,6 @@ pub struct Buffer {
     pub allocation: vma::Allocation,
     // pub mapped: Option<*mut c_void>, // If allocation is mapped
 }
-// impl Clone for Buffer {
-//     fn clone(&self) -> Self {
-//         let clone_allocation = std::mem::transmute();
-//         Self {
-//             buffer: self.buffer,
-//             allocation: clone_allocation,
-//             mapped: self.mapped,
-//         }
-//     }
-// }
 impl Default for Buffer {
     fn default() -> Self {
         Self {
@@ -118,25 +85,21 @@ impl Default for Buffer {
 pub struct Image {
     pub image: vk::Image,
     pub allocation: vma::Allocation,
-    pub view: vk::ImageView,           // Main view
-    pub mip_views: Vec<vk::ImageView>, // Vec for mip views
+    pub view: vk::ImageView,
+    // TODO: can we just keep everything in GENERAL?
     pub format: vk::Format,
     pub aspect: vk::ImageAspectFlags,
     pub extent: vk::Extent3D,
-    pub mip_levels: u32,
 }
-
 impl Default for Image {
     fn default() -> Self {
         Self {
             image: Default::default(),
             allocation: unsafe { std::mem::zeroed() },
             view: Default::default(),
-            mip_views: Default::default(),
             format: Default::default(),
             aspect: Default::default(),
             extent: Default::default(),
-            mip_levels: Default::default(),
         }
     }
 }
@@ -163,43 +126,12 @@ pub struct ComputePipe {
 }
 
 // Structure for RenderPass
+#[derive(Default)]
 pub struct RenderPass {
     pub clear_colors: Vec<vk::ClearValue>,   // Colors to clear
     pub framebuffers: Ring<vk::Framebuffer>, // Framebuffers for the pass
     pub extent: vk::Extent2D,                // Extent of the render pass
     pub render_pass: vk::RenderPass,         // The actual RenderPass object
-}
-
-impl Default for RenderPass {
-    fn default() -> Self {
-        Self {
-            clear_colors: Default::default(),
-            framebuffers: Default::default(),
-            extent: Default::default(),
-            render_pass: Default::default(),
-        }
-    }
-}
-
-// Structure for Window
-// #[derive(Clone, Default)]
-pub struct LumalWindow {
-    // pub pointer: *mut glfw::ffi::GLFWwindow, // GLFW window pointer
-    pub pointer: *mut winit::window::Window,
-    pub width: i32,
-    pub height: i32,
-}
-
-// Structure for QueueFamilyIndices
-pub struct LumalQueueFamilyIndices {
-    pub graphical_and_compute: Option<u32>,
-    pub present: Option<u32>,
-}
-
-impl LumalQueueFamilyIndices {
-    pub fn is_complete(&self) -> bool {
-        self.graphical_and_compute.is_some() && self.present.is_some()
-    }
 }
 
 // Structure for SwapChainSupportDetails
@@ -218,12 +150,16 @@ impl SwapChainSupportDetails {
 // Structure for Settings
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LumalSettings {
-    pub timestamp_count: i32,
-    pub fif: usize,
-    pub vsync: bool,
-    pub fullscreen: bool,
-    pub debug: bool,
-    pub profile: bool,
+    pub timestamp_count: i32 = 0,
+    // Same as desired frame latency in wgpu
+    // also means how many resources are going to be in Rings for CPU-GPU resources
+    // also means "how many frames might there be in flight at the same time"
+    pub fif: usize = DEFAULT_FRAMES_IN_FLIGHT,
+    pub vsync: bool = false,
+    // if renderer starts fullscreen initially. There is nothing stopping user from going into fullscreen / windowed mode after
+    pub fullscreen: bool = false,
+    pub debug: bool = false,
+    pub profile: bool = false,
     // pub device_features: vk::PhysicalDeviceFeatures,
     // pub device_features11: vk::PhysicalDeviceVulkan11Features,
     // pub device_features12: vk::PhysicalDeviceVulkan12Features,
@@ -231,22 +167,6 @@ pub struct LumalSettings {
     // pub instance_layers: Vec<*const i8>,
     // pub instance_extensions: Vec<*const i8>,
     // pub device_extensions: Vec<*const i8>,
-}
-impl LumalSettings {
-    pub fn create_default() -> LumalSettings {
-        LumalSettings {
-            timestamp_count: 0,
-            fif: MAX_FRAMES_IN_FLIGHT,
-            vsync: true,
-            fullscreen: false,
-            debug: false,
-            profile: false,
-            // device_features: vk::PhysicalDeviceFeatures::default(),
-            // device_features11: vk::PhysicalDeviceVulkan11Features::default(),
-            // device_features12: vk::PhysicalDeviceVulkan12Features::default(),
-            // physical_features2: vk::PhysicalDeviceFeatures2::default(),
-        }
-    }
 }
 
 #[allow(non_snake_case)]
@@ -270,17 +190,17 @@ pub struct DescriptorCounter {
 pub struct ImageDeletion {
     pub image: vk::Image,
     pub allocation: vma::Allocation,
-    pub view: vk::ImageView,           // Main view
-    pub mip_views: Vec<vk::ImageView>, // Vec for mip views
+    pub view: vk::ImageView, // Main view
+    // pub mip_views: Vec<vk::ImageView>, // Vec for mip views
     pub lifetime: i32,
 }
 
 impl Clone for ImageDeletion {
     fn clone(&self) -> Self {
         Self {
-            image: self.image.clone(),
-            view: self.view.clone(),
-            mip_views: self.mip_views.clone(),
+            image: self.image,
+            view: self.view,
+            // mip_views: self.mip_views.clone(),
             lifetime: self.lifetime,
             allocation: vma::Allocation::default(),
         }
@@ -297,15 +217,29 @@ pub struct BufferDeletion {
 pub struct Renderer {
     pub allocator: vma::Allocator,
     pub settings: LumalSettings,
-    pub vulkan_data: VulkanData, // ok example from vk is good
-    pub entry: Entry,            // internal vk entry point
-    pub instance: Instance, // wrapper around vk::Instance. TODO: custom vulkan al wrapper (barebone)
-    pub device: Device,     // wrapper around vk::Device. TODO: custom vulkan al wrapper (barebone)
+
+    pub surface: vk::SurfaceKHR,
+    pub physical_device: vk::PhysicalDevice,
+    pub graphics_queue: vk::Queue,
+    pub present_queue: vk::Queue,
+    pub swapchain_format: vk::Format,
+    pub swapchain_extent: vk::Extent2D,
+    pub swapchain: vk::SwapchainKHR,
+    pub swapchain_images: Ring<crate::Image>,
+    pub command_pool: vk::CommandPool,
+    pub image_available_semaphores: Ring<vk::Semaphore>,
+    pub render_finished_semaphores: Ring<vk::Semaphore>,
+    pub in_flight_fences: Ring<vk::Fence>,
+    pub descriptor_pool: vk::DescriptorPool,
+    pub entry: Entry, // internal vk entry point
+    pub instance: Instance,
+    pub device: Device,
     pub surface_loader: surface::Instance,
     pub swapchain_loader: swapchain::Device,
     pub debug_utils_loader: debug_utils::Instance,
     pub debug_utils_device_loader: debug_utils::Device,
     pub push_descriptors_loader: push_descriptor::Device,
+
     pub frame: i32, // global counter of rendered frame, mostly for internal use
     pub image_index: u32,
     pub should_recreate: bool,
@@ -328,18 +262,10 @@ impl Renderer {
     pub fn create(settings: &LumalSettings, window: &Window) -> Renderer {
         println!("Starting app.");
 
-        let mut vulkan_data = VulkanData {
-            validation: settings.debug,
-            ..Default::default()
-        };
-
-        if vulkan_data.validation {
-            println!("Validation layers requested.");
-        }
         unsafe {
             let entry = Entry::load().expect("Failed to load Vulkan entry point");
-            let instance = Renderer::create_instance(window, &entry, &mut vulkan_data);
-            vulkan_data.surface = ash_window::create_surface(
+            let instance = Renderer::create_instance(window, &entry, settings.debug);
+            let surface = ash_window::create_surface(
                 &entry,
                 &instance,
                 window.display_handle().unwrap().as_raw(),
@@ -347,41 +273,75 @@ impl Renderer {
                 None,
             )
             .unwrap();
-            pick_physical_device(&instance, &entry, &mut vulkan_data);
-            let device = create_logical_device(&entry, &instance, &mut vulkan_data);
+            let physical_device = pick_physical_device(&instance, &entry, &surface);
+            let (device, graphics_queue, present_queue) = create_logical_device(
+                &entry,
+                &instance,
+                &surface,
+                &physical_device,
+                settings.debug,
+            );
 
             let mut allocator = Allocator::new(&AllocatorCreateDesc {
                 instance: instance.clone(),
                 device: device.clone(),
-                physical_device: vulkan_data.physical_device,
+                physical_device: physical_device,
                 debug_settings: Default::default(),
                 buffer_device_address: false,
                 allocation_sizes: Default::default(),
             })
             .unwrap();
 
-            create_swapchain(window, &instance, &entry, &device, &mut vulkan_data);
-            // create_swapchain_image_views(&device, &mut vulkan_data);
-            // these are handled by downstream user. Makes no sense to hardcode pipes in renderer
+            let (swapchain, swapchain_images, swapchain_extent, swapchain_format) =
+                create_swapchain(
+                    settings,
+                    window,
+                    &instance,
+                    &entry,
+                    &device,
+                    &surface,
+                    &physical_device,
+                );
+
+            // these are handled by downstream user. Makes no sense to hardcode pipelines in renderer
             // example.create_render_pass(&device, &mut data);
             // example.create_pipeline(&device, &mut data);
             // create_framebuffers(&device, &mut data);
             // create_command_buffers(&device, &mut vulkan_data);
-            create_command_pool(&instance, &entry, &device, &mut vulkan_data);
-            create_sync_objects(&device, &mut vulkan_data);
 
+            let command_pool =
+                create_command_pool(&instance, &entry, &device, &surface, &physical_device);
+            let (image_available_semaphores, render_finished_semaphores, in_flight_fences) =
+                create_sync_objects(&device);
+
+            // these are loading functions (separate because they might not be presented)
             let surface_loader = surface::Instance::new(&entry, &instance);
             let swapchain_loader = swapchain::Device::new(&instance, &device);
             let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
             let debug_utils_device_loader = debug_utils::Device::new(&instance, &device);
             let push_descriptors_loader = push_descriptor::Device::new(&instance, &device);
 
+            let descriptor_pool = DescriptorPool::null();
+
             Renderer {
                 allocator,
-                vulkan_data,
                 entry,
                 instance,
                 device,
+                surface,
+                physical_device,
+                graphics_queue,
+                present_queue,
+                swapchain_format,
+                swapchain_extent,
+                swapchain,
+                swapchain_images,
+                command_pool,
+                image_available_semaphores,
+                render_finished_semaphores,
+                in_flight_fences,
+                descriptor_pool,
+
                 frame: 0,
                 should_recreate: false,
                 settings: *settings,
@@ -393,6 +353,7 @@ impl Renderer {
                 extra_command_buffers: Default::default(),
                 buffer_deletion_queue: vec![],
                 image_deletion_queue: vec![],
+
                 surface_loader,
                 swapchain_loader,
                 debug_utils_loader,
@@ -407,7 +368,7 @@ impl Renderer {
     pub unsafe fn create_instance(
         window: &Window,
         entry: &Entry,
-        data: &mut VulkanData,
+        validation: bool, // data: &mut Vulkan
     ) -> Instance {
         // Application Info
         let application_info = vk::ApplicationInfo {
@@ -435,11 +396,11 @@ impl Renderer {
         _validation_layers.resize(256, 0);
         let _validation_layers: [i8; 256] = _validation_layers.try_into().unwrap();
 
-        if data.validation && !available_layers.contains(&_validation_layers) {
-            return panic!("Validation layers requested but not supported");
+        if validation && !available_layers.contains(&_validation_layers) {
+            panic!("Validation layers requested but not supported");
         }
 
-        let mut layers = if (data.validation) {
+        let mut layers = if validation {
             vec![VALIDATION_LAYERS.as_ptr()]
         } else {
             Vec::new()
@@ -477,7 +438,7 @@ impl Renderer {
             vk::InstanceCreateFlags::empty()
         };
 
-        if data.validation {
+        if validation {
             extensions.push(EXT_DEBUG_UTILS_NAME.as_ptr());
         }
 
@@ -502,7 +463,7 @@ impl Renderer {
             ..Default::default()
         };
 
-        if data.validation {
+        if validation {
             info.p_next = &mut debug_info as *mut _ as *mut c_void;
         }
 
@@ -512,10 +473,10 @@ impl Renderer {
     pub unsafe fn destroy(mut self) {
         self.process_deletion_queues_untill_all_done();
         {
-            self.device.destroy_descriptor_pool(self.vulkan_data.descriptor_pool, None);
-            self.vulkan_data.descriptor_pool = vk::DescriptorPool::null();
+            self.device.destroy_descriptor_pool(self.descriptor_pool, None);
+            self.descriptor_pool = vk::DescriptorPool::null();
         }
-        self.device.destroy_command_pool(self.vulkan_data.command_pool, None);
+        self.device.destroy_command_pool(self.command_pool, None);
         self.destroy_swapchain();
         self.destroy_sync_primitives();
 
@@ -525,7 +486,7 @@ impl Renderer {
 
         self.device.destroy_device(None);
         unsafe {
-            self.surface_loader.destroy_surface(self.vulkan_data.surface, None);
+            self.surface_loader.destroy_surface(self.surface, None);
         }
         self.instance.destroy_instance(None);
     }
@@ -533,28 +494,22 @@ impl Renderer {
     #[cold]
     #[optimize(size)]
     unsafe fn destroy_swapchain(&self) {
-        self.vulkan_data
-            .swapchain_images
+        self.swapchain_images
             .iter()
             .for_each(|v| self.device.destroy_image_view(v.view, None));
         unsafe {
-            self.swapchain_loader.destroy_swapchain(self.vulkan_data.swapchain, None);
+            self.swapchain_loader.destroy_swapchain(self.swapchain, None);
         }
     }
 
     #[cold]
     #[optimize(size)]
     unsafe fn destroy_sync_primitives(&self) {
-        self.vulkan_data
-            .in_flight_fences
-            .iter()
-            .for_each(|f| self.device.destroy_fence(*f, None));
-        self.vulkan_data
-            .render_finished_semaphores
+        self.in_flight_fences.iter().for_each(|f| self.device.destroy_fence(*f, None));
+        self.render_finished_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
-        self.vulkan_data
-            .image_available_semaphores
+        self.image_available_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
     }
@@ -564,7 +519,7 @@ impl Renderer {
     pub fn begin_single_time_command_buffer(&self) -> vk::CommandBuffer {
         let alloc_info = vk::CommandBufferAllocateInfo {
             level: vk::CommandBufferLevel::PRIMARY,
-            command_pool: self.vulkan_data.command_pool,
+            command_pool: self.command_pool,
             command_buffer_count: 1,
             ..Default::default()
         };
@@ -594,18 +549,13 @@ impl Renderer {
         unsafe {
             // grapics is also capable of compute and transfer btw
             self.device
-                .queue_submit(
-                    self.vulkan_data.graphics_queue,
-                    &[submit_info],
-                    vk::Fence::null(),
-                )
+                .queue_submit(self.graphics_queue, &[submit_info], vk::Fence::null())
                 .unwrap();
             // yep unoptimal but you are not supposed to use this at all
-            self.device.queue_wait_idle(self.vulkan_data.graphics_queue).unwrap();
+            self.device.queue_wait_idle(self.graphics_queue).unwrap();
         }
         unsafe {
-            self.device
-                .free_command_buffers(self.vulkan_data.command_pool, &[command_buffer]);
+            self.device.free_command_buffers(self.command_pool, &[command_buffer]);
         }
     }
 
@@ -646,9 +596,9 @@ impl Renderer {
     #[optimize(size)]
     pub fn create_command_buffer(&self) -> Ring<vk::CommandBuffer> {
         let info = vk::CommandBufferAllocateInfo {
-            command_pool: self.vulkan_data.command_pool,
+            command_pool: self.command_pool,
             level: vk::CommandBufferLevel::PRIMARY,
-            command_buffer_count: MAX_FRAMES_IN_FLIGHT as u32,
+            command_buffer_count: self.settings.fif as u32,
             ..Default::default()
         };
 
@@ -659,10 +609,8 @@ impl Renderer {
     #[optimize(size)]
     pub fn destroy_command_buffer(&self, compute_command_buffers: &Ring<vk::CommandBuffer>) {
         unsafe {
-            self.device.free_command_buffers(
-                self.vulkan_data.command_pool,
-                compute_command_buffers.as_slice(),
-            )
+            self.device
+                .free_command_buffers(self.command_pool, compute_command_buffers.as_slice())
         };
     }
 
@@ -777,8 +725,7 @@ impl Renderer {
                 write_index += 1;
             } else {
                 // Destroy the buffer before overwriting
-                let buffer =
-                    std::mem::replace(&mut self.buffer_deletion_queue[i].buffer, Buffer::default());
+                let buffer = std::mem::take(&mut self.buffer_deletion_queue[i].buffer);
                 self.allocator.free(buffer.allocation);
                 unsafe { self.device.destroy_buffer(buffer.buffer, None) };
             }
@@ -802,14 +749,14 @@ impl Renderer {
                 // Destroy the image and view before overwriting
                 let image = self.image_deletion_queue[i].image;
                 let view = self.image_deletion_queue[i].view;
-                let mip_views = std::mem::take(&mut self.image_deletion_queue[i].mip_views);
+                // let mip_views = std::mem::take(&mut self.image_deletion_queue[i].mip_views);
                 let allocation = std::mem::take(&mut self.image_deletion_queue[i].allocation);
                 unsafe {
                     self.allocator.free(allocation);
                     self.device.destroy_image_view(view, None);
-                    for mip_view in mip_views {
-                        self.device.destroy_image_view(mip_view, None);
-                    }
+                    // for mip_view in mip_views {
+                    //     self.device.destroy_image_view(mip_view, None);
+                    // }
                     self.device.destroy_image(image, None);
                 }
             }
@@ -852,14 +799,16 @@ impl Renderer {
             self.device.device_wait_idle().unwrap();
 
             create_swapchain(
+                &self.settings,
                 window,
                 &self.instance,
                 &self.entry,
                 &self.device,
-                &mut self.vulkan_data,
+                &self.surface,
+                &self.physical_device,
             );
-            // create_swapchain_image_views(&self.device, &mut self.vulkan_data).unwrap();
-            // create_command_pool(&self.instance, &self.device, &mut self.vulkan_data).unwrap();
+            // create_swapchain_image_views(&self.device, &mut self).unwrap();
+            // create_command_pool(&self.instance, &self.device, &mut self).unwrap();
 
             // match self.create_swapchain_dependent_resources {
             //     Some(ref mut fun) => fun(window),
@@ -888,11 +837,11 @@ impl Renderer {
 #[rustfmt::skip]
 pub fn get_vulkan_object_type<T: Any>(_object: &T) -> Option<vk::ObjectType> {
     let type_id = TypeId::of::<T>();
-    
+
     // use vk::ObjectType::*;
     use vk::Buffer;
     use vk::*;
-    
+
     #[rustfmt::skip]
     macro_rules! elif {
         ($type_id:ident, $type_1:ident, $type_2:expr) => {
@@ -930,7 +879,7 @@ pub fn get_vulkan_object_type<T: Any>(_object: &T) -> Option<vk::ObjectType> {
     elif!(type_id, SwapchainKHR, vk::ObjectType::SWAPCHAIN_KHR);
     elif!(type_id, DebugUtilsMessengerEXT, vk::ObjectType::DEBUG_UTILS_MESSENGER_EXT);
 
-    return Some(vk::ObjectType::UNKNOWN);
+    Some(vk::ObjectType::UNKNOWN)
 }
 
 #[macro_export]
@@ -969,31 +918,23 @@ macro_rules! set_debug_names {
 }
 
 /// The Vulkan handles and associated properties used by an example Vulkan app.
-#[derive(Debug, Default)]
-pub struct VulkanData {
-    pub validation: bool,
-    // Surface
-    pub surface: vk::SurfaceKHR,
-    // Physical Device / Logical Device
-    pub physical_device: vk::PhysicalDevice,
-    pub graphics_queue: vk::Queue,
-    pub present_queue: vk::Queue,
-    // Swapchain
-    pub swapchain_format: vk::Format,
-    pub swapchain_extent: vk::Extent2D,
-    pub swapchain: vk::SwapchainKHR,
-    pub swapchain_images: Ring<crate::Image>,
-    // pub swapchain_image_views: Ring<vk::ImageView>,
-    // Command Pool
-    pub command_pool: vk::CommandPool,
-    // Sync Objects
-    pub image_available_semaphores: Ring<vk::Semaphore>,
-    pub render_finished_semaphores: Ring<vk::Semaphore>,
-    pub in_flight_fences: Ring<vk::Fence>,
-    // pub images_in_flight: Ring<vk::Fence>,
-    // Descriptor pool
-    pub descriptor_pool: vk::DescriptorPool,
-}
+// #[derive(Debug, Default)]
+// pub struct VulkanData {
+//     pub validation: bool,
+//     pub surface: vk::SurfaceKHR,
+//     pub physical_device: vk::PhysicalDevice,
+//     pub graphics_queue: vk::Queue,
+//     pub present_queue: vk::Queue,
+//     pub swapchain_format: vk::Format,
+//     pub swapchain_extent: vk::Extent2D,
+//     pub swapchain: vk::SwapchainKHR,
+//     pub swapchain_images: Ring<crate::Image>,
+//     pub command_pool: vk::CommandPool,
+//     pub image_available_semaphores: Ring<vk::Semaphore>,
+//     pub render_finished_semaphores: Ring<vk::Semaphore>,
+//     pub in_flight_fences: Ring<vk::Fence>,
+//     pub descriptor_pool: vk::DescriptorPool,
+// }
 
 /// Logs debug messages.
 #[cold]
@@ -1007,10 +948,10 @@ extern "system" fn debug_callback(
     let data = unsafe { *data };
     let message = unsafe { CStr::from_ptr(data.p_message) }.to_string_lossy();
 
-    if severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR) {
-        println!("({:?}) {}", type_, message);
-    } else if severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::WARNING) {
-        println!("({:?}) {}", type_, message);
+    if severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR)
+        || severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::WARNING)
+    {
+        println!("({type_:?}) {message}");
     }
 
     vk::FALSE
@@ -1019,10 +960,14 @@ extern "system" fn debug_callback(
 /// Picks a suitable physical device.
 #[cold]
 #[optimize(size)]
-unsafe fn pick_physical_device(instance: &Instance, entry: &Entry, data: &mut VulkanData) {
+unsafe fn pick_physical_device(
+    instance: &Instance,
+    entry: &Entry,
+    surface: &SurfaceKHR,
+) -> PhysicalDevice {
     for physical_device in instance.enumerate_physical_devices().unwrap() {
         let properties = instance.get_physical_device_properties(physical_device);
-        if let Err(error) = check_physical_device(instance, entry, data, physical_device) {
+        if let Err(error) = check_physical_device(instance, entry, surface, &physical_device) {
             //TODO:
             println!(
                 "Skipping physical device (`{}`): {}",
@@ -1034,8 +979,7 @@ unsafe fn pick_physical_device(instance: &Instance, entry: &Entry, data: &mut Vu
                 "Selected physical device (`{}`).",
                 properties.device_name_as_c_str().unwrap().to_string_lossy()
             );
-            data.physical_device = physical_device;
-            return;
+            return physical_device;
         }
     }
 
@@ -1048,12 +992,12 @@ unsafe fn pick_physical_device(instance: &Instance, entry: &Entry, data: &mut Vu
 unsafe fn check_physical_device(
     instance: &Instance,
     entry: &Entry,
-    data: &VulkanData,
-    physical_device: vk::PhysicalDevice,
+    surface: &SurfaceKHR,
+    physical_device: &vk::PhysicalDevice,
 ) -> VkResult<()> {
-    QueueFamilyIndices::get(instance, entry, data, physical_device)?;
+    QueueFamilyIndices::get(instance, entry, surface, physical_device)?;
     check_physical_device_extensions(instance, physical_device)?;
-    let support = SwapchainSupport::get(instance, entry, data, physical_device)?;
+    let support = SwapchainSupport::get(instance, entry, physical_device, surface)?;
     if support.formats.is_empty() || support.present_modes.is_empty() {
         // return Err(anyhow!(SuitabilityError("Insufficient swapchain support.")));
         println!("Insufficient swapchain support");
@@ -1067,10 +1011,10 @@ unsafe fn check_physical_device(
 #[optimize(size)]
 unsafe fn check_physical_device_extensions(
     instance: &Instance,
-    physical_device: vk::PhysicalDevice,
+    physical_device: &vk::PhysicalDevice,
 ) -> VkResult<()> {
     let extensions = instance
-        .enumerate_device_extension_properties(physical_device)?
+        .enumerate_device_extension_properties(*physical_device)?
         .iter()
         .map(|e| e.extension_name)
         .collect::<HashSet<_>>();
@@ -1097,7 +1041,7 @@ unsafe fn check_physical_device_extensions(
                 "Missing required device extension: {:?}",
                 required_ext.to_bytes()
             );
-            println!("all extensions: {:?}", extensions);
+            println!("all extensions: {extensions:?}");
             exit(34);
         }
     }
@@ -1112,9 +1056,11 @@ unsafe fn check_physical_device_extensions(
 unsafe fn create_logical_device(
     entry: &Entry,
     instance: &Instance,
-    data: &mut VulkanData,
-) -> Device {
-    let indices = QueueFamilyIndices::get(instance, entry, data, data.physical_device).unwrap();
+    surface: &SurfaceKHR,
+    physical_device: &PhysicalDevice,
+    validation: bool,
+) -> (Device, Queue, Queue) {
+    let indices = QueueFamilyIndices::get(instance, entry, surface, physical_device).unwrap();
 
     let mut unique_indices = HashSet::new();
     unique_indices.insert(indices.graphics);
@@ -1131,7 +1077,7 @@ unsafe fn create_logical_device(
         })
         .collect::<Vec<_>>();
 
-    let layers = if data.validation {
+    let layers = if validation {
         vec![VALIDATION_LAYERS.as_ptr()]
     } else {
         vec![]
@@ -1188,41 +1134,44 @@ unsafe fn create_logical_device(
         ..Default::default()
     };
 
-    let device = instance.create_device(data.physical_device, &info, None).unwrap();
+    let device = instance.create_device(*physical_device, &info, None).unwrap();
 
-    data.graphics_queue = device.get_device_queue(indices.graphics, 0);
-    data.present_queue = device.get_device_queue(indices.present, 0);
+    let graphics_queue = device.get_device_queue(indices.graphics, 0);
+    let present_queue = device.get_device_queue(indices.present, 0);
 
-    device
+    (device, graphics_queue, present_queue)
 }
 
 /// Creates a swapchain and swapchain images.
 #[cold]
 #[optimize(size)]
 unsafe fn create_swapchain(
+    settings: &LumalSettings,
     window: &Window,
     instance: &Instance,
     entry: &Entry,
     device: &Device,
-    data: &mut VulkanData,
-) {
-    let indices = QueueFamilyIndices::get(instance, entry, data, data.physical_device).unwrap();
-    let support = SwapchainSupport::get(instance, entry, data, data.physical_device).unwrap();
+    surface: &SurfaceKHR,
+    physical_device: &vk::PhysicalDevice,
+) -> (SwapchainKHR, Ring<Image>, Extent2D, Format) {
+    let indices = QueueFamilyIndices::get(instance, entry, surface, physical_device).unwrap();
+    let support = SwapchainSupport::get(instance, entry, physical_device, surface).unwrap();
     let surface_format = get_swapchain_surface_format(&support.formats);
     let present_mode = get_swapchain_present_mode(&support.present_modes);
     let extent = get_swapchain_extent(window, support.capabilities);
-    data.swapchain_format = surface_format.format;
-    data.swapchain_extent = extent;
+
     let max_image_count = if support.capabilities.max_image_count != 0 {
         support.capabilities.max_image_count
     } else {
         u32::MAX
     };
-    let image_count = ((support.capabilities.min_image_count).max(MAX_FRAMES_IN_FLIGHT as u32))
-        .min(max_image_count);
+    let image_count =
+        ((support.capabilities.min_image_count).max(settings.fif as u32)).min(max_image_count);
+
     dbg!(support.capabilities.min_image_count);
     dbg!(support.capabilities.max_image_count);
     dbg!(image_count);
+
     let mut queue_family_indices = vec![];
     let image_sharing_mode = if indices.graphics != indices.present {
         queue_family_indices.push(indices.graphics);
@@ -1233,7 +1182,7 @@ unsafe fn create_swapchain(
     };
 
     let info = vk::SwapchainCreateInfoKHR {
-        surface: data.surface,
+        surface: *surface,
         min_image_count: image_count,
         image_format: surface_format.format,
         image_color_space: surface_format.color_space,
@@ -1251,11 +1200,11 @@ unsafe fn create_swapchain(
     };
 
     let swapchain_loader = swapchain::Device::new(instance, device);
-    data.swapchain = swapchain_loader.create_swapchain(&info, None).unwrap();
+    let swapchain = swapchain_loader.create_swapchain(&info, None).unwrap();
 
-    let swapchain_images = swapchain_loader.get_swapchain_images(data.swapchain).unwrap();
+    let swapchain_images = swapchain_loader.get_swapchain_images(swapchain).unwrap();
 
-    data.swapchain_images = Ring::from_vec(
+    let swapchain_images = Ring::from_vec(
         swapchain_images
             .iter()
             .enumerate()
@@ -1278,7 +1227,7 @@ unsafe fn create_swapchain(
                 let info = vk::ImageViewCreateInfo {
                     image: *vk_img,
                     view_type: vk::ImageViewType::TYPE_2D,
-                    format: data.swapchain_format,
+                    format: surface_format.format,
                     components,
                     subresource_range,
                     ..Default::default()
@@ -1315,8 +1264,8 @@ unsafe fn create_swapchain(
                     image: *vk_img,
                     // fuck vk
                     allocation: vma::Allocation::default(),
-                    view: view,
-                    mip_views: vec![],
+                    view,
+                    // mip_views: vec![],
                     format: surface_format.format,
                     aspect: ImageAspectFlags::COLOR,
                     extent: vk::Extent3D {
@@ -1324,11 +1273,13 @@ unsafe fn create_swapchain(
                         height: extent.height,
                         depth: 1,
                     },
-                    mip_levels: 0,
+                    // mip_levels: 0,
                 }
             })
             .collect(),
     );
+
+    (swapchain, swapchain_images, extent, surface_format.format)
 }
 
 /// Gets a suitable swapchain surface format.
@@ -1349,7 +1300,7 @@ fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::Surface
             return *f;
         }
     }
-    return formats[0];
+    formats[0]
 }
 
 /// Gets a suitable swapchain present mode.
@@ -1390,35 +1341,42 @@ unsafe fn create_command_pool(
     instance: &Instance,
     entry: &Entry,
     device: &Device,
-    data: &mut VulkanData,
-) {
-    let indices = QueueFamilyIndices::get(instance, entry, data, data.physical_device).unwrap();
+    surface: &SurfaceKHR,
+    physical_device: &PhysicalDevice,
+) -> CommandPool {
+    let indices = QueueFamilyIndices::get(instance, entry, &surface, physical_device).unwrap();
     let info = vk::CommandPoolCreateInfo {
         flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
         queue_family_index: indices.graphics,
         ..Default::default()
     };
-    data.command_pool = device.create_command_pool(&info, None).unwrap();
+    device.create_command_pool(&info, None).unwrap()
 }
 
 #[cold]
 #[optimize(size)]
-unsafe fn create_sync_objects(device: &Device, data: &mut VulkanData) {
+unsafe fn create_sync_objects(device: &Device) -> (Ring<Semaphore>, Ring<Semaphore>, Ring<Fence>) {
     let semaphore_info = vk::SemaphoreCreateInfo::default();
     let fence_info = vk::FenceCreateInfo {
         flags: vk::FenceCreateFlags::SIGNALED,
         ..Default::default()
     };
-    data.image_available_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    data.render_finished_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    data.in_flight_fences.resize(MAX_FRAMES_IN_FLIGHT);
-    for i in 0..MAX_FRAMES_IN_FLIGHT {
-        data.image_available_semaphores[i] =
-            (device.create_semaphore(&semaphore_info, None).unwrap());
-        data.render_finished_semaphores[i] =
-            (device.create_semaphore(&semaphore_info, None).unwrap());
-        data.in_flight_fences[i] = (device.create_fence(&fence_info, None).unwrap());
+    // TODO: we need swapchain_count of image_available_semaphores
+    let mut image_available_semaphores = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
+    // TODO: we might need only one???
+    let mut render_finished_semaphores = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
+    let mut in_flight_fences = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
+    for i in 0..DEFAULT_FRAMES_IN_FLIGHT {
+        image_available_semaphores[i] = (device.create_semaphore(&semaphore_info, None).unwrap());
+        render_finished_semaphores[i] = (device.create_semaphore(&semaphore_info, None).unwrap());
+        in_flight_fences[i] = (device.create_fence(&fence_info, None).unwrap());
     }
+
+    (
+        image_available_semaphores,
+        render_finished_semaphores,
+        in_flight_fences,
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -1433,10 +1391,10 @@ impl QueueFamilyIndices {
     unsafe fn get(
         instance: &Instance,
         entry: &Entry,
-        data: &VulkanData,
-        physical_device: vk::PhysicalDevice,
+        surface: &SurfaceKHR,
+        physical_device: &vk::PhysicalDevice,
     ) -> VkResult<Self> {
-        let properties = instance.get_physical_device_queue_family_properties(physical_device);
+        let properties = instance.get_physical_device_queue_family_properties(*physical_device);
         let surface_loader = surface::Instance::new(entry, instance);
 
         let graphics = properties
@@ -1447,9 +1405,9 @@ impl QueueFamilyIndices {
         let mut present = None;
         for (index, _) in properties.iter().enumerate() {
             if surface_loader.get_physical_device_surface_support(
-                physical_device,
+                *physical_device,
                 index as u32,
-                data.surface,
+                *surface,
             )? {
                 present = Some(index as u32);
                 break;
@@ -1478,18 +1436,18 @@ impl SwapchainSupport {
     unsafe fn get(
         instance: &Instance,
         entry: &Entry,
-        data: &VulkanData,
-        physical_device: vk::PhysicalDevice,
+        physical_device: &vk::PhysicalDevice,
+        surface: &SurfaceKHR,
     ) -> VkResult<SwapchainSupport> {
         let surface_loader = surface::Instance::new(entry, instance);
 
         Ok(SwapchainSupport {
             capabilities: surface_loader
-                .get_physical_device_surface_capabilities(physical_device, data.surface)?,
+                .get_physical_device_surface_capabilities(*physical_device, *surface)?,
             formats: surface_loader
-                .get_physical_device_surface_formats(physical_device, data.surface)?,
+                .get_physical_device_surface_formats(*physical_device, *surface)?,
             present_modes: surface_loader
-                .get_physical_device_surface_present_modes(physical_device, data.surface)?,
+                .get_physical_device_surface_present_modes(*physical_device, *surface)?,
         })
     }
 }
@@ -1511,5 +1469,5 @@ fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
         "Shader file must be aligned to 4 bytes"
     );
 
-    unsafe { std::slice::from_raw_parts(buffer.as_ptr() as *const u8, buffer.len() / 4).to_vec() }
+    unsafe { std::slice::from_raw_parts(buffer.as_ptr(), buffer.len() / 4).to_vec() }
 }

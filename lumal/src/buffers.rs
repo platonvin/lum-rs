@@ -33,7 +33,7 @@ impl Renderer {
         let requirements = unsafe { self.device.get_buffer_memory_requirements(vk_buffer) };
 
         let alloc_info = vma::AllocationCreateDesc {
-            requirements: requirements,
+            requirements,
             location,
             allocation_scheme: vma::AllocationScheme::GpuAllocatorManaged,
             linear: true, // buffers are always linear

@@ -3,7 +3,7 @@ use ash::{vk, Device};
 
 use crate::{
     ring::Ring, set_debug_names, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe,
-    MAX_FRAMES_IN_FLIGHT,
+    DEFAULT_FRAMES_IN_FLIGHT,
 };
 use crate::{set_debug_name, Renderer};
 use std::ops::Index;
@@ -60,13 +60,13 @@ impl LoadStoreOp {
 
 impl PartialEq for LoadStoreOp {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (LoadStoreOp::DontCare, LoadStoreOp::DontCare) => true,
-            (LoadStoreOp::Clear, LoadStoreOp::Clear) => true,
-            (LoadStoreOp::Load, LoadStoreOp::Load) => true,
-            (LoadStoreOp::Store, LoadStoreOp::Store) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (LoadStoreOp::DontCare, LoadStoreOp::DontCare)
+                | (LoadStoreOp::Clear, LoadStoreOp::Clear)
+                | (LoadStoreOp::Load, LoadStoreOp::Load)
+                | (LoadStoreOp::Store, LoadStoreOp::Store)
+        )
     }
 }
 
@@ -388,7 +388,7 @@ impl Renderer {
             }
         }
 
-        self.descriptor_sets_count += (MAX_FRAMES_IN_FLIGHT as u32); // cuase dset per fif
+        self.descriptor_sets_count += (self.settings.fif as u32); // cuase dset per fif
     }
 
     // anounce is just a request, this is an actual logic
@@ -404,19 +404,19 @@ impl Renderer {
         stages: vk::ShaderStageFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
-        *descriptor_sets = Ring::new(MAX_FRAMES_IN_FLIGHT);
-        let dset_layouts = [*dset_layout; MAX_FRAMES_IN_FLIGHT];
-        for frame_i in 0..MAX_FRAMES_IN_FLIGHT {
+        *descriptor_sets = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
+        let dset_layouts = [*dset_layout; DEFAULT_FRAMES_IN_FLIGHT];
+        for frame_i in 0..DEFAULT_FRAMES_IN_FLIGHT {
             descriptor_sets[frame_i] = device
                 .allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
                     descriptor_pool: *descriptor_pool,
-                    descriptor_set_count: MAX_FRAMES_IN_FLIGHT as u32,
+                    descriptor_set_count: DEFAULT_FRAMES_IN_FLIGHT as u32,
                     p_set_layouts: dset_layouts.as_ptr(),
                     ..Default::default()
                 })
                 .unwrap()[0];
         }
-        assert!(descriptor_sets.len() == MAX_FRAMES_IN_FLIGHT);
+        assert!(descriptor_sets.len() == DEFAULT_FRAMES_IN_FLIGHT);
 
         // why FIF descriptors?
         // tats because some resources are FIF count in Ring
@@ -515,8 +515,8 @@ impl Renderer {
     #[optimize(size)]
     pub fn flush_descriptor_setup(&mut self) {
         // (actually) create Vulkan descriptor pool
-        if self.vulkan_data.descriptor_pool == vk::DescriptorPool::null() {
-            self.vulkan_data.descriptor_pool = unsafe { self.create_descriptor_pool() };
+        if self.descriptor_pool == vk::DescriptorPool::null() {
+            self.descriptor_pool = unsafe { self.create_descriptor_pool() };
         }
     }
 
@@ -534,7 +534,7 @@ impl Renderer {
         // actually setup descriptor
         unsafe {
             Self::actually_setup_descriptor_impl(
-                &self.vulkan_data.descriptor_pool,
+                &self.descriptor_pool,
                 &self.settings,
                 &self.device,
                 dset_layout,

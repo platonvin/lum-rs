@@ -1,7 +1,3 @@
-fn empty_arr<T>() -> &'static [T] {
-    &[]
-}
-
 use crate::{Image, Renderer};
 use ash::vk::{self, MemoryBarrier};
 
@@ -25,7 +21,6 @@ impl Renderer {
             src_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
             dst_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
             extent: src.extent,
-            ..Default::default()
         };
 
         unsafe {
@@ -62,8 +57,8 @@ impl Renderer {
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::empty(),
-                empty_arr::<vk::MemoryBarrier>(),
-                empty_arr::<vk::BufferMemoryBarrier>(),
+                &[],
+                &[],
                 &[barrier],
             );
         }
@@ -110,9 +105,8 @@ impl Renderer {
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            src_offsets: src_offsets,
-            dst_offsets: dst_offsets,
-            ..Default::default()
+            src_offsets,
+            dst_offsets,
         };
 
         unsafe {
@@ -149,8 +143,8 @@ impl Renderer {
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::empty(),
-                empty_arr::<vk::MemoryBarrier>(),
-                empty_arr::<vk::BufferMemoryBarrier>(),
+                &[],
+                &[],
                 &[barrier],
             );
         }
@@ -169,7 +163,7 @@ impl Renderer {
         for &format in candidates {
             let result = unsafe {
                 self.instance.get_physical_device_image_format_properties(
-                    self.vulkan_data.physical_device,
+                    self.physical_device,
                     format,
                     ty,
                     tiling,

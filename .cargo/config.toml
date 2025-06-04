@@ -30,7 +30,13 @@ RUST_BACKTRACE = "short" # this is what i love in Rust
 
 # native is highest perfomance build
 [profile.native.build-override]
-rustflags = ["-C", "target-cpu=native"]
+rustflags = [
+    "-C",
+    "target-cpu=native",
+    # TODO: find better passes for Lum 
+    # "-C",
+    # "passes= adce loop-unroll simplifycfg gvn sroa tailcallelim early-cse",
+]
 
 # natsize is smallest build
 [profile.natsize.build-override]

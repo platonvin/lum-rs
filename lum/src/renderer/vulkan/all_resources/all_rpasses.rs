@@ -143,7 +143,7 @@ impl InternalRendererVulkan {
                     final_layout: vk::ImageLayout::GENERAL,
                 },
                 AttachmentDescription {
-                    images: MaybeRing::Ring(&lumal.vulkan_data.swapchain_images),
+                    images: MaybeRing::Ring(&lumal.swapchain_images),
                     load: LoadStoreOp::DontCare,
                     store: LoadStoreOp::Store,
                     sload: LoadStoreOp::DontCare,
@@ -244,7 +244,7 @@ impl InternalRendererVulkan {
                 SubpassDescription {
                     pipes: &mut [&mut pipes.tonemap_pipe],
                     a_input: &[MaybeRing::Single(&dimages.highres_frame)],
-                    a_color: &[MaybeRing::Ring(&lumal.vulkan_data.swapchain_images)],
+                    a_color: &[MaybeRing::Ring(&lumal.swapchain_images)],
                     a_depth: None,
                 },
                 // SubpassDescription {
