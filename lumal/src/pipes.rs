@@ -1,11 +1,10 @@
 use crate::*;
-use crate::{ring::Ring, ComputePipe, RasterPipe};
-use ash::vk::{self, CompareOp, DynamicState, StencilOp};
+use crate::{ComputePipe, RasterPipe};
+use ash::vk::{self, CompareOp, StencilOp};
+use containers::Ring;
 use descriptors::*;
 
 impl Renderer {
-    #[cold]
-    #[optimize(size)]
     pub fn destroy_compute_pipe(&mut self, pipe: &mut ComputePipe) {
         assert!(pipe.line != vk::Pipeline::null());
         assert!(pipe.line_layout != vk::PipelineLayout::null());
@@ -26,15 +25,14 @@ impl Renderer {
             set_layout: vk::DescriptorSetLayout::null(),
         };
     }
-    #[cold]
-    #[optimize(size)]
+
     pub fn destroy_raster_pipe(&mut self, pipe: RasterPipe) {
         assert!(pipe.line != vk::Pipeline::null());
-        assert!(pipe.line_layout != vk::PipelineLayout::null());
+        assert!(pipe.layout != vk::PipelineLayout::null());
         assert!(pipe.set_layout != vk::DescriptorSetLayout::null());
         unsafe {
             self.device.destroy_pipeline(pipe.line, None);
-            self.device.destroy_pipeline_layout(pipe.line_layout, None);
+            self.device.destroy_pipeline_layout(pipe.layout, None);
             self.device.destroy_descriptor_set_layout(pipe.set_layout, None);
             self.device
                 .free_descriptor_sets(self.descriptor_pool, pipe.sets.as_slice())
@@ -51,8 +49,6 @@ impl Renderer {
         // };
     }
 
-    #[cold]
-    #[optimize(size)]
     // descriptors in extra_dynamic_layout are going to set 1, all others are going to set 0
     pub fn create_compute_pipe(
         &self,
@@ -159,8 +155,6 @@ impl Renderer {
         );
     }
 
-    #[cold]
-    #[optimize(size)]
     // descriptors in extra_dynamic_layout are going to set 1, all others are going to set 0
     pub fn create_raster_pipe(
         &self,
@@ -180,7 +174,6 @@ impl Renderer {
         stencil: vk::StencilOpState,
         debug_name: Option<&str>,
     ) {
-        assert!(pipe.render_pass != vk::RenderPass::null());
         // Create Vulkan shader stages
         let mut modules_to_destroy = vec![];
 
@@ -430,7 +423,7 @@ impl Renderer {
 
         // dots never meant anything]
         pipe.line = pipeline;
-        pipe.line_layout = pipeline_layout;
+        pipe.layout = pipeline_layout;
 
         // give debug names to vulkan objects
         set_debug_names!(
@@ -441,8 +434,6 @@ impl Renderer {
         );
     }
 
-    #[cold]
-    #[optimize(size)]
     fn stencil_is_empty(stencil: vk::StencilOpState) -> bool {
         (stencil.fail_op == StencilOp::KEEP)
             && (stencil.pass_op == StencilOp::KEEP)
@@ -453,8 +444,6 @@ impl Renderer {
             && (stencil.reference == 0)
     }
 
-    #[cold]
-    #[optimize(size)]
     fn create_shader_module(&self, code: &[u8]) -> vk::ShaderModule {
         let code_u32 =
             unsafe { std::slice::from_raw_parts(code.as_ptr() as *const u32, code.len() / 4) };
@@ -473,8 +462,8 @@ impl Renderer {
     }
 
     // // Helper function for resolving shader paths
-    // #[cold]
-    // #[optimize(size)]
+    //
+    //
     // fn resolve_shader_path(prefixes: &[&str], file_name: String) -> Option<std::path::PathBuf> {
     //     for prefix in prefixes {
     //         let candidate = std::path::Path::new(prefix).join(file_name.as_str());
@@ -486,8 +475,7 @@ impl Renderer {
     // }
 
     // Helper function for loading SPIR-V shader modules
-    #[cold]
-    #[optimize(size)]
+
     fn load_shader_module(device: &Device, spirv_code: &[u8]) -> vk::ShaderModule {
         let create_info = vk::ShaderModuleCreateInfo {
             code_size: spirv_code.len(),

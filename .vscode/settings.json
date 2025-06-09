@@ -1,0 +1,7 @@
+{
+    // they are optional and rust-analyzer wont help with any if corresponding features are not enabled
+    "rust-analyzer.cargo.features": [
+        "wgpu_backend",
+        "vk_backend"
+    ],
+}

@@ -1,29 +1,23 @@
 [package]
-    name = "lumal"
-    version = "0.1.0"
-    edition = "2021"
+name = "lumal"
+version = "0.1.0"
+edition = "2021"
 
 [features]
-    default = []
-    validation_layers = []
-    debug_validation_names = ["validation_layers"]
+default = []
+validation_layers = []
+debug_validation_names = ["validation_layers"]
 
 [profile.dev]
-    #enable debug names for validation_layers use in Lum
-    features = ["debug_validation_names"]
+#enable debug names for validation_layers use in Lum
+features = ["debug_validation_names"]
 
 [dependencies]
-    ash = { version = "0.38.0", default-features = false, features = [
-        "debug",
-        "loaded",
-    ] }
-    gpu-allocator = { version = "0.27.0", default-features = false, features = [
-        "vulkan",
-    ] }
-    winit = "0.30.9"
-    paste = "1.0.15"
-    ash-window = "0.13.0"
-
-[lib]
-    name = "lumal"
-    path = "src/lib.rs" # Path to the library source file
+ash = { version = "0.38", default-features = false, features = ["loaded"] }
+gpu-allocator = { version = "0.27.0", default-features = false, features = [
+    "vulkan",
+] }
+winit = "0.30.9"
+paste = "1.0.15"
+ash-window = "0.13.0"
+containers = { path = "../containers" }

@@ -1,9 +1,7 @@
 use crate::{Image, Renderer};
-use ash::vk::{self, MemoryBarrier};
+use ash::vk;
 
 impl Renderer {
-    #[cold]
-    #[optimize(speed)]
     pub fn copy_whole_image(&self, cmdbuf: vk::CommandBuffer, src: &Image, dst: &Image) {
         let copy_op = vk::ImageCopy {
             dst_subresource: vk::ImageSubresourceLayers {
@@ -65,8 +63,7 @@ impl Renderer {
     }
 
     // basically copy image into another image (with possible dimension mismatch and thus scaling)
-    #[cold]
-    #[optimize(speed)]
+
     pub fn blit_whole_image(
         &self,
         cmdbuf: vk::CommandBuffer,
@@ -150,9 +147,7 @@ impl Renderer {
         }
     }
 
-    // finds first image format that is supported by device
-    #[cold]
-    #[optimize(size)]
+    /// Finds first image format from given candidates that is supported by device (for given type, tiling and usage)
     pub fn find_supported_format(
         &self,
         candidates: &[vk::Format],
@@ -179,8 +174,7 @@ impl Renderer {
         None
     }
 
-    #[cold]
-    #[optimize(speed)]
+    /// Vulkan set viewport/scissors wrapper
     pub fn cmd_set_viewport(&self, cmdbuf: vk::CommandBuffer, width: u32, height: u32) {
         let viewport = vk::Viewport {
             x: 0.0,

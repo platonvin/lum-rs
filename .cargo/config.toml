@@ -4,20 +4,20 @@ t = "test"
 b = "build"
 r = "run"
 
-nv = "run --profile native --package examples --bin demo_vk --features vk_backend"
-nw = "run --profile native --package examples --bin demo_wgpu --features wgpu_backend"
-bnv = "build --profile native --package examples --bin demo_vk --features vk_backend"
-bnw = "build --profile native --package examples --bin demo_wgpu --features wgpu_backend"
+nv = "run -Zbuild-std=std,panic_abort --profile native --package demo --bin demo_vk --features vk_backend"
+nw = "run -Zbuild-std=std,panic_abort --profile native --package demo --bin demo_wgpu --features wgpu_backend"
+bnv = "build -Zbuild-std=std,panic_abort --profile native --package demo --bin demo_vk --features vk_backend"
+bnw = "build -Zbuild-std=std,panic_abort --profile native --package demo --bin demo_wgpu --features wgpu_backend"
 
-rv = "run --profile release --package examples --bin demo_vk --features vk_backend"
-rw = "run --profile release --package examples --bin demo_wgpu --features wgpu_backend"
-brv = "build --profile release --package examples --bin demo_vk --features vk_backend"
-brw = "build --profile release --package examples --bin demo_wgpu --features wgpu_backend"
+rv = "run --profile release --package demo --bin demo_vk --features vk_backend"
+rw = "run --profile release --package demo --bin demo_wgpu --features wgpu_backend"
+brv = "build --profile release --package demo --bin demo_vk --features vk_backend"
+brw = "build --profile release --package demo --bin demo_wgpu --features wgpu_backend"
 
-dv = "run --profile dev --package examples --bin demo_vk --features vk_backend"
-dw = "run --profile dev --package examples --bin demo_wgpu --features wgpu_backend"
-bdv = "build --profile dev --package examples --bin demo_vk --features vk_backend"
-bdw = "build --profile dev --package examples --bin demo_wgpu --features wgpu_backend"
+dv = "run --profile dev --package demo --bin demo_vk --features vk_backend"
+dw = "run --profile dev --package demo --bin demo_wgpu --features wgpu_backend"
+bdv = "build --profile dev --package demo --bin demo_vk --features vk_backend"
+bdw = "build --profile dev --package demo --bin demo_wgpu --features wgpu_backend"
 
 [build]
 [target.x86_64-pc-windows-gnu]
@@ -27,6 +27,9 @@ linker = "rust-lld"
 
 [env]
 RUST_BACKTRACE = "short" # this is what i love in Rust
+
+[profile.build-override]
+rustflags = ["--show-coverage"]
 
 # native is highest perfomance build
 [profile.native.build-override]

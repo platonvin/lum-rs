@@ -1,13 +1,11 @@
-use crate::{atrace, ring::Ring, Buffer, Renderer}; // Import the LumalRenderer struct
+use crate::{Buffer, Renderer}; // Import the LumalRenderer struct
 use ash::vk::{self, BufferUsageFlags};
-use std::ptr::{self, copy_nonoverlapping};
-
-use gpu_allocator::vulkan::{self as vma, AllocationCreateDesc};
+use containers::Ring;
+use gpu_allocator::vulkan::{self as vma};
+use std::ptr::copy_nonoverlapping;
 
 impl Renderer {
-    // creates a GPU buffer
-    #[cold]
-    #[optimize(size)]
+    /// Wrapper for creating a GPU buffer. Optionally maps it
     pub fn create_buffer(
         &mut self,
         usage: vk::BufferUsageFlags,
@@ -54,13 +52,10 @@ impl Renderer {
         Buffer {
             buffer: vk_buffer,
             allocation,
-            // mapped,
         }
     }
 
-    // creates ring of vulkan buffers. Optionally maps
-    #[cold]
-    #[optimize(size)]
+    // Creates Ring of Buffers
     pub fn create_buffer_rings(
         &mut self,
         ring_size: usize,
@@ -71,8 +66,6 @@ impl Renderer {
         (0..ring_size).map(|_| self.create_buffer(usage, biffer_size, host)).collect()
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn destroy_buffer(&mut self, buf: Buffer) {
         unsafe {
             // unmap if mapped
@@ -85,8 +78,6 @@ impl Renderer {
         };
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn destroy_buffer_ring(&mut self, buffers: Ring<Buffer>) {
         for buf in buffers.data {
             self.destroy_buffer(buf);
@@ -95,8 +86,7 @@ impl Renderer {
 
     // creates a GPU buffer and copies elements into it
     // does buffer_usage |= TRANSFER_DST automatically
-    #[cold]
-    #[optimize(size)]
+
     pub fn create_and_upload_buffer<T>(
         &mut self,
         elements: &[T],

@@ -1,13 +1,12 @@
 use crate::{Buffer, Image, Renderer};
-use ash::vk::{self, BufferMemoryBarrier, MemoryBarrier, WHOLE_SIZE};
-use std::ptr::null;
+use ash::vk;
 
 // just a wrapper for barriers that suits my needs
 // it is missing a lot but it does not matter anyways - drivers dont give a fuck about precise barriers
 
 impl Renderer {
-    #[cold]
-    #[optimize(speed)]
+    /// Vulkan pipeline barrier wrapper
+
     pub fn image_memory_barrier(
         &self,
         cmdbuf: &vk::CommandBuffer,
@@ -43,15 +42,15 @@ impl Renderer {
                 src_stage_mask,
                 dst_stage_mask,
                 vk::DependencyFlags::empty(),
-                &[] as &[MemoryBarrier],
-                &[] as &[BufferMemoryBarrier],
+                &[],
+                &[],
                 &[barrier],
             )
         };
     }
 
-    #[cold]
-    #[optimize(speed)]
+    /// Vulkan pipeline barrier wrapper
+
     pub fn buffer_memory_barrier(
         &self,
         cmdbuf: &vk::CommandBuffer,
@@ -78,9 +77,9 @@ impl Renderer {
                 src_stage_mask,
                 dst_stage_mask,
                 vk::DependencyFlags::empty(),
-                &[] as &[MemoryBarrier],
-                &[barrier] as &[BufferMemoryBarrier],
-                &[] as &[vk::ImageMemoryBarrier],
+                &[],
+                &[barrier],
+                &[],
             )
         };
     }

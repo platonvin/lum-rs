@@ -1,5 +1,5 @@
+use containers::Array3D;
 use criterion::{criterion_group, criterion_main, Criterion};
-use lum::containers::Array3D;
 use zarray::z3d::ZArray3D;
 
 fn blur_array3d(src: &Array3D<u8>, radius: usize) -> Array3D<u16> {

@@ -1,19 +1,14 @@
-use crate::descriptors::MaybeRing;
-use crate::Renderer;
 use crate::{
-    atrace,
-    descriptors::{AttachmentDescription, LoadStoreOp, SubpassAttachmentRefs, SubpassDescription},
-    ring::Ring,
-    trace, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe, RenderPass,
+    descriptors::{
+        AttachmentDescription, LoadStoreOp, MaybeRing, SubpassAttachmentRefs, SubpassDescription,
+    },
+    Image, RenderPass, Renderer,
 };
 use ash::vk;
-use std::{collections::HashMap, f64::consts::E, ptr::null};
-
-use crate::function;
+use containers::Ring;
+use std::{collections::HashMap, ptr::null};
 
 impl Renderer {
-    #[cold]
-    #[optimize(size)]
     pub fn destroy_renderpass(&mut self, rpass: RenderPass) {
         assert!(rpass.render_pass != vk::RenderPass::null());
         assert!(!rpass.framebuffers.is_empty());
@@ -29,18 +24,21 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
+    /// Creates RenderPass object from given description
+    /// attachments describe specific (maybe rings of) images and what happens with them in renderpass
+    /// each subpass description specifies which pipes operate on which (maybe rings of) images
+    // Vulkan actually wants array of attachments and indices,
+    // so we convert (maybe rings of) image reference(s) from subpass descriptions to indices in array of attachments (by hashmap or smth)
     pub fn create_renderpass(
         &self,
         attachments: &[AttachmentDescription],
-        spass_attachs: &mut [SubpassDescription],
+        subpass_descriptions: &mut [SubpassDescription],
     ) -> RenderPass {
         let mut rpass = RenderPass::default();
 
         // no subpasses / attachments is invalid and i dont like returning errors
         assert!(!attachments.is_empty());
-        assert!(!spass_attachs.is_empty());
+        assert!(!subpass_descriptions.is_empty());
 
         let mut adescs = vec![vk::AttachmentDescription::default(); attachments.len()];
         let mut arefs = vec![vk::AttachmentReference::default(); attachments.len()];
@@ -87,21 +85,21 @@ impl Renderer {
 
         // this vec's are used to figure out vulkan stuff from what user supplied
         // i just feel like passing references is more convenient than manually recomputing indices every time
-        let mut subpasses = vec![vk::SubpassDescription::default(); spass_attachs.len()];
-        let mut sas_refs = vec![SubpassAttachmentRefs::default(); spass_attachs.len()];
+        let mut subpasses = vec![vk::SubpassDescription::default(); subpass_descriptions.len()];
+        let mut sas_refs = vec![SubpassAttachmentRefs::default(); subpass_descriptions.len()];
 
-        for (i, spass_attach) in spass_attachs.iter().enumerate() {
-            if let Some(depth) = &spass_attach.a_depth {
+        for (i, subpass) in subpass_descriptions.iter().enumerate() {
+            if let Some(depth) = &subpass.a_depth {
                 let index = *img2ref.get(&(depth.get_first() as *const _)).unwrap();
                 sas_refs[i].a_depth = Some(arefs[index])
             } else {
                 sas_refs[i].a_depth = None;
             };
-            for color in spass_attach.a_color {
+            for color in subpass.a_color {
                 let index = *img2ref.get(&(color.get_first() as *const _)).unwrap();
                 sas_refs[i].a_color.push(arefs[index]);
             }
-            for input in spass_attach.a_input {
+            for input in subpass.a_input {
                 let index = *img2ref.get(&(input.get_first() as *const _)).unwrap();
                 sas_refs[i].a_input.push(arefs[index]);
             }
@@ -122,12 +120,11 @@ impl Renderer {
         }
 
         // for every subpass, set subpass_id of every pipe in that subpass to the subpass index
-        for i in 0..spass_attachs.len() {
-            for pipe in &mut *spass_attachs[i].pipes {
+        for i in 0..subpass_descriptions.len() {
+            for pipe in &mut *subpass_descriptions[i].pipes {
                 pipe.subpass_id = i as i32;
             }
         }
-
         // alternative (how is that so complicated?)
         // spass_attachs
         //     .iter_mut()
@@ -135,7 +132,7 @@ impl Renderer {
         //     .map(|(i, spass)| spass.pipes.iter_mut().map(move |pipe| pipe.subpass_id = i as i32));
 
         // not real vulkan struct, just barriers inside a subpass (currently, dummy barriers)
-        let dependencies = Self::create_subpass_dependencies(spass_attachs);
+        let dependencies = Self::create_subpass_dependencies(subpass_descriptions);
 
         // typical Vulkan createinfo struct
 
@@ -158,8 +155,8 @@ impl Renderer {
         };
 
         // Pipes (which are abstractions of Vulkan pipelines) need to know the render pass
-        for spass_attach in spass_attachs {
-            for pipe in &mut *spass_attach.pipes {
+        for subpass in subpass_descriptions {
+            for pipe in &mut *subpass.pipes {
                 pipe.render_pass = render_pass;
             }
         }
@@ -186,8 +183,7 @@ impl Renderer {
     }
 
     // Function to create subpass dependencies
-    #[cold]
-    #[optimize(size)]
+
     fn create_subpass_dependencies(
         spass_attachs: &[SubpassDescription],
     ) -> Vec<vk::SubpassDependency> {
@@ -236,8 +232,7 @@ impl Renderer {
     }
 
     // Function to create framebuffers
-    #[cold]
-    #[optimize(size)]
+
     fn create_framebuffers(
         &self,
         // device: &vulkanalia::Device,
@@ -282,8 +277,6 @@ impl Renderer {
         framebuffers
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn cmd_begin_renderpass(
         &self,
         command_buffer: &vk::CommandBuffer,
@@ -312,8 +305,6 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn cmd_end_renderpass(
         &self,
         command_buffer: &vk::CommandBuffer,

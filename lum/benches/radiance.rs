@@ -2,12 +2,11 @@
 // damn am i really forcing nighly?
 // how are you supposed to use simd without nightly?
 // benches/radiance_benchmark.rs
+use containers::{Array3D, BitArray3d, Multiprocessor};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use lum::{
-    assert_assume,
-    containers::{Array3D, BitArray3d, Multiprocessor},
-    for_zyx,
-    renderer::types::{i8vec4, uvec3},
+    assert_assume, for_zyx,
+    /*renderer::*/ types::{i8vec4, uvec3},
 };
 use qvek::i8vec4;
 

@@ -1,0 +1,27 @@
+[package]
+name = "demo"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+wgpu_backend = ["lum/wgpu_backend"]
+vk_backend = ["lum/vk_backend"]
+
+[dependencies]
+lum = { path = "../../lum" }
+shaders = { path = "../../shaders" }
+assets = { path = "../assets" }
+winit = "0.30.8"
+
+[[bin]]
+path = "src/bin/demo_vk.rs"
+name = "demo_vk"
+
+[[bin]]
+path = "src/bin/demo_wgpu.rs"
+name = "demo_wgpu"
+
+[lib]
+path = "src/demo_lib.rs"
+name = "demo_lib"

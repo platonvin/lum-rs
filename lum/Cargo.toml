@@ -3,10 +3,14 @@ name = "lum"
 version = "0.1.4"
 edition = "2021"
 
+[lib]
+name = "lum"
+path = "src/lib.rs"
+
 [features]
 default = []
-vk_backend = ["shaders/vk_backend"]
-wgpu_backend = ["shaders/wgpu_backend"]
+vk_backend = ["lumal", "shaders/vk_backend"]
+wgpu_backend = ["wgpu", "futures", "shaders/wgpu_backend"]
 # controls wether Lum uses Lumal feature for validation layer names
 debug_validation_names = ["lumal/debug_validation_names"]
 
@@ -17,21 +21,20 @@ features = ["debug_validation_names"]
 
 [dependencies]
 # lumal is lum's abstraction layer over vulkan
-lumal = { path = "../lumal" }
+lumal = { path = "../lumal", optional = true }
+# crate with embedded into binary shader sources (SPIR-V / WGSL)
 shaders = { path = "../shaders" }
-# derive macro for AsU8Slice
+# just containers - arenas, multidimensional arrays, etc.
+containers = { path = "../containers" }
+# bytemuck but not bytemuck
 as_u8_slice_derive = { path = "../as_u8_slice_derive" }
+# Vek casts
+# qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
+qvek = { path = "../../qvek/qvek" }
 winit = "0.30.9"
-qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
-pub-fields = "0.1.1"
-block-mesh = "0.2.0"
-flame = "0.2.2"
-wgpu = "25.0.0"
-futures = "0.3.31"
-
-[lib]
-name = "lum"
-path = "src/lib.rs"
+# block-mesh = "0.2.0"
+wgpu = { version = "25.0.0", optional = true }
+futures = { version = "0.3.31", optional = true }
 
 [dev-dependencies]
 criterion = "0.5.1"

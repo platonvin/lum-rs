@@ -1,22 +1,17 @@
-use crate::{ring::Ring, Renderer}; // Import the LumalRenderer struct
+use crate::Renderer; // Import the LumalRenderer struct
 use crate::{set_debug_names, Image};
-use ash::vk::{self, Handle};
+use ash::vk;
+use containers::Ring;
 use gpu_allocator::vulkan as vma;
 
-use std::ptr::{self};
 impl Renderer {
-    #[cold]
-    #[optimize(speed)]
     pub fn create_image(
         &mut self,
         image_type: vk::ImageType,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
-        // vma_usage: vma::MemoryUsage,
-        // vma_flags: vma::AllocationCreateFlags,
         aspect: vk::ImageAspectFlags,
         extent: vk::Extent3D,
-        // mipmaps: u32,
         sample_count: vk::SampleCountFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) -> Image {
@@ -130,8 +125,7 @@ impl Renderer {
 
         image
     }
-    #[cold]
-    #[optimize(speed)]
+
     pub fn create_image_ring(
         &mut self,
         size: usize,
@@ -174,8 +168,6 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(speed)]
     pub fn destroy_image(&mut self, img: Image) {
         unsafe {
             self.device.destroy_image_view(img.view, None);
@@ -184,12 +176,9 @@ impl Renderer {
         };
     }
 
-    #[cold]
-    #[optimize(speed)]
-    pub fn destroy_image_ring(&mut self, mut images: Ring<Image>) {
+    pub fn destroy_image_ring(&mut self, images: Ring<Image>) {
         for img in images.data {
             self.destroy_image(img);
         }
     }
 }
-// }

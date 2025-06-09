@@ -1,14 +1,9 @@
+use crate::Renderer;
+use crate::{Buffer, Image, LumalSettings, RasterPipe, DEFAULT_FRAMES_IN_FLIGHT};
 use ash::vk::DescriptorType;
 use ash::{vk, Device};
-
-use crate::{
-    ring::Ring, set_debug_names, Buffer, DescriptorCounter, Image, LumalSettings, RasterPipe,
-    DEFAULT_FRAMES_IN_FLIGHT,
-};
-use crate::{set_debug_name, Renderer};
+use containers::Ring;
 use std::ops::Index;
-use std::{any::TypeId, cell::UnsafeCell};
-use std::{option, ptr::null};
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum BlendAttachment {
@@ -101,71 +96,90 @@ impl<'a, T> Index<usize> for MaybeRing<'a, T> {
     }
 }
 
+/// Description of a single attachment for the renderpass. Close to Vulkan
 pub struct AttachmentDescription<'a> {
+    /// (maybe ring of) image(s), which are resource of this attachment
     pub images: MaybeRing<'a, Image>,
+    /// executed operation in the beginning of the renderpass for Color aspects
     pub load: LoadStoreOp,
+    /// executed operation in the end of the renderpass for Color aspects
     pub store: LoadStoreOp,
+    /// executed operation in the beginning of the renderpass for Stencil aspects
     pub sload: LoadStoreOp,
+    /// executed operation in the end of the renderpass for Stencil aspects
     pub sstore: LoadStoreOp,
+    /// Value used for clearing when LoadOp is Clear
     pub clear: vk::ClearValue,
-    pub final_layout: vk::ImageLayout, // Default value is GENERAL
+    /// Wanted layout of Image after Renderpass ends
+    pub final_layout: vk::ImageLayout,
 }
 
-// everything is a a pointer to be able to compare them later
+/// Description of a subpass for the renderpass,
 pub struct SubpassDescription<'lt> {
+    /// all Pipes, that might be used with this subpass
     pub pipes: &'lt mut [&'lt mut RasterPipe],
-    pub a_input: &'lt [MaybeRing<'lt, Image>], // Input images for the subpass
-    pub a_color: &'lt [MaybeRing<'lt, Image>], // Color images for the subpass
+    /// All input attachments that pipes of this subpass will have
+    /// Input attachments are 1:1 read-only images
+    pub a_input: &'lt [MaybeRing<'lt, Image>],
+    /// All color attachments that pipes of this subpass will have
+    /// Color attachments are 1:1 write-only, and you must write to them
+    /// this is how you draw pixels on screen
+    pub a_color: &'lt [MaybeRing<'lt, Image>],
+    /// All depth/stencil attachments that pipes of this subpass will have
+    /// Depth attachments are 1:1 read-write images for depth/stencil tests
+    /// this is how you do depth testing
     pub a_depth: Option<MaybeRing<'lt, Image>>, // Depth image for the subpass
 }
 
+/// Intermediate struct which we accumulate corresponding subpass attachment data into (for later referencing it for Vulkan calls)
 #[derive(Clone, Default, Debug)]
 pub struct SubpassAttachmentRefs {
+    /// All the Input attachments, used by corresponding subpass
     pub a_input: Vec<vk::AttachmentReference>,
+    /// All the Color attachments, used by corresponding subpass
     pub a_color: Vec<vk::AttachmentReference>,
     // using Option is unconvenient because we need to point'er it afterwards. But still
+    /// All the Depth attachments, used by corresponding subpass
     pub a_depth: Option<vk::AttachmentReference>,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub enum RelativeDescriptorPos {
-    #[default]
-    NotPresented, // What?
-    Previous, // Relative Descriptor position previous - for accumulators
-    Current,  // Relative Descriptor position matching - common CPU-paired
-    First,    // Relative Descriptor position first - for GPU-only
-}
-
+/// Simple shader stage wrapper
 #[derive(Clone, Debug)]
 pub struct ShaderStage<'a> {
     pub stage: vk::ShaderStageFlags,
     pub spirv_code: &'a [u8],
 }
 
+/// Description of a Vertex Attributes for given Pipe
+/// Note: location is defined by position of this AttrFormOffs in array of AttrFormOffs for Pipe creation
 #[derive(Clone, Debug)]
 pub struct AttrFormOffs {
+    /// Size and type of the vertex attribute data (they are hardware thing, so somewhat limited)
     pub format: vk::Format,
+    /// Binding number which this attribute takes its data from (you have to bind vertex buffers accordingly!)
     pub binding: u32,
+    /// Byte offset of this attribute relative to the start of an element in the vertex input binding
     pub offset: usize,
 }
 
-#[derive(Debug, Default)]
+/// Abstraction which simplifies managing CPU-GPU resources
+/// When the resource is operated by GPU only, we can have single copy of it, and always use this copy
+/// When CPU writes to some resource, we need to (at least) double-buffer it,
+/// because otherwise we might end up with situation, where CPU is writing data for current frame which GPU is reading for previous frame
+#[derive(Debug)]
 pub enum RelativeResource<'a, T> {
-    #[default]
-    None,
     /// Resource is Ring of things and we bind current() (most resource)
     Current(&'a Ring<T>),
     /// Resource is Ring of things and we bind previous()
     /// (e.g. reading old for reading and current for writing in case of radiance cache)
     Previous(&'a Ring<T>),
-    // Resource is a single thing (and is the same for all binds)
+    /// Resource is a single thing (and is the same for all binds)
     Single(&'a T),
 }
 
 impl<'a, T> RelativeResource<'a, T> {
     fn get_matching_resource(&'a self, current_frame_i: usize, previous_frame_i: usize) -> &'a T {
         match self {
-            RelativeResource::None => panic!(),
             RelativeResource::Current(ring) => &ring[current_frame_i],
             RelativeResource::Previous(ring) => &ring[previous_frame_i],
             RelativeResource::Single(resource) => resource,
@@ -175,36 +189,42 @@ impl<'a, T> RelativeResource<'a, T> {
 
 /// Typed subset of bundles of Vulkan types and my objects
 /// this moves work from runtime to compile time by enforcing relative presentance of descriptor information with type system
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum DescriptorResource<'a> {
-    #[default]
-    None,
+    /// Corresponds to VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
     StorageImage(RelativeResource<'a, Image>, vk::ImageLayout),
+    /// Corresponds to VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
     SampledImage(RelativeResource<'a, Image>, vk::ImageLayout, vk::Sampler),
+    /// Corresponds to VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT
     InputAttachment(RelativeResource<'a, Image>, vk::ImageLayout),
+    /// Corresponds to VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
     UniformBuffer(RelativeResource<'a, Buffer>),
+    /// Corresponds to VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
     StorageBuffer(RelativeResource<'a, Buffer>),
 }
 
-#[derive(Debug, Default)]
+/// DescriptorResource + which stages see this resource
+#[derive(Debug)]
 pub struct DescriptorInfo<'a> {
+    /// The resource itself
     pub resources: DescriptorResource<'a>,
+    /// Which shader stages see this resource
     pub specified_stages: vk::ShaderStageFlags,
 }
 
 impl<'a> DescriptorInfo<'a> {
-    pub fn get_type(&self) -> DescriptorType {
+    fn get_type(&self) -> DescriptorType {
         match self.resources {
             DescriptorResource::StorageImage(_, _) => DescriptorType::STORAGE_IMAGE,
             DescriptorResource::SampledImage(_, _, _) => DescriptorType::COMBINED_IMAGE_SAMPLER,
             DescriptorResource::InputAttachment(_, _) => DescriptorType::INPUT_ATTACHMENT,
             DescriptorResource::UniformBuffer(_) => DescriptorType::UNIFORM_BUFFER,
             DescriptorResource::StorageBuffer(_) => DescriptorType::STORAGE_BUFFER,
-            DescriptorResource::None => todo!(),
         }
     }
 }
 
+/// Subset of description info used for creating dset layouts and allocating pool
 pub struct ShortDescriptorInfo {
     pub descriptor_type: vk::DescriptorType,
     pub stages: vk::ShaderStageFlags,
@@ -212,8 +232,6 @@ pub struct ShortDescriptorInfo {
 
 impl Renderer {
     /// immediately creates vulkan descriptor set layout
-    #[cold]
-    #[optimize(size)]
     pub fn create_descriptor_set_layout(
         &mut self,
         descriptor_infos: &[ShortDescriptorInfo],
@@ -225,37 +243,8 @@ impl Renderer {
             .iter()
             .enumerate()
             .map(|(i, info)| {
-                macro_rules! make_descriptor_type {
-                    ($name:ident) => {
-                        self.descriptor_counter.$name += 1
-                    };
-                }
-                match info.descriptor_type {
-                    vk::DescriptorType::SAMPLER => make_descriptor_type!(SAMPLER),
-                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER => {
-                        make_descriptor_type!(COMBINED_IMAGE_SAMPLER)
-                    }
-                    vk::DescriptorType::SAMPLED_IMAGE => make_descriptor_type!(SAMPLED_IMAGE),
-                    vk::DescriptorType::STORAGE_IMAGE => make_descriptor_type!(STORAGE_IMAGE),
-                    vk::DescriptorType::UNIFORM_TEXEL_BUFFER => {
-                        make_descriptor_type!(UNIFORM_TEXEL_BUFFER)
-                    }
-                    vk::DescriptorType::STORAGE_TEXEL_BUFFER => {
-                        make_descriptor_type!(STORAGE_TEXEL_BUFFER)
-                    }
-                    vk::DescriptorType::UNIFORM_BUFFER => make_descriptor_type!(UNIFORM_BUFFER),
-                    vk::DescriptorType::STORAGE_BUFFER => make_descriptor_type!(STORAGE_BUFFER),
-                    vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC => {
-                        make_descriptor_type!(UNIFORM_BUFFER_DYNAMIC)
-                    }
-                    vk::DescriptorType::STORAGE_BUFFER_DYNAMIC => {
-                        make_descriptor_type!(STORAGE_BUFFER_DYNAMIC)
-                    }
-                    vk::DescriptorType::INPUT_ATTACHMENT => make_descriptor_type!(INPUT_ATTACHMENT),
-                    _ => {
-                        panic!("Unknown descriptor type");
-                    }
-                }
+                // add 1 to corresponding counter
+                self.descriptor_counter.increment_counter(info.descriptor_type);
 
                 vk::DescriptorSetLayoutBinding {
                     binding: i as u32,
@@ -282,35 +271,12 @@ impl Renderer {
         };
 
         #[cfg(feature = "debug_validation_names")]
-        set_debug_names!(self, debug_name, (layout, " Layout"));
+        crate::set_debug_names!(self, debug_name, (layout, " Layout"));
     }
 
-    #[cold]
-    #[optimize(size)]
-    pub unsafe fn create_descriptor_pool(&self) -> vk::DescriptorPool {
-        let mut pool_sizes = Vec::new();
-
-        macro_rules! make_descriptor_type {
-            ($name:ident) => {
-                if self.descriptor_counter.$name != 0 {
-                    pool_sizes.push(vk::DescriptorPoolSize {
-                        ty: vk::DescriptorType::$name,
-                        descriptor_count: self.descriptor_counter.$name,
-                    });
-                }
-            };
-        }
-        make_descriptor_type!(SAMPLER);
-        make_descriptor_type!(COMBINED_IMAGE_SAMPLER);
-        make_descriptor_type!(SAMPLED_IMAGE);
-        make_descriptor_type!(STORAGE_IMAGE);
-        make_descriptor_type!(UNIFORM_TEXEL_BUFFER);
-        make_descriptor_type!(STORAGE_TEXEL_BUFFER);
-        make_descriptor_type!(UNIFORM_BUFFER);
-        make_descriptor_type!(STORAGE_BUFFER);
-        make_descriptor_type!(UNIFORM_BUFFER_DYNAMIC);
-        make_descriptor_type!(STORAGE_BUFFER_DYNAMIC);
-        make_descriptor_type!(INPUT_ATTACHMENT);
+    /// Creates Vulkan descriptor pool with exact sizes, specified in self.descriptor_counter
+    pub fn create_descriptor_pool(&self) -> vk::DescriptorPool {
+        let pool_sizes = self.descriptor_counter.get_pool_sizes();
 
         let pool_info = vk::DescriptorPoolCreateInfo {
             pool_size_count: pool_sizes.len() as u32,
@@ -320,44 +286,34 @@ impl Renderer {
             ..Default::default()
         };
 
-        self.device.create_descriptor_pool(&pool_info, None).unwrap()
+        unsafe { self.device.create_descriptor_pool(&pool_info, None).unwrap() }
     }
 
-    #[cold]
-    #[optimize(size)]
-    pub unsafe fn allocate_descriptor(
-        device: Device,
-        layout: vk::DescriptorSetLayout,
-        pool: vk::DescriptorPool,
-        count: usize,
-    ) -> Ring<vk::DescriptorSet> {
-        let layouts = vec![layout; count];
-        let alloc_info = vk::DescriptorSetAllocateInfo {
-            descriptor_pool: pool,
-            descriptor_set_count: layouts.len() as u32,
-            p_set_layouts: layouts.as_ptr(),
-            ..Default::default()
-        };
+    // pub fn allocate_descriptor(
+    //     device: Device,
+    //     layout: vk::DescriptorSetLayout,
+    //     pool: vk::DescriptorPool,
+    //     count: usize,
+    // ) -> Ring<vk::DescriptorSet> {
+    //     let layouts = vec![layout; count];
+    //     let alloc_info = vk::DescriptorSetAllocateInfo {
+    //         descriptor_pool: pool,
+    //         descriptor_set_count: layouts.len() as u32,
+    //         p_set_layouts: layouts.as_ptr(),
+    //         ..Default::default()
+    //     };
 
-        let mut ring = Ring::new(count);
-        // return
-        let vec = device
-            .allocate_descriptor_sets(&alloc_info)
-            .expect("Failed to allocate descriptor sets");
-        for (i, v) in vec.iter().enumerate() {
-            ring[i] = *v;
-        }
-        ring
-    }
+    //     let vec = unsafe { device.allocate_descriptor_sets(&alloc_info).unwrap() };
+    //     Ring::from_vec(vec)
+    // }
 
     // Tell the LumalRenderer that such descriptor will be setup
     // basically counts needed resources to then allocate them
-    #[cold]
-    #[optimize(size)]
+
     pub fn anounce_descriptor_setup(
         &mut self,
         dset_layout: &mut vk::DescriptorSetLayout,
-        descriptor_sets: &mut Ring<vk::DescriptorSet>, // Ring to setup into (some setup happens immediately on anounce)
+        _descriptor_sets: &mut Ring<vk::DescriptorSet>, // Ring to setup into (some setup happens immediately on anounce)
         descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
@@ -376,24 +332,22 @@ impl Renderer {
                     },
                 })
                 .collect();
-            unsafe {
-                // actually create layout and write it to ptr
-                self.create_descriptor_set_layout(
-                    &descriptor_infos,
-                    dset_layout,
-                    create_flags,
-                    #[cfg(feature = "debug_validation_names")]
-                    debug_name,
-                );
-            }
+
+            // actually create layout and write it to ptr
+            self.create_descriptor_set_layout(
+                &descriptor_infos,
+                dset_layout,
+                create_flags,
+                #[cfg(feature = "debug_validation_names")]
+                debug_name,
+            );
         }
 
-        self.descriptor_sets_count += (self.settings.fif as u32); // cuase dset per fif
+        self.descriptor_sets_count += self.settings.fif as u32; // cuase dset per fif
     }
 
     // anounce is just a request, this is an actual logic
-    #[cold]
-    #[optimize(size)]
+
     pub unsafe fn actually_setup_descriptor_impl(
         descriptor_pool: &vk::DescriptorPool,
         settings: &LumalSettings,
@@ -401,7 +355,7 @@ impl Renderer {
         dset_layout: &vk::DescriptorSetLayout,
         descriptor_sets: &mut Ring<vk::DescriptorSet>,
         descriptions: &[DescriptorInfo],
-        stages: vk::ShaderStageFlags,
+        _stages: vk::ShaderStageFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
         *descriptor_sets = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
@@ -452,7 +406,6 @@ impl Renderer {
                     // now we need to extract resource from a description and find corresponding element in Ring (or just use it if its Single (nor Ring))
 
                     match &desc.resources {
-                        DescriptorResource::None => panic!(),
                         // if descriptor is some type of image, we fill corresponding image slot in image_infos and point to it
                         DescriptorResource::StorageImage(images, image_layout) => {
                             let image = images.get_matching_resource(frame_i, previous_frame_i);
@@ -511,24 +464,20 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn flush_descriptor_setup(&mut self) {
         // (actually) create Vulkan descriptor pool
         if self.descriptor_pool == vk::DescriptorPool::null() {
-            self.descriptor_pool = unsafe { self.create_descriptor_pool() };
+            self.descriptor_pool = self.create_descriptor_pool();
         }
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn acutally_setup_descriptor(
         &mut self,
         dset_layout: &mut vk::DescriptorSetLayout,
         descriptor_sets: &mut Ring<vk::DescriptorSet>, // Ring to setup into
         descriptions: &[DescriptorInfo],
         default_stages: vk::ShaderStageFlags,
-        create_flags: vk::DescriptorSetLayoutCreateFlags,
+        _create_flags: vk::DescriptorSetLayoutCreateFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
         // actually setup descriptor

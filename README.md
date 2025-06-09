@@ -38,3 +38,11 @@ wgpu (backend) sorts by state cause state change is slow (no push constants in w
 
 
 instructions on instalation
+
+// RIGHT HANDED MATH EVERYWHERE
+
+demo is library for web (no bin in web)
+
+All types like Voxe, MatId, BlockId... are CPU-side and shared across backends. Types that start with Internal are per-backend (and do not match quite often)
+
+Lum operates on memory, not files, and it expects your assets to have special format (in memory). However, you dont have to "compile" assets yourselves - Lum has built-in tools for creating assets from magicavoxel (good voxel editor with) format (.vox) - both meshing and repacking

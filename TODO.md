@@ -9,6 +9,8 @@ todoy:
   formats
   fix smoke
   fix particles (remove geom)
+  resizing in wgpu
+  pub(crate) instead of pub
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
 wgpui better pcnherit TODO from lum++
@@ -183,19 +185,19 @@ error[E0053]: method `make_contour_vertices` has an incompatible type for trait
    --> lum\src\renderer\webgpu\load.rs:348:10
     |
 348 |     ) -> FaceBuffers<Self::BufferType, IndexedVerticesQueue<1>> {
-    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `renderer::types::IndexedVertices`, found `webgpu::types::IndexedVerticesQueue<1>`
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `/*renderer::*/types::IndexedVertices`, found `webgpu::types::IndexedVerticesQueue<1>`
     |
 note: type in trait
    --> lum\src\renderer\load_interface.rs:159:10
     |
 159 |     ) -> FaceBuffers<Self::BufferType>;
     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    = note: expected signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> renderer::types::FaceBuffers<_, renderer::types::IndexedVertices>`
-               found signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> renderer::types::FaceBuffers<_, webgpu::types::IndexedVerticesQueue<1>>`
+    = note: expected signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> /*renderer::*/types::FaceBuffers<_, /*renderer::*/types::IndexedVertices>`
+               found signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> /*renderer::*/types::FaceBuffers<_, webgpu::types::IndexedVerticesQueue<1>>`
 help: change the output type to match the trait
     |
 348 -     ) -> FaceBuffers<Self::BufferType, IndexedVerticesQueue<1>> {
-348 +     ) -> renderer::types::FaceBuffers<std::option::Option<wgpu::Buffer>> {
+348 +     ) -> /*renderer::*/types::FaceBuffers<std::option::Option<wgpu::Buffer>> {
     |
 
 

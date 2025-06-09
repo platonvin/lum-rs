@@ -1,16 +1,8 @@
-use crate::{read_file, ring::Ring, ComputePipe, RasterPipe, RenderPass};
-
 use crate::*;
 use ash::prelude::VkResult;
-use descriptors::*;
-
-use std::{error, ffi::CStr, ptr::null};
-
 use std::result::Result::Ok;
 
 impl Renderer {
-    #[cold]
-    #[optimize(speed)]
     pub fn start_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
         unsafe {
             self.device.wait_for_fences(&[*self.in_flight_fences.current()], true, u64::MAX);
@@ -45,8 +37,6 @@ impl Renderer {
         self.process_error_code(index_code);
     }
 
-    #[cold]
-    #[optimize(speed)]
     pub fn present_frame(&mut self, window: &Window) {
         let wait_semaphores = [*self.render_finished_semaphores.current()];
         let swapchains = [self.swapchain];
@@ -66,8 +56,6 @@ impl Renderer {
         self.process_success_code(error_code, window);
     }
 
-    #[cold]
-    #[optimize(speed)]
     pub fn end_frame(&mut self, command_buffers: &[vk::CommandBuffer], window: &Window) {
         for command_buffer in command_buffers {
             unsafe {
@@ -110,8 +98,7 @@ impl Renderer {
 
     // figure out if entire thing has to be recreated or not. Does not reacreate, only "flags" it
     // does someone know how to make this cleaner?
-    #[cold]
-    #[optimize(speed)]
+
     fn process_error_code(&mut self, index_code: VkResult<(u32, bool)>) {
         // man why did you corrode vulkan. Should i make my own fn wrapper?
         match index_code {
@@ -136,8 +123,7 @@ impl Renderer {
     }
 
     // does someone know how to make this cleaner?
-    #[cold]
-    #[optimize(speed)]
+
     fn process_success_code(&mut self, index_code: VkResult<bool>, window: &Window) {
         match index_code {
             Ok(suboptimal) => {

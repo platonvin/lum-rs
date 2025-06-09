@@ -2,7 +2,16 @@ cargo-features = ["profile-rustflags"]
 
 [workspace]
 resolver = "3"
-members = ["lum", "lumal", "shaders", "examples", "as_u8_slice_derive"]
+members = [
+    "lum",
+    "lumal",
+    "shaders",
+    "example/demo",
+    "example/assets",
+    "as_u8_slice_derive",
+    "containers",
+    "voxc",
+]
 
 [profile.dev]
 opt-level = 0
@@ -24,10 +33,10 @@ inline = "never"
 opt-level = 0
 debug = true
 inline = "never"
-[profile.dev.package.examples]
-opt-level = 0
-debug = true
-inline = "never"
+# [profile.dev.package.demo]
+# opt-level = 0
+# debug = true
+# inline = "never"
 [profile.dev.package.wgpu]
 opt-level = 1
 debug = true

@@ -1,9 +1,14 @@
+//! Lumal is Vulkan abstraction specifically for Lum renderer
+//! It is not trying to be generic, super extendable and scalable
+//! "Great idea" of Lumal is init-time resources - by forcing most resources to be created in init-time
+//! abstraction can be much simpler
+
 #![feature(optimize_attribute)]
 #![feature(const_type_id)]
 #![feature(default_field_values)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
-
+#![warn(missing_docs)]
 // lumal is divided into files (aka modules)
 // this in needed for whole thing to compile
 // Rust is so good that figuring it out only took 1 hour
@@ -16,7 +21,6 @@ pub mod images;
 pub mod macros;
 pub mod pipes;
 pub mod renderer;
-pub mod ring; // circular Vec
 pub mod rpass;
 pub mod samplers;
 
@@ -33,8 +37,8 @@ use ash::{
     },
     Device, Entry, Instance,
 };
+use containers::Ring;
 use gpu_allocator::vulkan::{self as vma, Allocator, AllocatorCreateDesc};
-use ring::*;
 use std::{
     any::{Any, TypeId},
     collections::HashSet,
@@ -65,18 +69,17 @@ const PORTABILITY_MACOS_VERSION: ConformanceVersion = ConformanceVersion {
 /// number of frames that will be processed concurrently. 2 is perferct - CPU prepares frame N, GPU renders frame N-1
 const DEFAULT_FRAMES_IN_FLIGHT: usize = 2;
 
+/// Simple vk::Buffer wrapper
 #[derive(Debug)]
 pub struct Buffer {
     pub buffer: vk::Buffer,
     pub allocation: vma::Allocation,
-    // pub mapped: Option<*mut c_void>, // If allocation is mapped
 }
 impl Default for Buffer {
     fn default() -> Self {
         Self {
             buffer: Default::default(),
             allocation: unsafe { std::mem::zeroed() },
-            // mapped: Default::default(),
         }
     }
 }
@@ -108,7 +111,7 @@ impl Default for Image {
 #[derive(Clone, Debug, Default)]
 pub struct RasterPipe {
     pub line: vk::Pipeline,
-    pub line_layout: vk::PipelineLayout,
+    pub layout: vk::PipelineLayout,
     // WHERE IS MY FUCKING DEFAULT VALUE WHY NO ONE WRITES BINDINGS THAT JUST WORK
     pub sets: Ring<vk::DescriptorSet>,
     pub set_layout: vk::DescriptorSetLayout,
@@ -169,20 +172,72 @@ pub struct LumalSettings {
     // pub device_extensions: Vec<*const i8>,
 }
 
+/// Bundle of counters for how many corresponding descriptors we will need.
+/// This way we will allocate descriptor pool with exact sizes we need
 #[allow(non_snake_case)]
 #[derive(Debug, Default)]
 pub struct DescriptorCounter {
-    pub COMBINED_IMAGE_SAMPLER: u32,
-    pub INPUT_ATTACHMENT: u32,
-    pub SAMPLED_IMAGE: u32,
-    pub SAMPLER: u32,
-    pub STORAGE_BUFFER: u32,
-    pub STORAGE_BUFFER_DYNAMIC: u32,
-    pub STORAGE_IMAGE: u32,
-    pub STORAGE_TEXEL_BUFFER: u32,
-    pub UNIFORM_BUFFER: u32,
-    pub UNIFORM_BUFFER_DYNAMIC: u32,
-    pub UNIFORM_TEXEL_BUFFER: u32,
+    COMBINED_IMAGE_SAMPLER: u32,
+    INPUT_ATTACHMENT: u32,
+    SAMPLED_IMAGE: u32,
+    SAMPLER: u32,
+    STORAGE_BUFFER: u32,
+    STORAGE_BUFFER_DYNAMIC: u32,
+    STORAGE_IMAGE: u32,
+    STORAGE_TEXEL_BUFFER: u32,
+    UNIFORM_BUFFER: u32,
+    UNIFORM_BUFFER_DYNAMIC: u32,
+    UNIFORM_TEXEL_BUFFER: u32,
+}
+
+impl DescriptorCounter {
+    fn increment_counter(&mut self, desc_type: vk::DescriptorType) {
+        match desc_type {
+            vk::DescriptorType::SAMPLER => self.SAMPLER += 1,
+            vk::DescriptorType::COMBINED_IMAGE_SAMPLER => self.COMBINED_IMAGE_SAMPLER += 1,
+            vk::DescriptorType::SAMPLED_IMAGE => self.SAMPLED_IMAGE += 1,
+            vk::DescriptorType::STORAGE_IMAGE => self.STORAGE_IMAGE += 1,
+            vk::DescriptorType::UNIFORM_TEXEL_BUFFER => self.UNIFORM_TEXEL_BUFFER += 1,
+            vk::DescriptorType::STORAGE_TEXEL_BUFFER => self.STORAGE_TEXEL_BUFFER += 1,
+            vk::DescriptorType::UNIFORM_BUFFER => self.UNIFORM_BUFFER += 1,
+            vk::DescriptorType::STORAGE_BUFFER => self.STORAGE_BUFFER += 1,
+            vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC => self.UNIFORM_BUFFER_DYNAMIC += 1,
+            vk::DescriptorType::STORAGE_BUFFER_DYNAMIC => self.STORAGE_BUFFER_DYNAMIC += 1,
+            vk::DescriptorType::INPUT_ATTACHMENT => self.INPUT_ATTACHMENT += 1,
+            _ => {
+                panic!("Unknown descriptor type");
+            }
+        }
+    }
+
+    fn get_pool_sizes(&self) -> Vec<vk::DescriptorPoolSize> {
+        let mut pool_sizes = Vec::new();
+
+        macro_rules! add_pool_size_if_not_zero {
+            ($name:ident) => {
+                if self.$name != 0 {
+                    pool_sizes.push(vk::DescriptorPoolSize {
+                        ty: vk::DescriptorType::$name,
+                        descriptor_count: self.$name,
+                    });
+                }
+            };
+        }
+
+        add_pool_size_if_not_zero!(SAMPLER);
+        add_pool_size_if_not_zero!(COMBINED_IMAGE_SAMPLER);
+        add_pool_size_if_not_zero!(SAMPLED_IMAGE);
+        add_pool_size_if_not_zero!(STORAGE_IMAGE);
+        add_pool_size_if_not_zero!(UNIFORM_TEXEL_BUFFER);
+        add_pool_size_if_not_zero!(STORAGE_TEXEL_BUFFER);
+        add_pool_size_if_not_zero!(UNIFORM_BUFFER);
+        add_pool_size_if_not_zero!(STORAGE_BUFFER);
+        add_pool_size_if_not_zero!(UNIFORM_BUFFER_DYNAMIC);
+        add_pool_size_if_not_zero!(STORAGE_BUFFER_DYNAMIC);
+        add_pool_size_if_not_zero!(INPUT_ATTACHMENT);
+
+        pool_sizes
+    }
 }
 
 // TODO: not copy? or Copy image?
@@ -257,8 +312,6 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    #[cold]
-    #[optimize(size)]
     pub fn create(settings: &LumalSettings, window: &Window) -> Renderer {
         println!("Starting app.");
 
@@ -282,7 +335,7 @@ impl Renderer {
                 settings.debug,
             );
 
-            let mut allocator = Allocator::new(&AllocatorCreateDesc {
+            let allocator = Allocator::new(&AllocatorCreateDesc {
                 instance: instance.clone(),
                 device: device.clone(),
                 physical_device: physical_device,
@@ -363,8 +416,6 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
     pub unsafe fn create_instance(
         window: &Window,
         entry: &Entry,
@@ -491,8 +542,6 @@ impl Renderer {
         self.instance.destroy_instance(None);
     }
 
-    #[cold]
-    #[optimize(size)]
     unsafe fn destroy_swapchain(&self) {
         self.swapchain_images
             .iter()
@@ -502,8 +551,6 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
     unsafe fn destroy_sync_primitives(&self) {
         self.in_flight_fences.iter().for_each(|f| self.device.destroy_fence(*f, None));
         self.render_finished_semaphores
@@ -514,8 +561,6 @@ impl Renderer {
             .for_each(|s| self.device.destroy_semaphore(*s, None));
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn begin_single_time_command_buffer(&self) -> vk::CommandBuffer {
         let alloc_info = vk::CommandBufferAllocateInfo {
             level: vk::CommandBufferLevel::PRIMARY,
@@ -533,8 +578,6 @@ impl Renderer {
         command_buffer
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn end_single_time_command_buffer(&self, command_buffer: vk::CommandBuffer) {
         unsafe {
             self.device.end_command_buffer(command_buffer).unwrap();
@@ -559,8 +602,6 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn bind_compute_pipe(&self, cmb: &vk::CommandBuffer, pipe: &ComputePipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
@@ -575,15 +616,13 @@ impl Renderer {
         }
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn bind_raster_pipe(&self, cmb: &vk::CommandBuffer, pipe: &RasterPipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
             self.device.cmd_bind_descriptor_sets(
                 *cmb,
                 vk::PipelineBindPoint::GRAPHICS,
-                pipe.line_layout,
+                pipe.layout,
                 0,
                 &[*pipe.sets.current()],
                 &[],
@@ -592,8 +631,7 @@ impl Renderer {
     }
 
     // creates primary command buffer. Lumal does not interact with non-primary command buffers
-    #[cold]
-    #[optimize(size)]
+
     pub fn create_command_buffer(&self) -> Ring<vk::CommandBuffer> {
         let info = vk::CommandBufferAllocateInfo {
             command_pool: self.command_pool,
@@ -605,8 +643,6 @@ impl Renderer {
         Ring::from_vec(unsafe { self.device.allocate_command_buffers(&info).unwrap() })
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn destroy_command_buffer(&self, compute_command_buffers: &Ring<vk::CommandBuffer>) {
         unsafe {
             self.device
@@ -614,8 +650,6 @@ impl Renderer {
         };
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn transition_image_layout_single_time(
         &self,
         image: &Image,
@@ -652,8 +686,6 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn copy_buffer_to_image_single_time(
         &self,
         buffer: vk::Buffer,
@@ -684,8 +716,6 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn copy_buffer_to_buffer_single_time(
         &mut self,
         src_buffer: vk::Buffer,
@@ -708,8 +738,6 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
-    #[cold]
-    #[optimize(size)]
     pub fn process_deletion_queues(&mut self) {
         let mut write_index = 0;
         let len = self.buffer_deletion_queue.len();
@@ -726,7 +754,7 @@ impl Renderer {
             } else {
                 // Destroy the buffer before overwriting
                 let buffer = std::mem::take(&mut self.buffer_deletion_queue[i].buffer);
-                self.allocator.free(buffer.allocation);
+                self.allocator.free(buffer.allocation).unwrap();
                 unsafe { self.device.destroy_buffer(buffer.buffer, None) };
             }
             i += 1;
@@ -752,7 +780,7 @@ impl Renderer {
                 // let mip_views = std::mem::take(&mut self.image_deletion_queue[i].mip_views);
                 let allocation = std::mem::take(&mut self.image_deletion_queue[i].allocation);
                 unsafe {
-                    self.allocator.free(allocation);
+                    self.allocator.free(allocation).unwrap();
                     self.device.destroy_image_view(view, None);
                     // for mip_view in mip_views {
                     //     self.device.destroy_image_view(mip_view, None);
@@ -766,8 +794,7 @@ impl Renderer {
     }
 
     // The only use i can imagine for this is the indented one - freing resources
-    #[cold]
-    #[optimize(size)]
+
     pub fn process_deletion_queues_untill_all_done(&mut self) {
         while !self.buffer_deletion_queue.is_empty() || !self.image_deletion_queue.is_empty() {
             self.process_deletion_queues();
@@ -798,15 +825,22 @@ impl Renderer {
 
             self.device.device_wait_idle().unwrap();
 
-            create_swapchain(
-                &self.settings,
-                window,
-                &self.instance,
-                &self.entry,
-                &self.device,
-                &self.surface,
-                &self.physical_device,
-            );
+            let (swapchain, swapchain_images, swapchain_extent, swapchain_format) =
+                create_swapchain(
+                    &self.settings,
+                    window,
+                    &self.instance,
+                    &self.entry,
+                    &self.device,
+                    &self.surface,
+                    &self.physical_device,
+                );
+
+            self.swapchain = swapchain;
+            self.swapchain_images = swapchain_images;
+            self.swapchain_extent = swapchain_extent;
+            self.swapchain_format = swapchain_format;
+
             // create_swapchain_image_views(&self.device, &mut self).unwrap();
             // create_command_pool(&self.instance, &self.device, &mut self).unwrap();
 
@@ -937,8 +971,7 @@ macro_rules! set_debug_names {
 // }
 
 /// Logs debug messages.
-#[cold]
-#[optimize(speed)]
+
 extern "system" fn debug_callback(
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     type_: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -958,8 +991,7 @@ extern "system" fn debug_callback(
 }
 
 /// Picks a suitable physical device.
-#[cold]
-#[optimize(size)]
+
 unsafe fn pick_physical_device(
     instance: &Instance,
     entry: &Entry,
@@ -987,8 +1019,7 @@ unsafe fn pick_physical_device(
 }
 
 /// Checks that a physical device is suitable.
-#[cold]
-#[optimize(size)]
+
 unsafe fn check_physical_device(
     instance: &Instance,
     entry: &Entry,
@@ -1007,8 +1038,7 @@ unsafe fn check_physical_device(
 }
 
 /// Checks that a physical device supports the required device extensions.
-#[cold]
-#[optimize(size)]
+
 unsafe fn check_physical_device_extensions(
     instance: &Instance,
     physical_device: &vk::PhysicalDevice,
@@ -1051,8 +1081,7 @@ unsafe fn check_physical_device_extensions(
 
 /// Creates a logical device for the picked physical device.
 #[allow(unused_variables)]
-#[cold]
-#[optimize(size)]
+
 unsafe fn create_logical_device(
     entry: &Entry,
     instance: &Instance,
@@ -1094,7 +1123,7 @@ unsafe fn create_logical_device(
     }
 
     // TODO: unhardcode
-    let mut features = vk::PhysicalDeviceFeatures {
+    let features = vk::PhysicalDeviceFeatures {
         sampler_anisotropy: vk::TRUE,
         shader_int16: vk::TRUE,
         geometry_shader: vk::TRUE,
@@ -1143,8 +1172,7 @@ unsafe fn create_logical_device(
 }
 
 /// Creates a swapchain and swapchain images.
-#[cold]
-#[optimize(size)]
+
 unsafe fn create_swapchain(
     settings: &LumalSettings,
     window: &Window,
@@ -1283,8 +1311,7 @@ unsafe fn create_swapchain(
 }
 
 /// Gets a suitable swapchain surface format.
-#[cold]
-#[optimize(size)]
+
 fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
     for f in formats {
         if f.format == vk::Format::B8G8R8A8_UNORM
@@ -1304,8 +1331,7 @@ fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::Surface
 }
 
 /// Gets a suitable swapchain present mode.
-#[cold]
-#[optimize(size)]
+
 fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
     present_modes
         .iter()
@@ -1316,8 +1342,8 @@ fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::Prese
 
 /// Gets a suitable swapchain extent.
 #[rustfmt::skip]
-#[cold]
-#[optimize(size)]
+
+
 fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
     if capabilities.current_extent.width != u32::MAX {
         capabilities.current_extent
@@ -1335,8 +1361,6 @@ fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKH
     }
 }
 
-#[cold]
-#[optimize(size)]
 unsafe fn create_command_pool(
     instance: &Instance,
     entry: &Entry,
@@ -1353,8 +1377,6 @@ unsafe fn create_command_pool(
     device.create_command_pool(&info, None).unwrap()
 }
 
-#[cold]
-#[optimize(size)]
 unsafe fn create_sync_objects(device: &Device) -> (Ring<Semaphore>, Ring<Semaphore>, Ring<Fence>) {
     let semaphore_info = vk::SemaphoreCreateInfo::default();
     let fence_info = vk::FenceCreateInfo {
@@ -1369,7 +1391,7 @@ unsafe fn create_sync_objects(device: &Device) -> (Ring<Semaphore>, Ring<Semapho
     for i in 0..DEFAULT_FRAMES_IN_FLIGHT {
         image_available_semaphores[i] = (device.create_semaphore(&semaphore_info, None).unwrap());
         render_finished_semaphores[i] = (device.create_semaphore(&semaphore_info, None).unwrap());
-        in_flight_fences[i] = (device.create_fence(&fence_info, None).unwrap());
+        in_flight_fences[i] = device.create_fence(&fence_info, None).unwrap();
     }
 
     (
@@ -1386,8 +1408,6 @@ struct QueueFamilyIndices {
 }
 
 impl QueueFamilyIndices {
-    #[cold]
-    #[optimize(size)]
     unsafe fn get(
         instance: &Instance,
         entry: &Entry,
@@ -1431,8 +1451,6 @@ struct SwapchainSupport {
 }
 
 impl SwapchainSupport {
-    #[cold]
-    #[optimize(size)]
     unsafe fn get(
         instance: &Instance,
         entry: &Entry,
@@ -1456,8 +1474,6 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-#[cold]
-#[optimize(size)]
 fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
     let possible_error = "Failed to open file: ".to_owned() + path.as_ref().to_str().unwrap();
     let mut file = File::open(path).expect(&possible_error);

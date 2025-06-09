@@ -1,7 +1,7 @@
 use std::thread;
 
+use containers::Multiprocessor;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use lum::containers::Multiprocessor;
 use rayon::ThreadPool;
 
 // A dummy function to simulate (no) dispatch work
