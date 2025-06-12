@@ -19,29 +19,7 @@ pub struct Array3D<T> {
     pub z_size: usize,
 }
 
-impl<T: Default> Array3D<T>
-where
-    T: Default,
-{
-    pub fn new_filled_by_generator(
-        x_size: usize,
-        y_size: usize,
-        z_size: usize,
-        generator: impl Fn() -> T,
-    ) -> Self {
-        assert!(
-            x_size > 0 && y_size > 0 && z_size > 0,
-            "Dimensions must be greater than zero"
-        );
-        let data = (0..x_size * y_size * z_size).map(|_| generator()).collect();
-        Self {
-            data,
-            x_size,
-            y_size,
-            z_size,
-        }
-    }
-
+impl<T> Array3D<T> {
     /// Returns the index in the flat data array for given (x, y, z) coordinates.
     pub fn index_internal(&self, x: usize, y: usize, z: usize) -> usize {
         if core::cfg!(debug_assertions) && !(x < self.x_size && y < self.y_size && z < self.z_size)
@@ -87,15 +65,35 @@ where
     }
 }
 
-impl<T: Default + Clone> Array3D<T>
-where
-    T: Default + Clone,
-{
+impl<T: Default> Array3D<T> {
+    pub fn new_filled_by_generator(
+        x_size: usize,
+        y_size: usize,
+        z_size: usize,
+        generator: impl Fn() -> T,
+    ) -> Self {
+        assert!(
+            x_size > 0 && y_size > 0 && z_size > 0,
+            "Dimensions must be greater than zero"
+        );
+        let data = (0..x_size * y_size * z_size).map(|_| generator()).collect();
+        Self {
+            data,
+            x_size,
+            y_size,
+            z_size,
+        }
+    }
+}
+
+impl<T: Default + Clone> Array3D<T> {
     /// Creates a new 3D array with given dimensions, initialized with `Default` values.
     pub fn new(x_size: usize, y_size: usize, z_size: usize) -> Self {
         Self::new_filled(x_size, y_size, z_size, T::default())
     }
+}
 
+impl<T: Clone> Array3D<T> {
     pub fn new_filled(x_size: usize, y_size: usize, z_size: usize, value: T) -> Self {
         assert!(
             x_size > 0 && y_size > 0 && z_size > 0,
@@ -117,6 +115,7 @@ where
     pub fn copy_data_from(&mut self, other: &Array3D<T>) {
         self.data = other.data.clone();
     }
+
     pub fn get(&self, x: usize, y: usize, z: usize) -> T {
         self.data[self.index_internal(x, y, z)].clone()
     }
@@ -242,6 +241,127 @@ impl<'a, T: Default + Clone> IntoIterator for &'a mut Array3D<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
+    }
+}
+
+pub struct Array3DView<'a, T, U> {
+    array: &'a Array3D<T>,
+    // to actually have U as type param
+    _phantom: std::marker::PhantomData<U>,
+}
+
+pub struct Array3DViewMut<'a, T, U> {
+    // TODO: why is there no generic over order / presentance / mut of fields?
+    array: &'a mut Array3D<T>,
+    // to actually have U as type param
+    _phantom: std::marker::PhantomData<U>,
+}
+
+impl<T> Array3D<T> {
+    pub fn as_view<U>(&self) -> Array3DView<'_, T, U> {
+        Array3DView {
+            array: self,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn as_view_mut<U>(&mut self) -> Array3DViewMut<'_, T, U> {
+        Array3DViewMut {
+            array: self,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+//
+pub trait ToUsize3 {
+    fn to_usize3(&self) -> (usize, usize, usize);
+}
+impl ToUsize3 for (usize, usize, usize) {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        *self
+    }
+}
+
+impl ToUsize3 for (isize, isize, isize) {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.0 as usize, self.1 as usize, self.2 as usize)
+    }
+}
+
+impl ToUsize3 for (i32, i32, i32) {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.0 as usize, self.1 as usize, self.2 as usize)
+    }
+}
+
+impl ToUsize3 for (i8, i8, i8) {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.0 as usize, self.1 as usize, self.2 as usize)
+    }
+}
+
+impl ToUsize3 for qvek::vek::Vec3<i32> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+
+impl ToUsize3 for qvek::vek::Vec3<i8> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+
+impl ToUsize3 for qvek::vek::Vec4<i32> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+
+impl ToUsize3 for qvek::vek::Vec4<i8> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+
+impl<'a, T, U, I> Index<I> for Array3DView<'a, T, U>
+where
+    I: ToUsize3,
+    T: Clone + Into<U>,
+{
+    type Output = U;
+
+    fn index(&self, index: I) -> &Self::Output {
+        panic!("By-value conversion required — use get() instead.")
+    }
+}
+
+impl<'a, T, U> Array3DView<'a, T, U>
+where
+    T: From<U> + Into<U> + Clone,
+{
+    pub fn get(&self, index: impl ToUsize3) -> U {
+        let (x, y, z) = index.to_usize3();
+        self.array.get(x, y, z).into()
+    }
+}
+
+impl<'a, T, U> Array3DViewMut<'a, T, U>
+where
+    T: From<U>,
+{
+    pub fn set(&mut self, index: impl ToUsize3, value: U) {
+        let (x, y, z) = index.to_usize3();
+        self.array.set(x, y, z, T::from(value));
+    }
+
+    pub fn get(&self, index: impl ToUsize3) -> U
+    where
+        T: Into<U> + Clone,
+    {
+        let (x, y, z) = index.to_usize3();
+        self.array.get(x, y, z).into()
     }
 }
 

@@ -8,3 +8,12 @@ publish = false
 
 [dependencies]
 lum = { path = "../../lum" }
+vek = "0.17.1"
+
+[build-dependencies]
+lum = { path = "../../lum" }
+glob = "0.3.2"
+block-mesh = "0.2.0"
+vek = "0.17.1"
+as_u8_slice_derive = { path = "../../as_u8_slice_derive" }
+voxc = { path = "../../voxc" }

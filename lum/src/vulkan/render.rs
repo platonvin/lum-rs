@@ -3,6 +3,7 @@ use std::time::Instant;
 use super::InternalRendererVulkan;
 use crate::{
     assert_assume,
+    load_interface::{BlockData, ModelData},
     render_interface::FoliageDescriptionCreate,
     vulkan::{pc_types, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y},
     *,
@@ -12,7 +13,10 @@ use crate::{
 };
 use aabb::{get_shift, iAABB};
 // use as_u8_slice_derive::AsU8Slice;
-use containers::BitArray3d;
+use containers::{
+    array3d::{Array3DView, Array3DViewMut},
+    BitArray3d,
+};
 use containers::{Arena, Array3D};
 use lumal::vk;
 use qvek::{i16vec3, i16vec4, i8vec4, ivec3, ivec4, uvec2, uvec3, vec3, vec4, vek::Clamp};
@@ -115,7 +119,7 @@ impl InternalRendererVulkan {
                         }
 
                         self.current_world[(xx as usize, yy as usize, zz as usize)] =
-                            self.palette_counter as InternalBlockId;
+                            self.palette_counter as MeshBlock;
                         self.palette_counter += 1;
                     } else {
                         //already new block, just leave it
@@ -129,12 +133,12 @@ impl InternalRendererVulkan {
         let count_to_copy = self.current_world.dimensions().0
             * self.current_world.dimensions().1
             * self.current_world.dimensions().2;
-        let size_to_copy = count_to_copy * size_of::<InternalBlockId>();
+        let size_to_copy = count_to_copy * size_of::<MeshBlock>();
         unsafe {
             std::ptr::copy_nonoverlapping(
                 self.current_world.data.as_ptr(),
                 self.buffers.staging_world.current().allocation.mapped_ptr().unwrap().as_ptr()
-                    as *mut InternalBlockId,
+                    as *mut MeshBlock,
                 count_to_copy, // converts to size automatically
             )
         };
@@ -993,7 +997,7 @@ impl InternalRendererVulkan {
         normal.dot(camera_dir) < 0.0
     }
 
-    fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: InternalBlockId) {
+    fn raygen_block_face(&self, normal: ivec3, buff: &IndexedVertices, block_id: MeshBlock) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
         debug_assert!(block_id > 0);
         let sum = normal.x + normal.y + normal.z;
@@ -1036,7 +1040,7 @@ impl InternalRendererVulkan {
         };
     }
 
-    fn raygen_block(&mut self, block_id: InternalBlockId, shift: ivec3) {
+    fn raygen_block(&mut self, block_id: MeshBlock, shift: ivec3) {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         let block_mesh = &self.block_palette_meshes[block_id as usize];
@@ -1196,12 +1200,7 @@ impl InternalRendererVulkan {
         // let _ :i64 = 0x0_c001_babe_face;
     }
 
-    fn lightmap_block_face(
-        &self,
-        _normal: ivec3,
-        buff: &IndexedVertices,
-        _block_id: InternalBlockId,
-    ) {
+    fn lightmap_block_face(&self, _normal: ivec3, buff: &IndexedVertices, _block_id: MeshBlock) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
         unsafe {
             self.lumal
@@ -1210,7 +1209,7 @@ impl InternalRendererVulkan {
         }
     }
 
-    fn lightmap_block(&mut self, block_id: InternalBlockId, shift: ivec3) {
+    fn lightmap_block(&mut self, block_id: MeshBlock, shift: ivec3) {
         let command_buffer = self.cmdbufs.lightmap_command_buffers.current();
 
         let block_mesh = &self.block_palette_meshes[block_id as usize];
@@ -1811,7 +1810,7 @@ pub struct ModelRenderRequest {
 }
 pub struct BlockRenderRequest {
     pub cam_dist: f32,
-    pub block: InternalBlockId,
+    pub block: MeshBlock,
     // snapped to voxel grid
     pub pos: i16vec3,
 }
@@ -1944,6 +1943,7 @@ impl RendererVulkan<'_> {
 impl RendererInterface for RendererVulkan<'_> {
     type FoliageDescription = MeshFoliageDescription;
     type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder;
+    type InternalBlockId = InternalBlockId;
 
     fn new(
         settings: &crate::Settings,
@@ -1966,28 +1966,29 @@ impl RendererInterface for RendererVulkan<'_> {
         }
     }
 
-    fn destroy(mut self) {
+    fn destroy(self) {
         unsafe { self.renderer.destroy() };
     }
 
-    fn load_model(&mut self, path: &str) -> MeshModel {
-        let model_mesh = self.renderer.load_mesh_from_file(path, true, true);
+    fn load_model(&mut self, model: ModelData) -> MeshModel {
+        let model_mesh = self.renderer.load_model(model);
         let index = self.storage.models.allocate(model_mesh).unwrap();
         index as MeshModel
     }
     fn unload_model(&mut self, model: MeshModel) {
         let model_mesh = self.storage.models.take(model).unwrap();
-        self.renderer.free_mesh(model_mesh);
+        self.renderer.free_model(model_mesh);
     }
     fn get_model_size(&self, model: MeshModel) -> uvec3 {
         self.storage.models.get(model).unwrap().size
     }
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
-    fn load_block(&mut self, block: InternalBlockId, path: &str) {
-        self.renderer.load_block_from_file(block, path);
+
+    fn load_block(&mut self, block: MeshBlock, block_data: BlockData) {
+        self.renderer.load_block(block, block_data);
     }
-    fn unload_block(&mut self, block: InternalBlockId) {
+    fn unload_block(&mut self, block: MeshBlock) {
         self.renderer.free_block(block);
     }
 
@@ -2225,11 +2226,12 @@ impl RendererInterface for RendererVulkan<'_> {
         self.renderer.end_frame(&self.window);
     }
 
-    fn get_world_blocks(&self) -> &Array3D<InternalBlockId> {
-        &self.renderer.origin_world
+    fn get_world_blocks(&self) -> Array3DView<InternalBlockId, MeshBlock> {
+        self.renderer.origin_world.as_view()
     }
-    fn get_world_blocks_mut(&mut self) -> &mut Array3D<InternalBlockId> {
-        &mut self.renderer.origin_world
+
+    fn get_world_blocks_mut(&mut self) -> Array3DViewMut<InternalBlockId, MeshBlock> {
+        self.renderer.origin_world.as_view_mut()
     }
 
     fn is_block_visible(&self, pos: vec3) -> bool {
@@ -2328,6 +2330,14 @@ impl RendererInterface for RendererVulkan<'_> {
 
     fn get_block_palette_mut(&mut self) -> &mut [BlockVoxels] {
         self.renderer.block_palette_voxels.as_mut_slice()
+    }
+
+    fn get_material_palette(&self) -> &[Material] {
+        &self.renderer.material_palette
+    }
+
+    fn get_material_palette_mut(&mut self) -> &mut [Material] {
+        &mut self.renderer.material_palette
     }
 }
 

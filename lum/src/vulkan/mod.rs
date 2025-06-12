@@ -240,10 +240,10 @@ pub struct InternalRendererVulkan {
     pub static_block_palette_size: u32,
 
     /// ground truth for block references data, without any block allocations (no models)
-    pub origin_world: Array3D<InternalBlockId>,
+    pub origin_world: Array3D<MeshBlock>,
     /// modified origin world, with some blocks allocated for models
     /// for internal use only
-    pub current_world: Array3D<InternalBlockId>,
+    pub current_world: Array3D<MeshBlock>,
 
     /// just particles. Very simple system to process them
     pub particles: Vec<Particle>,
@@ -260,6 +260,7 @@ pub struct InternalRendererVulkan {
     pub material_palette: Vec<Material>, // its fixed size but its fine
     /// CPU-side Voxel data for static blocks
     pub block_palette_voxels: Vec<BlockVoxels>, // its fixed size but its fine
+
     /// GPU objects for mesh data for blocks.
     /// Unlike models, meshes for blocks are stored internally and indexed instead
     pub block_palette_meshes: Vec<InternalMeshBlock>, // its fixed size but its fine
@@ -328,7 +329,7 @@ impl InternalRendererVulkan {
         let camera = Camera::default();
         let light = SunLight::default();
 
-        let origin_world = Array3D::<InternalBlockId>::new(
+        let origin_world = Array3D::<MeshBlock>::new(
             lum_settings.world_size.x as usize,
             lum_settings.world_size.y as usize,
             lum_settings.world_size.z as usize,

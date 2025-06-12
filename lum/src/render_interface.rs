@@ -1,6 +1,13 @@
 use super::types::*;
-use crate::{fBLOCK_SIZE, BLOCK_SIZE};
-use containers::Array3D;
+use crate::{
+    fBLOCK_SIZE,
+    load_interface::{BlockData, ModelData},
+    BLOCK_SIZE,
+};
+use containers::{
+    array3d::{Array3DView, Array3DViewMut},
+    Array3D,
+};
 use qvek::{vec3, vek::FrustumPlanes};
 use winit::window::Window;
 
@@ -121,6 +128,8 @@ pub trait RendererInterface {
     type FoliageDescription: FoliageDescriptionCreate;
     type FoliageDescriptionBuilder: FoliageDescriptionBuilder<Self::FoliageDescription>;
 
+    type InternalBlockId: From<MeshBlock>;
+
     fn new(
         settings: &super::Settings,
         window: Window,
@@ -128,12 +137,12 @@ pub trait RendererInterface {
     ) -> Self;
     fn destroy(self);
 
-    fn load_model(&mut self, path: &str) -> MeshModel;
+    fn load_model(&mut self, model_data: ModelData) -> MeshModel;
     fn unload_model(&mut self, model: MeshModel);
     fn get_model_size(&self, model: MeshModel) -> uvec3;
 
-    fn load_block(&mut self, block: BlockId, path: &str);
-    fn unload_block(&mut self, block: BlockId);
+    fn load_block(&mut self, block: MeshBlock, block_data: BlockData);
+    fn unload_block(&mut self, block: MeshBlock);
 
     fn update_block_palette_to_gpu(&mut self);
     fn update_material_palette_to_gpu(&mut self);
@@ -160,16 +169,21 @@ pub trait RendererInterface {
     fn is_model_visible(&self, model_size: &uvec3, trans: &MeshTransform) -> bool;
 
     fn draw_world(&mut self);
-    fn draw_block(&mut self, block: BlockId, block_pos: &i16vec3);
+    fn draw_block(&mut self, block: MeshBlock, block_pos: &i16vec3);
     fn draw_model(&mut self, model: &MeshModel, trans: &MeshTransform);
     fn draw_foliage(&mut self, foliage: &MeshFoliage, pos: &vec3);
     fn draw_liquid(&mut self, liquid: &MeshLiquid, pos: &vec3);
     fn draw_volumetric(&mut self, volumetric: &MeshVolumetric, pos: &vec3);
     fn spawn_particle(&mut self, particle: &Particle);
 
-    fn get_world_blocks(&self) -> &Array3D<BlockId>;
-    fn get_world_blocks_mut(&mut self) -> &mut Array3D<BlockId>;
+    fn get_world_blocks(&self) -> Array3DView<Self::InternalBlockId, MeshBlock>;
+    fn get_world_blocks_mut(&mut self) -> Array3DViewMut<Self::InternalBlockId, MeshBlock>;
+
+    //TODO: arrays vs images?
 
     fn get_block_palette(&self) -> &[BlockVoxels];
     fn get_block_palette_mut(&mut self) -> &mut [BlockVoxels];
+
+    fn get_material_palette(&self) -> &[Material];
+    fn get_material_palette_mut(&mut self) -> &mut [Material];
 }

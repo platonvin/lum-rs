@@ -12,7 +12,12 @@ vk_backend = ["lum/vk_backend"]
 lum = { path = "../../lum" }
 shaders = { path = "../../shaders" }
 assets = { path = "../assets" }
-winit = "0.30.8"
+winit = "0.30.11"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1.7"
+wasm-bindgen = "0.2.100"
+web-sys = { version = "0.3.77", features = ["Document", "Window", "Element"] }
 
 [[bin]]
 path = "src/bin/demo_vk.rs"
@@ -23,5 +28,7 @@ path = "src/bin/demo_wgpu.rs"
 name = "demo_wgpu"
 
 [lib]
+# we want to build for web, too
+crate-type = ["cdylib", "rlib"]
 path = "src/demo_lib.rs"
 name = "demo_lib"

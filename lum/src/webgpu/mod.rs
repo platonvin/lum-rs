@@ -23,7 +23,6 @@ const MATNORM_FORMAT: TextureFormat = TextureFormat::Rgba8Uint;
 const RADIANCE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 const BLOCK_PALETTE_SIZE_X: u32 = 64;
 const BLOCK_PALETTE_SIZE_Y: u32 = 64;
-const FRAMES_IN_FLIGHT: usize = 2;
 const DEPTH_FORMAT_PREFERED: wgpu::TextureFormat = wgpu::TextureFormat::Depth32FloatStencil8;
 static mut CHOSEN_DEPTH_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Depth32Float);
 static mut CHOSEN_STENCIL_FORMAT: Option<wgpu::TextureFormat> = Some(TextureFormat::Stencil8);
@@ -140,8 +139,8 @@ pub struct InternalRendererWebGPU<'window> {
     pub palette_counter: usize,
     pub static_block_palette_size: u32,
 
-    pub origin_world: Array3D<BlockId>,
-    pub current_world: Array3D<BlockId>,
+    pub origin_world: Array3D<InternalBlockId>,
+    pub current_world: Array3D<InternalBlockId>,
 
     pub particles: Vec<Particle>,
 
@@ -201,12 +200,12 @@ impl<'window> InternalRendererWebGPU<'window> {
         let camera = Camera::default();
         let light = SunLight::default();
 
-        let origin_world = Array3D::<BlockId>::new(
+        let origin_world = Array3D::<InternalBlockId>::new(
             lum_settings.world_size.x as usize,
             lum_settings.world_size.y as usize,
             lum_settings.world_size.z as usize,
         );
-        let current_world = Array3D::<BlockId>::new(
+        let current_world = Array3D::<InternalBlockId>::new(
             origin_world.x_size,
             origin_world.y_size,
             origin_world.z_size,

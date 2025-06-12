@@ -67,8 +67,8 @@ pub struct InternalMeshFoliage {
 
 #[derive(Clone, Debug, Default)]
 pub struct InternalMeshLiquid {
-    pub main: MatId,
-    pub foam: MatId,
+    pub main: InternalMatId,
+    pub foam: InternalMatId,
     // pub pc_buffer: Option<wgpu::Buffer>,
     // pub pc_bg: Option<wgpu::BindGroup>,
     // pub push_constants: Vec<u8>,
@@ -100,24 +100,35 @@ pub struct InternalMeshVolumetric {
 //     pub mat_id: MatId,
 // }
 
+// I am unsure about if this should be shared between backends but it is at the moment
+/// CPU-side particle (grid-aigned but not grid-snapped cube with material and size dependent lifetime)
+// #[repr(C)]
+// #[derive(Debug, Clone, Copy, Default)]
+// pub struct InternalParticle {
+//     pub pos: vec3,
+//     pub vel: vec3,
+//     pub life_time: f32,
+//     pub mat_id: InternalMatId,
+// }
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct VoxelVertex {
     pub pos: u8vec3,
     pub norm: i8vec3,
-    pub mat_id: MatId,
+    pub mat_id: InternalMatId,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelVertex {
     pub pos: u8vec3,
-    pub mat_id: MatId,
+    pub mat_id: InternalMatId,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PackedVoxelQuad {
     pub size: u8vec2,
     pub pos: u8vec3,
-    pub mat_id: MatId,
+    pub mat_id: InternalMatId,
 }
 
 #[repr(C)]

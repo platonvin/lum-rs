@@ -40,8 +40,8 @@ pub type dmat4 = vek::Mat4<f64>;
 pub type quat = vek::quaternion::Quaternion<f32>;
 pub type dquat = vek::quaternion::Quaternion<f64>;
 
-// #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
-// pub struct VoxelForContour<V: PartialEq>(pub V);
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct VoxelForContour<V: PartialEq>(pub V);
 
 // impl<V: PartialEq + Zero> block_mesh::Voxel for VoxelForContour<V> {
 //     fn get_visibility(&self) -> VoxelVisibility {
@@ -74,21 +74,36 @@ pub type dquat = vek::quaternion::Quaternion<f64>;
 // }
 
 #[repr(C)]
-#[derive(as_u8_slice_derive::AsU8Slice, Default, Clone, Copy, Debug)]
+#[derive(as_u8_slice_derive::AsU8Slice, Default, Clone, Copy)]
 pub struct Material {
     pub albedo: vec3,
     pub transparency: f32,
     pub emmitness: f32,
     pub roughness: f32,
 }
+impl std::fmt::Debug for Material {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "({:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2})",
+            self.albedo.x,
+            self.albedo.y,
+            self.albedo.z,
+            self.transparency,
+            self.emmitness,
+            self.roughness,
+        )
+    }
+}
 
-// /// API BlockId type - same across all backends. Used in API and CPU-side world representation (GPU-side does NOT use this exact type)
-// pub type BlockId = i16;
-// // Material ID and Voxel are essentially the same thing
-// pub type MatId = u8;
-// // TODO: enum with empty / non-empty using NonZeroU8
-// pub type Voxel = u8;
+/// API BlockId type - same across all backends. Used in API and CPU-side world representation (GPU-side does NOT use this exact type)
+pub type BlockId = i16;
+// Material ID and Voxel are essentially the same thing
+pub type MatId = u8;
+// TODO: enum with empty / non-empty using NonZeroU8
+pub type Voxel = u8;
 
+pub type MeshBlock = i16;
 // opaque handlers. Done this way for cheap copying and simple lifetime management
 pub type MeshModel = usize;
 pub type MeshVolumetric = usize;
@@ -97,14 +112,14 @@ pub type MeshFoliage = usize;
 
 // I am unsure about if this should be shared between backends but it is at the moment
 /// CPU-side particle (grid-aigned but not grid-snapped cube with material and size dependent lifetime)
-// #[repr(C)]
-// #[derive(Debug, Clone, Copy, Default)]
-// pub struct Particle {
-//     pub pos: vec3,
-//     pub vel: vec3,
-//     pub life_time: f32,
-//     pub mat_id: MatId,
-// }
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Particle {
+    pub pos: vec3,
+    pub vel: vec3,
+    pub life_time: f32,
+    pub mat_id: MatId,
+}
 
 // #[repr(C)]
 // #[derive(Debug, Clone, Copy, Default)]
@@ -257,6 +272,8 @@ pub struct MeshTransform {
     pub rotation: quat,
     pub translation: vec3,
 }
+
+pub type BlockVoxels = [[[Voxel; BLOCK_SIZE as usize]; BLOCK_SIZE as usize]; BLOCK_SIZE as usize];
 
 // #[derive(Debug)]
 // pub struct Block<BufferType, ImageType, VoxelType> {

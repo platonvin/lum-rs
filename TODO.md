@@ -11,6 +11,9 @@ todoy:
   fix particles (remove geom)
   resizing in wgpu
   pub(crate) instead of pub
+  single index / vertex buffer?
+  merge models & blocks since they both are some sort of slot arenas
+  block palette in image layout with array views
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
 wgpui better pcnherit TODO from lum++

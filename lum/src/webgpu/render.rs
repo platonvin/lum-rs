@@ -2,7 +2,7 @@ use super::InternalRendererWebGPU;
 use crate::{
     aabb::{get_shift, iAABB},
     ao_lut, assert_assume, fBLOCK_SIZE,
-    load_interface::LoadInterface,
+    load_interface::{BlockData, LoadInterface, ModelData},
     render_interface::{FoliageDescriptionBuilder, RendererInterface},
     types::{
         i16vec3, i8vec3, ivec3, ivec4, mat4, quat, u8vec3, u8vec4, uvec3, vec2, vec3, vec4, AoLut,
@@ -15,7 +15,10 @@ use crate::{
     Settings, BLOCK_SIZE,
 };
 use as_u8_slice_derive::AsU8Slice;
-use containers::{Arena, Array3D, BitArray3d};
+use containers::{
+    array3d::{Array3DView, Array3DViewMut},
+    Arena, Array3D, BitArray3d,
+};
 use qvek::{
     i16vec3, ivec3, ivec4, uvec2, uvec3, vec2, vec3, vec4,
     vek::{Clamp, Vec3},
@@ -358,7 +361,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         }
 
         // Finally, copy the world buffer to the world texture.
-        let bytes_per_row = self.settings.world_size.x * std::mem::size_of::<BlockId>() as u32;
+        let bytes_per_row = self.settings.world_size.x * std::mem::size_of::<MeshBlock>() as u32;
 
         //TODO: idk pad this
         let padded_bytes_per_row = bytes_per_row.next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT);
@@ -443,7 +446,7 @@ pub struct ModelRenderRequest {
 }
 pub struct BlockRenderRequest {
     pub cam_dist: f32,
-    pub block: BlockId,
+    pub block: MeshBlock,
     // snapped to voxel grid
     pub pos: i16vec3,
 }
@@ -1101,7 +1104,7 @@ impl<'window> RendererWgpu<'window> {
                                 }
 
                                 this.current_world[(xx as usize, yy as usize, zz as usize)] =
-                                    this.palette_counter as BlockId;
+                                    this.palette_counter as InternalBlockId;
                                 this.palette_counter += 1;
                             } else {
                                 //already new block, just leave it
@@ -1113,21 +1116,23 @@ impl<'window> RendererWgpu<'window> {
         }
         {
             let (dim_x, dim_y, dim_z) = self.renderer.current_world.dimensions();
-            let padded_dim_x = (dim_x)
-                .next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT as usize / size_of::<BlockId>());
+            let padded_dim_x = (dim_x).next_multiple_of(
+                COPY_BYTES_PER_ROW_ALIGNMENT as usize / size_of::<InternalBlockId>(),
+            );
             let padded_count_to_copy = padded_dim_x * dim_y * dim_z;
 
-            let mut padded_data: Vec<BlockId> = vec![0; padded_count_to_copy];
+            let mut padded_data: Vec<InternalBlockId> = vec![0; padded_count_to_copy];
             for zz in 0..dim_z {
                 for yy in 0..dim_y {
                     for xx in 0..dim_x {
                         let index = xx + yy * padded_dim_x + zz * padded_dim_x * dim_y;
-                        padded_data[index] = self.renderer.current_world[(xx, yy, zz)] as BlockId;
+                        padded_data[index] =
+                            self.renderer.current_world[(xx, yy, zz)] as InternalBlockId;
                     }
                 }
             }
 
-            let size_to_copy = padded_count_to_copy * size_of::<BlockId>();
+            let size_to_copy = padded_count_to_copy * size_of::<InternalBlockId>();
             let data: &[u8] = unsafe {
                 std::slice::from_raw_parts(padded_data.as_ptr() as *const u8, size_to_copy)
             };
@@ -1804,7 +1809,7 @@ impl<'window> RendererWgpu<'window> {
         normal: ivec3,
         shift: ivec3,
         buff: &IndexedVertices,
-        block_id: BlockId,
+        block_id: MeshBlock,
     ) {
         debug_assert!(block_id > 0);
         let sum = normal.x + normal.y + normal.z;
@@ -1824,7 +1829,7 @@ impl<'window> RendererWgpu<'window> {
         let pbn = { (neg_sign << 7) | absnorm.x | (absnorm.y << 1) | (absnorm.z << 2) };
 
         let push_constant = PcRyagenBlockFace {
-            block: block_id,
+            block: block_id as InternalBlockId,
             shift,
             unorm: unsafe { transmute(u8vec4::new(pbn, 0, 0, 0)) },
         };
@@ -2202,6 +2207,7 @@ impl FoliageDescriptionBuilder<MeshFoliageDesc> for SimpleFoliageDescriptionBuil
 impl<'window> RendererInterface for RendererWgpu<'window> {
     type FoliageDescription = MeshFoliageDesc;
     type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder;
+    type InternalBlockId = InternalBlockId;
 
     fn new(settings: &Settings, window: Window, foliages: &[MeshFoliageDesc]) -> Self {
         Self {
@@ -2217,14 +2223,14 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         }
     }
 
-    fn load_model(&mut self, mesh: ModelMeshData) -> MeshModel {
-        let model_mesh = self.renderer.load_mesh(mesh, true, true);
+    fn load_model(&mut self, model_data: ModelData) -> MeshModel {
+        let model_mesh = self.renderer.load_model(model_data);
         let index = self.storage.models.allocate(model_mesh).unwrap();
         index as MeshModel
     }
     fn unload_model(&mut self, model: MeshModel) {
         let model_mesh = self.storage.models.take(model).unwrap();
-        self.renderer.free_mesh(model_mesh);
+        self.renderer.free_model(model_mesh);
     }
     // TODO: move to impl MeshModel
     fn get_model_size(&self, model: MeshModel) -> uvec3 {
@@ -2232,11 +2238,11 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     }
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
-    fn load_block(&mut self, block: BlockId, path: &str) {
-        self.renderer.load_block_from_file(block as BlockId, path);
+    fn load_block(&mut self, block: MeshBlock, block_data: BlockData) {
+        self.renderer.load_block(block, block_data);
     }
-    fn unload_block(&mut self, block: BlockId) {
-        self.renderer.free_block(block as BlockId);
+    fn unload_block(&mut self, block: MeshBlock) {
+        self.renderer.free_block(block);
     }
 
     // volumetrics can be loaded any time (no context on GPU). But please, load them in the same way as models / foliage
@@ -2264,8 +2270,8 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     // rendered using same shader, mesh is just "uniforms"
     fn load_liquid(&mut self, main_mat: MatId, foam_mat: MatId) -> MeshLiquid {
         let liquid_mesh = InternalMeshLiquid {
-            main: main_mat,
-            foam: foam_mat,
+            main: main_mat as InternalMatId,
+            foam: foam_mat as InternalMatId,
         };
         let index = self.storage.liquids.allocate(liquid_mesh).unwrap();
         index as MeshLiquid
@@ -2380,19 +2386,19 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
 
                     let block_pos = i16vec3!(xx, yy, zz) * BLOCK_SIZE as i16;
 
-                    self.draw_block(block as BlockId, &block_pos);
+                    self.draw_block(block as MeshBlock, &block_pos);
                 }
             }
         }
     }
 
-    fn draw_block(&mut self, block: BlockId, block_pos: &i16vec3) {
+    fn draw_block(&mut self, block: MeshBlock, block_pos: &i16vec3) {
         let fpos = vec3!(*block_pos);
 
         if self.is_block_visible(fpos) {
             self.block_que.push(BlockRenderRequest {
                 cam_dist: 0.0,
-                block: block as BlockId,
+                block: block as MeshBlock,
                 pos: *block_pos,
             });
         }
@@ -2521,12 +2527,12 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         // atrace!();
     }
 
-    fn get_world_blocks(&self) -> &Array3D<BlockId> {
-        &self.renderer.origin_world
+    fn get_world_blocks(&self) -> Array3DView<InternalBlockId, MeshBlock> {
+        self.renderer.origin_world.as_view()
     }
 
-    fn get_world_blocks_mut(&mut self) -> &mut Array3D<BlockId> {
-        &mut self.renderer.origin_world
+    fn get_world_blocks_mut(&mut self) -> Array3DViewMut<InternalBlockId, MeshBlock> {
+        self.renderer.origin_world.as_view_mut()
     }
 
     fn destroy(self) {
@@ -2547,6 +2553,14 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
 
     fn get_block_palette_mut(&mut self) -> &mut [BlockVoxels] {
         self.renderer.block_palette_voxels.as_mut_slice()
+    }
+
+    fn get_material_palette(&self) -> &[Material] {
+        &self.renderer.material_palette
+    }
+
+    fn get_material_palette_mut(&mut self) -> &mut [Material] {
+        &mut self.renderer.material_palette
     }
 }
 

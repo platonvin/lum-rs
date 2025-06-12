@@ -2,16 +2,12 @@
 #![allow(unused_variables)]
 #![feature(inherent_associated_types)]
 
-use std::{
-    fs::File,
-    io::{self, Read},
-    path::Path,
-};
+use assets::{BlockAsset, ModelAsset};
 use lum::{
-    fBLOCK_SIZE,
+    fBLOCK_SIZE, for_zyx,
     render_interface::{FoliageDescriptionBuilder, FoliageDescriptionCreate, RendererInterface},
     types::{
-        quat, u8vec3, uvec3, vec3, BlockId, MeshFoliage, MeshLiquid, MeshModel, MeshTransform,
+        quat, u8vec3, uvec3, vec3, MeshBlock, MeshFoliage, MeshLiquid, MeshModel, MeshTransform,
         MeshVolumetric,
     },
     Settings,
@@ -47,14 +43,13 @@ struct AllTransforms {
 
 impl AllMeshes {
     fn new<T: RendererInterface>(lum: &mut T, grass: MeshFoliage) -> Self {
-        let tank = lum.load_model("assets/tank_body.vox");
         Self {
-            tank_body: tank,
-            tank_head: lum.load_model("assets/tank_head.vox"),
-            tank_rf_leg: lum.load_model("assets/tank_rf_lb_leg.vox"),
-            tank_lb_leg: lum.load_model("assets/tank_rf_lb_leg.vox"),
-            tank_lf_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
-            tank_rb_leg: lum.load_model("assets/tank_lf_rb_leg.vox"),
+            tank_body: lum.load_model(assets::get_model(ModelAsset::TankBody)),
+            tank_head: lum.load_model(assets::get_model(ModelAsset::TankHead)),
+            tank_rf_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
+            tank_lb_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
+            tank_lf_leg: lum.load_model(assets::get_model(ModelAsset::TankLfRbLeg)),
+            tank_rb_leg: lum.load_model(assets::get_model(ModelAsset::TankLfRbLeg)),
             water: lum.load_liquid(69, 42),
             grass,
             smoke: lum.load_volumetric(1.0, 0.5, u8vec3::zero()),
@@ -109,20 +104,25 @@ impl<'renderer, Renderer: RendererInterface> DemoState<Renderer> {
 
         let meshes = AllMeshes::new(&mut lum, grass);
 
-        lum.load_block(1, "assets/dirt.vox");
-        lum.load_block(2, "assets/grass.vox");
-        lum.load_block(3, "assets/grassNdirt.vox");
-        lum.load_block(4, "assets/stone_dirt.vox");
-        lum.load_block(5, "assets/bush.vox");
-        lum.load_block(6, "assets/leaves.vox");
-        lum.load_block(7, "assets/iron.vox");
-        lum.load_block(8, "assets/lamp.vox");
-        lum.load_block(9, "assets/stone_brick.vox");
-        lum.load_block(10, "assets/stone_brick_cracked.vox");
-        lum.load_block(11, "assets/stone_pack.vox");
-        lum.load_block(12, "assets/bark.vox");
-        lum.load_block(13, "assets/wood.vox");
-        lum.load_block(14, "assets/planks.vox");
+        lum.load_block(1, assets::get_block(BlockAsset::Dirt));
+        lum.load_block(2, assets::get_block(BlockAsset::Grass));
+        lum.load_block(3, assets::get_block(BlockAsset::GrassNdirt));
+        lum.load_block(4, assets::get_block(BlockAsset::StoneDirt));
+        lum.load_block(5, assets::get_block(BlockAsset::Bush));
+        lum.load_block(6, assets::get_block(BlockAsset::Leaves));
+        lum.load_block(7, assets::get_block(BlockAsset::Iron));
+        lum.load_block(8, assets::get_block(BlockAsset::Lamp));
+        lum.load_block(9, assets::get_block(BlockAsset::StoneBrick));
+        lum.load_block(10, assets::get_block(BlockAsset::StoneBrickCracked));
+        lum.load_block(11, assets::get_block(BlockAsset::StonePack));
+        lum.load_block(12, assets::get_block(BlockAsset::Bark));
+        lum.load_block(13, assets::get_block(BlockAsset::Wood));
+        lum.load_block(14, assets::get_block(BlockAsset::Planks));
+
+        lum.get_material_palette_mut().copy_from_slice(assets::get_palette());
+
+        // dbg!(lum.get_material_palette());
+        // dbg!(lum.get_world_blocks());
 
         // TODO:
         lum.update_block_palette_to_gpu();
@@ -163,55 +163,14 @@ impl<'renderer, Renderer: RendererInterface> DemoState<Renderer> {
         self.lum.destroy();
     }
 
-    pub fn load_scene(&mut self, vox_file: &str) -> io::Result<()> {
-        let buffer = read_file_buffer(vox_file)?; // Read file into Vec<u8>
-
-        if buffer.len() < std::mem::size_of::<uvec3>() {
-            self.lum.get_world_blocks_mut().fill(0);
-            return Ok(());
-        }
-
-        // Extract world size from header
-        let stored_world_size = uvec3::from_slice(
-            &buffer[..12]
-                .chunks_exact(4)
-                .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
-                .collect::<Vec<_>>()[..],
-        );
-
-        let stored_world = &buffer[12..]; // Skip the header
-
-        // Ensure we don't read past buffer bounds
-        assert!(
-            stored_world.len()
-                >= stored_world_size.x as usize
-                    * stored_world_size.y as usize
-                    * stored_world_size.z as usize
-                    * std::mem::size_of::<i16>()
-        );
-
-        let size2read = stored_world_size.map(|v| v.min(self.lum.get_world_blocks().x_size as u32));
-
-        for zz in 0..size2read.z {
-            for yy in 0..size2read.y {
-                for xx in 0..size2read.x {
-                    let index = (xx
-                        + stored_world_size.x * yy
-                        + stored_world_size.x * stored_world_size.y * zz)
-                        as usize;
-                    let loaded_block = i16::from_le_bytes(
-                        stored_world[index * 2..index * 2 + 2].try_into().unwrap(),
-                    );
-
-                    // Clamp and set block
-                    self.lum.get_world_blocks_mut()[(xx as usize, yy as usize, zz as usize)] =
-                        loaded_block.clamp(0 as i16, self.lum.get_block_palette().len() as i16)
-                            as BlockId;
-                }
-            }
-        }
-
-        Ok(())
+    pub fn load_scene(&mut self) {
+        let scene = assets::get_scene();
+        for_zyx!(scene.size, |x, y, z| {
+            let index =
+                x + y * scene.size.x as usize + z * scene.size.x as usize * scene.size.y as usize;
+            let v = scene.blocks[index];
+            self.lum.get_world_blocks_mut().set((x, y, z), v);
+        })
     }
 
     pub fn render(&mut self) {
@@ -337,7 +296,8 @@ pub fn run<Renderer: RendererInterface>() {
 
     let mut state: DemoState<Renderer> = DemoState::new(window, &event_loop);
 
-    state.load_scene("assets/scene").unwrap();
+    state.load_scene();
+    // state.lum.
 
     let result = event_loop.run_app(&mut state);
     state.destroy();
@@ -346,31 +306,26 @@ pub fn run<Renderer: RendererInterface>() {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub async fn run() {
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn run() {
+    use lum::webgpu::render::RendererWgpu;
+    use wasm_bindgen::prelude::*;
+
+    console_error_panic_hook::set_once();
+
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    let window_attributes = Window::default_attributes()
-        .with_title("Lumal")
-        .with_maximized(true)
-        // .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
-        ;
+    let window_attributes = Window::default_attributes().with_title("Lumal").with_maximized(true);
+
     #[allow(deprecated)] // cause winit is going crazy
     let window = event_loop.create_window(window_attributes).unwrap();
 
-    let mut state = DemoState::new(window, &event_loop);
+    let mut state = DemoState::<RendererWgpu>::new(window, &event_loop);
 
-    state.load_scene("assets/scene").unwrap();
+    state.load_scene();
 
     let result = event_loop.run_app(&mut state);
     state.destroy();
 
     result.unwrap();
-}
-
-// wtf did i put it into bottom?
-fn read_file_buffer<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    Ok(buffer)
 }

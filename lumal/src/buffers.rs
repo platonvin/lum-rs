@@ -6,6 +6,7 @@ use std::ptr::copy_nonoverlapping;
 
 impl Renderer {
     /// Wrapper for creating a GPU buffer. Optionally maps it
+    
     pub fn create_buffer(
         &mut self,
         usage: vk::BufferUsageFlags,
@@ -87,6 +88,7 @@ impl Renderer {
     // creates a GPU buffer and copies elements into it
     // does buffer_usage |= TRANSFER_DST automatically
 
+    
     pub fn create_and_upload_buffer<T>(
         &mut self,
         elements: &[T],

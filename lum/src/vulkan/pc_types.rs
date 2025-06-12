@@ -2,7 +2,7 @@
 
 use as_u8_slice_derive::AsU8Slice;
 
-use crate::types::{i16vec3, i16vec4, ivec4, mat4, quat, u8vec4, vec2, vec4, BlockId};
+use crate::types::{i16vec3, i16vec4, ivec4, mat4, quat, u8vec4, vec2, vec4, MeshBlock};
 
 #[repr(C)]
 #[derive(AsU8Slice)]
@@ -49,7 +49,7 @@ pub struct RaygenBlockPerBlock {
 #[repr(C)] // for push constants
 #[derive(AsU8Slice)] // allow cast to &[u8]
 pub struct RaygenBlockPerFace {
-    pub block: BlockId,
+    pub block: MeshBlock,
     pub shift: i16vec3,
     // inorm: i8vec4, // passed separately
 }

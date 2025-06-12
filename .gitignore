@@ -17,8 +17,8 @@ analysis.json
 analysis.jsoncargo
 /tree.txt
 /temp3.md
-/assets/scene
-/assets/robot.vox
+# /assets/scene
+# /assets/robot.vox
 
 /move.md
 # imgui file created by nvidia nsight 

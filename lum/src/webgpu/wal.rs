@@ -145,7 +145,11 @@ impl<'window> Wal<'window> {
         // essntially we are just setting up a few of GPU/Driver state objects in a way we need to proceed
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            // #[cfg(target_arch = "wasm32")]
+            // backends: wgpu::Backends::BROWSER_WEBGPU,
+            // #[cfg(not(target_arch = "wasm32"))]
+            // backends: wgpu::Backends::VULKAN,
+            backends: wgpu::Backends::all(),
             ..Default::default()
         });
 
@@ -164,10 +168,6 @@ impl<'window> Wal<'window> {
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Device"),
                 required_features: Features::DEPTH32FLOAT_STENCIL8 | Features::FLOAT32_FILTERABLE,
-                required_limits: Limits {
-                    min_uniform_buffer_offset_alignment: 256,
-                    ..Default::default()
-                },
                 ..Default::default()
             })
             .await

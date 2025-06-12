@@ -8,4 +8,5 @@ name = "containers"
 path = "src/lib.rs"
 
 [dependencies]
-qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
+# qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
+qvek = { path = "../../qvek/qvek" }

@@ -1,7 +1,7 @@
 use super::all_types::UboData;
 use crate::{
     types::{i8vec4, mat4, AoLut, Particle},
-    webgpu::{types::BlockId, wal::Wal, AllBuffers, InternalRendererWebGPU},
+    webgpu::{types::InternalBlockId, wal::Wal, AllBuffers, InternalRendererWebGPU},
     Settings,
 };
 use std::mem;
@@ -44,14 +44,13 @@ impl<'window> InternalRendererWebGPU<'window> {
             Some("Radiance Updates"),
         ); // TODO test extra mem
 
-        let padded_x_size =
-            lum_settings.world_size.x.next_multiple_of(
-                COPY_BYTES_PER_ROW_ALIGNMENT / std::mem::size_of::<BlockId>() as u32,
-            ) as usize;
+        let padded_x_size = lum_settings.world_size.x.next_multiple_of(
+            COPY_BYTES_PER_ROW_ALIGNMENT / std::mem::size_of::<InternalBlockId>() as u32,
+        ) as usize;
         let padded_staging_world_size = padded_x_size
             * lum_settings.world_size.y as usize
             * lum_settings.world_size.z as usize
-            * std::mem::size_of::<BlockId>();
+            * std::mem::size_of::<InternalBlockId>();
 
         let staging_world = wal.create_buffers(
             wal.config.desired_maximum_frame_latency as usize,

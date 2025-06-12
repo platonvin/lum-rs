@@ -1,27 +1,98 @@
-use crate::types::{ivec3, uvec3};
-use crate::{sBLOCK_SIZE, BLOCK_SIZE};
-use containers::Array3D;
+use crate::sBLOCK_SIZE;
+use crate::types::{ivec3, u8vec3, uvec3, BlockId, MeshModel, Voxel};
 use qvek::vek::num_traits::{One, Zero};
 
-pub struct ModelData<'a, FaceIndicesTy, VoxelTy, VertexTy, IndexTy> {
-    size: ivec3,
-    iv: FaceIndicesTy,
-    voxels: &'a [VoxelTy],
-    vertices: &'a [VertexTy],
-    indices: &'a [IndexTy],
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SimpleVertex {
+    pub pos: u8vec3,
 }
 
-pub struct BlockData<'a, FaceIndicesTy, VoxelTy, VertexTy, IndexTy> {
-    iv: FaceIndicesTy,
-    voxels: &'a [[[VoxelTy; sBLOCK_SIZE]; sBLOCK_SIZE]; sBLOCK_SIZE],
-    vertices: &'a [VertexTy],
-    indices: &'a [IndexTy],
+/// IndexedVertices is just another way to store where the data is in (single) allocated buffer
+/// this could have been 6 buffers, but insted it is 1 buffer and 6 (offset+index_count)s
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SImpleIndexedSlice {
+    // TODO: u16?
+    pub offset: u32, // they are all stored in same buffer and accessed with offset
+    pub icount: u32,
+}
+
+#[allow(non_snake_case)]
+#[derive(Debug, Default, Clone, Copy)]
+/// Bundle of "virtual" (indexed) buffers for faces of a mesh
+/// IndexedVertices point to slices of indices which point to (not necessarily slices (almost never slices) of) vertices
+/// zPz means zero-Positive-zero ((0,1,0)normal), zzN means zero-zero-Negative ((0,0,-1) normal) and so on
+pub struct SimpleFaceIndices {
+    /// Slice of indices, corresponding to +X face
+    pub Pzz: SImpleIndexedSlice,
+    /// Slice of indices, corresponding to -X face
+    pub Nzz: SImpleIndexedSlice,
+    /// Slice of indices, corresponding to +Y face
+    pub zPz: SImpleIndexedSlice,
+    /// Slice of indices, corresponding to -Y face
+    pub zNz: SImpleIndexedSlice,
+    /// Slice of indices, corresponding to +Z face
+    pub zzP: SImpleIndexedSlice,
+    /// Slice of indices, corresponding to -Z face
+    pub zzN: SImpleIndexedSlice,
+}
+
+#[repr(C)]
+#[derive(as_u8_slice_derive::AsU8Slice)]
+pub struct Metadata {
+    pub size: ivec3,
+    pub face_indices: SimpleFaceIndices,
+}
+
+/// Model mesh memory in relatively compact form (matches Vulkan, needs repacking for wgpu)
+#[repr(C)]
+pub struct ModelData<'a> {
+    pub size: ivec3,
+    pub iv: SimpleFaceIndices,
+    pub voxels: &'a [Voxel],
+    pub vertices: &'a [SimpleVertex],
+    pub indices: &'a [u16],
+}
+
+/// Block mesh memory in relatively compact form (matches Vulkan, needs repacking for wgpu)
+#[repr(C)]
+pub struct BlockData<'a> {
+    pub iv: SimpleFaceIndices,
+    pub voxels: &'a [Voxel; sBLOCK_SIZE * sBLOCK_SIZE * sBLOCK_SIZE],
+    pub vertices: &'a [SimpleVertex],
+    pub indices: &'a [u16],
+}
+
+#[repr(C)]
+pub struct SceneData<'a> {
+    pub size: ivec3,
+    pub blocks: &'a [BlockId],
+}
+
+#[macro_export]
+macro_rules! include_bytes_aligned {
+    ($align_to:expr, $path:expr) => {{
+        #[repr(C, align($align_to))]
+        struct __Aligned<T: ?Sized>(T);
+
+        const __DATA: &'static __Aligned<[u8]> = &__Aligned(*include_bytes!($path));
+
+        &__DATA.0
+    }};
+}
+pub fn cast_meta(b: &'static [u8]) -> &'static Metadata {
+    unsafe { &*(b.as_ptr() as *const _) }
+}
+pub fn cast_slice<T>(b: &'static [u8]) -> &'static [T] {
+    let len = b.len() / std::mem::size_of::<T>();
+    unsafe { std::slice::from_raw_parts(b.as_ptr() as *const _, len) }
 }
 
 // Lum is not going to parse any file format and create triangles, so you need to prepare them separately
 // This is done this way for binary size and perfomance
 
-pub trait LoadInterface {
+/// Trait for abstracting (internal) renderer resource loading (to/from GPU)
+pub(crate) trait LoadInterface {
     type Buffer;
     type Image;
     type BlockId: Clone;
@@ -34,17 +105,12 @@ pub trait LoadInterface {
     type InternalMeshVolumetric;
     type FaceBuffers;
     type Voxel: Zero + One + Eq + Default + Clone + From<u8>;
-    type Vertex: Clone + Copy;
-    type Index: Clone + Copy;
 
     fn update_block_palette_to_gpu(&mut self);
     fn update_material_palette_to_gpu(&mut self);
 
     /// Loads mesh in specified format from provided memory
-    fn load_model(
-        &mut self,
-        model: ModelData<Self::IndexedVertices, Self::Voxel, Self::Vertex, Self::Index>,
-    ) -> Self::InternalMeshModel;
+    fn load_model(&mut self, model: ModelData) -> Self::InternalMeshModel;
 
     // i love that we can implement functions in traits
 
@@ -149,21 +215,13 @@ pub trait LoadInterface {
     //     self.set_block_palette_mesh(block_id, triangles);
     // }
 
-    fn load_block(&mut self, block_id: Self::BlockId, model: &[u8]) {}
+    fn load_block(&mut self, block_id: Self::BlockId, mesh: BlockData);
 
-    fn set_block_palette_voxels(&mut self, block_id: Self::BlockId, pos: uvec3, voxel: Self::Voxel);
-    fn get_block_palette_voxels(&self, block_id: Self::BlockId, pos: uvec3) -> Self::Voxel;
+    // fn set_block_palette_voxel(&mut self, block_id: Self::BlockId, pos: uvec3, voxel: Self::Voxel);
+    // fn get_block_palette_voxel(&self, block_id: Self::BlockId, pos: uvec3) -> Self::Voxel;
 
-    fn set_block_palette_mesh(&mut self, block_id: Self::BlockId, mesh: Self::FaceBuffers);
-    fn get_block_palette_mesh(&self, block_id: Self::BlockId) -> &Self::InternalMeshBlock;
-
-    fn make_contour_vertices(
-        &mut self,
-        // real size. TODO: do i need this?
-        size: uvec3,
-        // 3d array with 1 padding
-        padded_voxel_data: Array3D<VoxelForContour<Self::Voxel>>,
-    ) -> Self::FaceBuffers;
+    // fn set_block_palette_mesh(&mut self, block_id: Self::BlockId, mesh: Self::FaceBuffers);
+    // fn get_block_palette_mesh(&self, block_id: Self::BlockId) -> &Self::InternalMeshBlock;
 
     fn create_rayrace_voxel_image(
         &mut self,
@@ -172,11 +230,10 @@ pub trait LoadInterface {
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) -> Self::Image;
 
-    fn free_mesh(&mut self, mesh: Self::InternalMeshModel);
-
+    fn free_model(&mut self, mesh: Self::InternalMeshModel);
     fn free_block(&mut self, block: Self::BlockId);
 
-    fn extract_palette_from_scene(&mut self, scene: &ogt_vox::VoxScene);
-    fn has_palette(&self) -> bool;
-    fn set_has_palette(&mut self, has_palette: bool);
+    // fn extract_palette_from_scene(&mut self, scene: &ogt_vox::VoxScene);
+    // fn has_palette(&self) -> bool;
+    // fn set_has_palette(&mut self, has_palette: bool);
 }

@@ -4,20 +4,20 @@
 use crate::{render_interface::FoliageDescriptionCreate, types::*, webgpu::wal};
 use as_u8_slice_derive::AsU8Slice; // cast struct to u8 slice
 
-pub type BlockId = i32;
+pub type InternalBlockId = i32;
 // Material ID and Voxel are essentially the same thing
-pub type MatId = i32;
+pub type InternalMatId = i32;
 // TODO: enum with empty / non-empty using NonZeroU8
-pub type Voxel = i32;
+pub type InternalVoxel = i32;
 
-/// CPU-side particle (grid-aigned but not grid-snapped cube with material and size dependent lifetime)
+/// GPU-side particle (grid-aigned but not grid-snapped cube with material and size dependent lifetime)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Particle {
+pub struct InternalParticle {
     pub pos: vec3,
     pub vel: vec3,
     pub life_time: f32,
-    pub mat_id: MatId,
+    pub mat_id: InternalMatId,
 }
 
 impl FoliageDescriptionCreate for MeshFoliageDesc {
@@ -110,8 +110,8 @@ pub struct InternalMeshFoliage {
 
 #[derive(Clone, Debug, Default)]
 pub struct InternalMeshLiquid {
-    pub main: MatId,
-    pub foam: MatId,
+    pub main: InternalMatId,
+    pub foam: InternalMatId,
     // pub pc_buffer: Option<wgpu::Buffer>,
     // pub pc_bg: Option<wgpu::BindGroup>,
     // pub push_constants: Vec<u8>,
