@@ -2223,6 +2223,20 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         }
     }
 
+    async fn new_async(settings: &Settings, window: Window, foliages: &[MeshFoliageDesc]) -> Self {
+        Self {
+            renderer: InternalRendererWebGPU::new_async(settings, window, foliages.to_vec()).await,
+            block_que: vec![],
+            // mesh_que: vec![],
+            foliage_ques: vec![vec![]; foliages.len()],
+            liquid_que: vec![],
+            volumetric_que: vec![],
+            model_que: vec![],
+            storage: RendererStorage::default(),
+            radiance_shift: ivec3::zero(),
+        }
+    }
+
     fn load_model(&mut self, model_data: ModelData) -> MeshModel {
         let model_mesh = self.renderer.load_model(model_data);
         let index = self.storage.models.allocate(model_mesh).unwrap();

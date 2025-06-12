@@ -144,20 +144,13 @@ impl<'window> Wal<'window> {
         // if you dont understand what is happening here i recommend looking into WGPU guide
         // essntially we are just setting up a few of GPU/Driver state objects in a way we need to proceed
 
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            // #[cfg(target_arch = "wasm32")]
-            // backends: wgpu::Backends::BROWSER_WEBGPU,
-            // #[cfg(not(target_arch = "wasm32"))]
-            // backends: wgpu::Backends::VULKAN,
-            backends: wgpu::Backends::all(),
-            ..Default::default()
-        });
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
 
         let surface = instance.create_surface(window).unwrap();
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                power_preference: wgpu::PowerPreference::None,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })

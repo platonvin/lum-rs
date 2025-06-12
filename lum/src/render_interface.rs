@@ -135,6 +135,12 @@ pub trait RendererInterface {
         window: Window,
         foliage: &[Self::FoliageDescription],
     ) -> Self;
+    async fn new_async(
+        settings: &super::Settings,
+        window: Window,
+        foliages: &[Self::FoliageDescription],
+    ) -> Self;
+
     fn destroy(self);
 
     fn load_model(&mut self, model_data: ModelData) -> MeshModel;
