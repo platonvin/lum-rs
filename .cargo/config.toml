@@ -20,16 +20,15 @@ bdv = "build --profile dev --package demo --bin demo_vk --features vk_backend"
 bdw = "build --profile dev --package demo --bin demo_wgpu --features wgpu_backend"
 
 [build]
-[target.x86_64-pc-windows-gnu]
-linker = "x86_64-w64-mingw32-gcc"
-[target.x86_64-pc-windows-msvc]
-linker = "rust-lld"
+rustflags = ["--cfg=web_sys_unstable_apis"]
+# [target.x86_64-pc-windows-gnu]
+# linker = "x86_64-w64-mingw32-gcc"
+# [target.x86_64-pc-windows-msvc]
+# linker = "rust-lld"
+
 
 [env]
 RUST_BACKTRACE = "short" # this is what i love in Rust
-
-[profile.build-override]
-rustflags = ["--show-coverage"]
 
 # native is highest perfomance build
 [profile.native.build-override]

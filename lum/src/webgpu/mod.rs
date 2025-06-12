@@ -258,6 +258,105 @@ impl<'window> InternalRendererWebGPU<'window> {
         renderer
     }
 
+    pub async fn new_async(
+        lum_settings: &Settings,
+        window: Window,
+        foliage_descriptions: Vec<MeshFoliageDesc>,
+    ) -> InternalRendererWebGPU<'window> {
+        // 1. Create our Wal context (the WGPU abstraction layer)
+        let mut wal = wal::Wal::new(window).await;
+
+        // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
+        let lightmap_extent = Extent3d {
+            width: 1024,
+            height: 1024,
+            depth_or_array_layers: 1,
+        };
+
+        // 3. WGPU limits depth so its kinda 100% supported
+        let _chosen_depth_format = DEPTH_FORMAT_PREFERED;
+
+        // 4. Create independent resources (images/textures that persist across swapchain changes)
+        let independent_images =
+            InternalRendererWebGPU::create_independent_images(&wal, lum_settings);
+        // 5. Create buffers, samplers, and command buffers.
+        let buffers = InternalRendererWebGPU::create_all_buffers(&mut wal, lum_settings);
+        let samplers = InternalRendererWebGPU::create_all_samplers(&wal);
+        // let command_buffers = InternalRendererWebGPU::create_all_command_buffers(&wal);
+
+        // 6. Create dependent resources (those that depend on the swapchain)
+        let (dependent_images, pipes) = create_dependent(
+            &wal,
+            lum_settings,
+            &foliage_descriptions,
+            lum_settings, // In lieu of a separate lumal_settings object
+            &independent_images,
+            &buffers,
+            &samplers,
+        );
+
+        // 7. Create scene-level objects: camera, light, and world data.
+        let camera = Camera::default();
+        let light = SunLight::default();
+
+        let origin_world = Array3D::<InternalBlockId>::new(
+            lum_settings.world_size.x as usize,
+            lum_settings.world_size.y as usize,
+            lum_settings.world_size.z as usize,
+        );
+        let current_world = Array3D::<InternalBlockId>::new(
+            origin_world.x_size,
+            origin_world.y_size,
+            origin_world.z_size,
+        );
+
+        // 8. Assemble our renderer structure.
+        let mut renderer = InternalRendererWebGPU {
+            counter: 69420,
+            wal,
+            settings: Settings::default(),
+            delta_time: 0.0,
+            last_time: Instant::now(),
+
+            // rpasses: renderpasses,
+            // cmdbufs: command_buffers,
+            lightmap_extent,
+            pipes,
+            independent_images,
+            dependent_images: Some(dependent_images),
+            buffers,
+            samplers,
+            camera,
+            light,
+            palette_counter: 0,
+            static_block_palette_size: lum_settings.static_block_palette_size,
+            origin_world,
+            current_world,
+            has_palette: false,
+            radiance_updates: vec![],
+            special_radiance_updates: vec![],
+            particles: vec![],
+            material_palette: vec![Material::default(); 256],
+            block_palette_voxels: vec![
+                [[[0; BLOCK_SIZE as usize]; BLOCK_SIZE as usize];
+                    BLOCK_SIZE as usize];
+                lum_settings.static_block_palette_size as usize
+            ],
+            block_copies_queue: vec![],
+            block_clear_queue: vec![],
+            foliage_descriptions,
+            block_palette_meshes: (0..lum_settings.static_block_palette_size)
+                .map(|_| Default::default())
+                .collect(),
+            current_encoder: None,
+        };
+
+        // 9. Generate perlin noise images (for grass, water, smoke, etc.)
+        renderer.gen_perlin_noises();
+
+        renderer
+    }
+
     /// Called when the window is resized. This method recreates dependent resources.
     pub fn recreate_window(&mut self, window: &Window) {
         // poll the device to make sure work is finished:

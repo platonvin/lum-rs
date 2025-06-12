@@ -2339,6 +2339,14 @@ impl RendererInterface for RendererVulkan<'_> {
     fn get_material_palette_mut(&mut self) -> &mut [Material] {
         &mut self.renderer.material_palette
     }
+
+    async fn new_async(
+        settings: &crate::Settings,
+        window: Window,
+        foliages: &[Self::FoliageDescription],
+    ) -> Self {
+        todo!()
+    }
 }
 
 // TODO: is there a simpler shorter)way to do this?
