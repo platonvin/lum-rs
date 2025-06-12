@@ -32,13 +32,13 @@
             display: block;
         }
     </style>
-<link rel="modulepreload" href="/demo-6fb8942ad8f81ae6.js" crossorigin="anonymous" integrity="sha384-4P5byFdeNRD4yslhcVfbvmOgJ8rvWlHsuRyyUCKphQzrB9j0BJWo3PaiIqRlbwCf"><link rel="preload" href="/demo-6fb8942ad8f81ae6_bg.wasm" crossorigin="anonymous" integrity="sha384-q8IawA3DyZeh70Ebzg4Lg5TiB6cLcUE92gvslII4BECJSmy7tF48ApB5r507acpD" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="/demo-568f781ac4f86af5.js" crossorigin="anonymous" integrity="sha384-tpAbcR9bW+7UUY7XEe8YSFWjxYxps38DjQKGe5PyX/Ggw579dDgko+TyWWz9YS8T"><link rel="preload" href="/demo-568f781ac4f86af5_bg.wasm" crossorigin="anonymous" integrity="sha384-ClgJ4gq+tdBprW2LMXsnJy0/jBBhlYCmA5iYSQIWMULJ33nzMiGB2dvYJ6to7vSA" as="fetch" type="application/wasm"></head>
 
 <body>
     
 <script type="module">
-import init, * as bindings from '/demo-6fb8942ad8f81ae6.js';
-const wasm = await init({ module_or_path: '/demo-6fb8942ad8f81ae6_bg.wasm' });
+import init, * as bindings from '/demo-568f781ac4f86af5.js';
+const wasm = await init({ module_or_path: '/demo-568f781ac4f86af5_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -48,17 +48,17 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
     <div class="root">
-        <canvas class="main-canvas" id="canvas"></canvas>
+        <canvas class="main-canvas" id="my_canvas"></canvas>
     </div>
-    <script>
+    <!-- <script>
         function resizeCanvas() {
-            const canvas = document.getElementById("canvas");
+            const canvas = document.getElementById("my_canvas");
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         }
         window.addEventListener("resize", resizeCanvas);
         window.addEventListener("load", resizeCanvas);
-    </script>
+    </script> -->
 <script>"use strict";
 
 (function () {

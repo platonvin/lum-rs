@@ -35,3 +35,5 @@ GL_CHANGES
 /webgpu_is_great
 e.bash
 rust-analyzer-check
+example/demo/dist
+example/demo/pkg
