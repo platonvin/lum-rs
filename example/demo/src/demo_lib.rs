@@ -42,6 +42,7 @@ use futures::channel::oneshot;
 use pollster; // For blocking on async in non-WASM environments // Provides the oneshot channel for async results
 
 // i hardcode it but you probably should use some sort of "Asset library" - hashmap (array) of YourEntityTypeEnum -> LumMeshModel
+#[derive(Default)]
 struct AllMeshes {
     tank_body: MeshModel,
     tank_head: MeshModel,
@@ -92,70 +93,82 @@ impl AllMeshes {
 }
 
 struct DemoState<Renderer: RendererInterface> {
-    window: Option<Arc<Window>>, // Now an Option<Arc<Window>>
-    lum: Option<Renderer>,       // Renderer is now an Option, initialized asynchronously
-    meshes: Option<AllMeshes>,   // Meshes will be loaded after renderer is ready
+    // window: Option<Arc<Window>>, // Now an Option<Arc<Window>>
+    lum: Renderer,     // Renderer is now an Option, initialized asynchronously
+    meshes: AllMeshes, // Meshes will be loaded after renderer is ready
     transforms: AllTransforms,
     about_to_close: bool,
     #[cfg(target_arch = "wasm32")]
-    renderer_receiver: Option<oneshot::Receiver<Renderer>>, // For async WASM init result
+    // renderer_receiver: Option<oneshot::Receiver<Renderer>>, // For async WASM init result
     // last_render_time: Option<Instant>, // To calculate delta time between frames
     last_size: (u32, u32), // Stores the last known window/canvas size
 }
 
-impl<Renderer: RendererInterface> Default for DemoState<Renderer> {
-    fn default() -> Self {
-        Self {
-            window: Default::default(),
-            lum: Default::default(),
-            meshes: Default::default(),
-            transforms: Default::default(),
-            about_to_close: Default::default(),
-            #[cfg(target_arch = "wasm32")]
-            renderer_receiver: None,
-            // last_render_time: Default::default(),
-            last_size: Default::default(),
-        }
-    }
-}
+// impl<Renderer: RendererInterface> Default for DemoState<Renderer> {
+//     fn default() -> Self {
+//         Self {
+//             // window: Default::default(),
+//             lum: Default::default(),
+//             meshes: Default::default(),
+//             transforms: Default::default(),
+//             about_to_close: Default::default(),
+//             // #[cfg(target_arch = "wasm32")]
+//             // renderer_receiver: None,
+//             // last_render_time: Default::default(),
+//             last_size: Default::default(),
+//             init: false,
+//         }
+//     }
+// }
 
 impl<'renderer, Renderer: RendererInterface> DemoState<Renderer> {
     type FoliageDescription = Renderer::FoliageDescription;
 
-    fn new() -> Self {
-        Self::default()
-    }
+    fn new(event_loop: &EventLoop<()>) -> Self {
+        let mut attributes = Window::default_attributes();
 
-    // `load_scene` method is called when the renderer is ready
-    pub fn load_scene(&mut self) {
-        let Some(lum) = self.lum.as_mut() else {
-            log::error!("Cannot load scene: Renderer not initialized yet.");
-            return;
+        {
+            let (mut canvas_width, mut canvas_height) = (0, 0); // Initialize for WASM
+                                                                // Acquire the HTML canvas element. Your `index.html` must have:
+                                                                // `<canvas id="canvas" style="width: 100vw; height: 100vh;"></canvas>`
+            let canvas = web_sys::window()
+                .unwrap()
+                .document()
+                .unwrap()
+                .get_element_by_id("canvas") // Changed from "my_canvas" to "canvas" for common practice
+                .expect("HTML document must contain a <canvas id='canvas'> element.")
+                .dyn_into::<web_sys::HtmlCanvasElement>()
+                .unwrap();
+            canvas_width = canvas.width();
+            canvas_height = canvas.height();
+            // self.last_size = (canvas_width, canvas_height); // Store initial canvas size
+            attributes = attributes.with_canvas(Some(canvas)); // Attach winit window to this canvas
+
+            log::info!("resumed-init canvas dimensions: ({canvas_width} * {canvas_height})");
+        }
+
+        let Ok(window) = event_loop.create_window(attributes) else {
+            log::error!("Failed to create winit window!");
+            panic!();
         };
 
-        // These settings and foliage descriptions are part of your scene loading,
-        // and should be performed *after* the renderer is ready.
         let settings = Settings {
             static_block_palette_size: 15,
             ..Settings::default()
         };
 
+        let settings_clone = settings.clone();
+
         let mut foliage_desc_builder =
             <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
 
-        #[cfg(feature = "vk_backend")]
-        let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-            "grass.vert.spv",
-            13,
-            100,
-        ));
-
-        // #[cfg(feature = "wgpu_backend")]
+        #[cfg(feature = "wgpu_backend")]
         let grass =
             foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new("grass.vert", 13, 100));
 
-        let meshes = AllMeshes::new(lum, grass);
-        self.meshes = Some(meshes); // Store loaded meshes
+        let mut lum = Renderer::new(&settings_clone, window, &foliage_desc_builder.build());
+
+        let meshes = AllMeshes::new(&mut lum, grass);
 
         // Your block and palette loading logic
         lum.load_block(1, assets::get_block(BlockAsset::Dirt));
@@ -187,46 +200,81 @@ impl<'renderer, Renderer: RendererInterface> DemoState<Renderer> {
             lum.get_world_blocks_mut().set((x, y, z), v);
         });
 
+        Self {
+            lum,
+            meshes,
+            transforms: AllTransforms::default(),
+            about_to_close: false,
+            last_size: (0, 0),
+        }
+    }
+
+    // `load_scene` method is called when the renderer is ready
+    pub fn load_scene(&mut self) {
+        // let Some(lum) = self.lum.as_mut() else {
+        //     log::error!("Cannot load scene: Renderer not initialized yet.");
+        //     return;
+        // };
+
+        // These settings and foliage descriptions are part of your scene loading,
+        // and should be performed *after* the renderer is ready.
+        let settings = Settings {
+            static_block_palette_size: 15,
+            ..Settings::default()
+        };
+
+        let mut foliage_desc_builder =
+            <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
+
+        #[cfg(feature = "vk_backend")]
+        let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
+            "grass.vert.spv",
+            13,
+            100,
+        ));
+
+        // #[cfg(feature = "wgpu_backend")]
+        let grass =
+            foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new("grass.vert", 13, 100));
+
         println!("Lumal: Scene loaded!");
     }
 
     pub fn destroy(mut self) {
         println!("Shutting down renderer");
         // Take ownership of `lum` and `meshes` to ensure proper cleanup
-        if let Some(mut lum_instance) = self.lum.take() {
-            if let Some(meshes_instance) = self.meshes.take() {
-                meshes_instance.unload(&mut lum_instance);
-            }
-            // Unload blocks
-            lum_instance.unload_block(1);
-            lum_instance.unload_block(2);
-            lum_instance.unload_block(3);
-            lum_instance.unload_block(4);
-            lum_instance.unload_block(5);
-            lum_instance.unload_block(6);
-            lum_instance.unload_block(7);
-            lum_instance.unload_block(8);
-            lum_instance.unload_block(9);
-            lum_instance.unload_block(10);
-            lum_instance.unload_block(11);
-            lum_instance.unload_block(12);
-            lum_instance.unload_block(13);
-            lum_instance.unload_block(14);
-            lum_instance.destroy(); // Call the renderer's destroy method
-        }
+        let meshes = self.meshes;
+        let mut lum = self.lum;
+        meshes.unload(&mut lum);
+        // Unload blocks
+        lum.unload_block(1);
+        lum.unload_block(2);
+        lum.unload_block(3);
+        lum.unload_block(4);
+        lum.unload_block(5);
+        lum.unload_block(6);
+        lum.unload_block(7);
+        lum.unload_block(8);
+        lum.unload_block(9);
+        lum.unload_block(10);
+        lum.unload_block(11);
+        lum.unload_block(12);
+        lum.unload_block(13);
+        lum.unload_block(14);
+        lum.destroy(); // Call the renderer's destroy method
     }
 
     pub fn render(&mut self) {
-        let Some(lum) = self.lum.as_mut() else {
-            // Only log this warning for WASM, as desktop initializes synchronously
-            #[cfg(target_arch = "wasm32")]
-            log::warn!("Renderer not yet initialized for rendering. Waiting for WGPU context.");
-            return;
-        };
-        let Some(meshes) = self.meshes.as_ref() else {
-            log::warn!("Meshes not loaded yet. Skipping render frame.");
-            return;
-        };
+        // let Some(lum) = self.lum.as_mut() else {
+        //     // Only log this warning for WASM, as desktop initializes synchronously
+        //     #[cfg(target_arch = "wasm32")]
+        //     log::warn!("Renderer not yet initialized for rendering. Waiting for WGPU context.");
+        //     return;
+        // };
+        // let Some(meshes) = self.meshes.as_ref() else {
+        //     log::warn!("Meshes not loaded yet. Skipping render frame.");
+        //     return;
+        // };
 
         // Calculate delta time
         // let now = Instant::now();
@@ -234,9 +282,9 @@ impl<'renderer, Renderer: RendererInterface> DemoState<Renderer> {
         // self.last_render_time = Some(now);
 
         // Your existing rendering logic using `lum` and `meshes`
-        lum.start_frame();
-        lum.draw_world();
-        lum.draw_model(&meshes.tank_body, &self.transforms.tank_body);
+        self.lum.start_frame();
+        self.lum.draw_world();
+        self.lum.draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
 
         for xx in 4..20 {
             for yy in 4..20 {
@@ -244,162 +292,32 @@ impl<'renderer, Renderer: RendererInterface> DemoState<Renderer> {
                     continue;
                 };
                 let pos = vec3::new(xx as f32 * fBLOCK_SIZE, yy as f32 * fBLOCK_SIZE, 16.0);
-                lum.draw_foliage(&meshes.grass, &pos);
+                self.lum.draw_foliage(&self.meshes.grass, &pos);
             }
         }
 
         for xx in 5..12 {
             for yy in 6..16 {
                 let pos = vec3::new(xx as f32 * fBLOCK_SIZE, yy as f32 * fBLOCK_SIZE, 14.0);
-                lum.draw_liquid(&meshes.water, &pos);
+                self.lum.draw_liquid(&self.meshes.water, &pos);
             }
         }
 
         for xx in 8..10 {
             for yy in 10..13 {
                 let pos = vec3::new(xx as f32 * fBLOCK_SIZE, yy as f32 * fBLOCK_SIZE, 20.0);
-                lum.draw_volumetric(&meshes.smoke, &pos);
+                self.lum.draw_volumetric(&self.meshes.smoke, &pos);
             }
         }
 
-        lum.prepare_frame();
-        lum.end_frame();
+        self.lum.prepare_frame();
+        self.lum.end_frame();
     }
 }
 
 impl<Renderer: RendererInterface + 'static> ApplicationHandler for DemoState<Renderer> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        println!("Application Resumed");
-
-        // Prevent re-initialization if `resumed` is called multiple times.
-        // This is crucial for platforms like Android where `resumed` can be called often.
-
-        #[cfg(target_arch = "wasm32")]
-        if self.renderer_receiver.is_some() || self.lum.is_some() {
-            return;
-        }
-
-        let mut attributes = Window::default_attributes();
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            attributes = attributes.with_title("Lumal WGPU Renderer (Desktop)");
-            // Keep your Lumal title
-            // Initialize logger for desktop builds; `env_logger` is common.
-            // env_logger::init();
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        let (mut canvas_width, mut canvas_height) = (0, 0); // Initialize for WASM
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            // Acquire the HTML canvas element. Your `index.html` must have:
-            // `<canvas id="canvas" style="width: 100vw; height: 100vh;"></canvas>`
-            let canvas = web_sys::window()
-                .unwrap()
-                .document()
-                .unwrap()
-                .get_element_by_id("canvas") // Changed from "my_canvas" to "canvas" for common practice
-                .expect("HTML document must contain a <canvas id='canvas'> element.")
-                .dyn_into::<web_sys::HtmlCanvasElement>()
-                .unwrap();
-            canvas_width = canvas.width();
-            canvas_height = canvas.height();
-            self.last_size = (canvas_width, canvas_height); // Store initial canvas size
-            attributes = attributes.with_canvas(Some(canvas)); // Attach winit window to this canvas
-
-            // Initialize WASM-specific debugging tools for browser console output.
-            // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            // console_log::init().expect("Failed to initialize logger for WASM!");
-            log::info!("Canvas dimensions: ({canvas_width} x {canvas_height})");
-        }
-
-        let Ok(window) = event_loop.create_window(attributes) else {
-            log::error!("Failed to create winit window!");
-            return;
-        };
-
-        let window_handle = Arc::new(window);
-
-        self.window = Some(window_handle.clone()); // Store the window handle in DemoState
-
-        let settings = Settings {
-            static_block_palette_size: 15,
-            ..Settings::default()
-        };
-
-        // --- Asynchronous WGPU initialization for WASM, synchronous for desktop ---
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let inner_size = window_handle.inner_size();
-            self.last_size = (inner_size.width, inner_size.height);
-
-            // For desktop, block on the async renderer creation.
-            // This is the correct way to call an async function from a non-async context.
-            let renderer = pollster::block_on(async move {
-                let mut foliage_desc_builder =
-                    <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
-                #[cfg(feature = "vk_backend")]
-                let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-                    "grass.vert.spv",
-                    13,
-                    100,
-                ));
-                #[cfg(feature = "wgpu_backend")]
-                // Assuming WGPU is the target backend for this example
-                let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-                    "grass.vert",
-                    13,
-                    100,
-                ));
-                // Call your Renderer's async constructor
-                Renderer::new_async(&settings, window_handle, &foliage_desc_builder.build()).await
-            });
-            self.lum = Some(renderer); // Store the initialized renderer
-            self.load_scene(); // Load scene after renderer is ready
-                               // self.last_render_time = Some(Instant::now()); // Start rendering timer
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            // Set up a channel to receive the renderer once it's initialized asynchronously.
-            let (sender, receiver) = oneshot::channel();
-            self.renderer_receiver = Some(receiver);
-
-            // Clone necessary variables for the async task, as they move into the spawned future.
-            let window_handle_clone = window_handle.clone();
-            let settings_clone = settings.clone(); // Assuming Settings is Clone
-
-            // Spawn the asynchronous renderer creation task locally onto the browser's event loop.
-            wasm_bindgen_futures::spawn_local(async move {
-                // FIX: Create the foliage_desc_builder and build the FoliageDescription
-                //      outside the async block to ensure its lifetime.
-                let mut foliage_desc_builder =
-                    <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
-                #[cfg(feature = "wgpu_backend")]
-                let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-                    "grass.vert",
-                    13,
-                    100,
-                ));
-                // FIX: Store the built FoliageDescription in an owned variable
-                let owned_foliage_desc = foliage_desc_builder.build();
-
-                // Call your RendererWgpu's async constructor
-                let renderer = Renderer::new_async(
-                    &settings_clone,
-                    window_handle_clone.clone(),
-                    &owned_foliage_desc,
-                )
-                .await;
-                // Send the initialized renderer back to the main thread `DemoState`.
-                if sender.send(renderer).is_err() {
-                    log::error!("Failed to send initialized renderer over channel!");
-                }
-            });
-            // self.last_render_time = Some(Instant::now()); // Start rendering timer
-        }
+        log::info!("Application Resumed");
     }
 
     fn window_event(
@@ -408,73 +326,34 @@ impl<Renderer: RendererInterface + 'static> ApplicationHandler for DemoState<Ren
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        // --- Handle asynchronous renderer readiness for WASM ---
-        #[cfg(target_arch = "wasm32")]
-        {
-            // Attempt to receive the renderer from the oneshot channel.
-            let mut renderer_received = false;
-            if let Some(receiver) = self.renderer_receiver.as_mut() {
-                if let Ok(Some(renderer)) = receiver.try_recv() {
-                    self.lum = Some(renderer); // Store the received renderer
-                    renderer_received = true;
-                }
+        match event {
+            WindowEvent::CloseRequested => {
+                self.about_to_close = true;
             }
-            if renderer_received {
-                self.renderer_receiver = None; // Clear the receiver once it's received
-                log::info!("Renderer initialized on WASM!");
-                self.load_scene(); // Load the scene AFTER the renderer is fully ready
-                self.lum.as_mut().unwrap().resize(self.window.clone().unwrap().inner_size());
-            }
-        }
-
-        let Some(window) = self.window.as_ref().cloned() else {
-            return; // No window to process events for yet
-        };
-
-        {
-            match event {
-                WindowEvent::CloseRequested => {
+            WindowEvent::KeyboardInput {
+                event:
+                    winit::event::KeyEvent {
+                        physical_key: winit::keyboard::PhysicalKey::Code(key_code), // Use physical_key for consistent key handling
+                        ..
+                    },
+                ..
+            } => {
+                if matches!(key_code, winit::keyboard::KeyCode::Escape) {
                     self.about_to_close = true;
                 }
-                WindowEvent::KeyboardInput {
-                    event:
-                        winit::event::KeyEvent {
-                            physical_key: winit::keyboard::PhysicalKey::Code(key_code), // Use physical_key for consistent key handling
-                            ..
-                        },
-                    ..
-                } => {
-                    if matches!(key_code, winit::keyboard::KeyCode::Escape) {
-                        self.about_to_close = true;
-                    }
-                }
-                WindowEvent::RedrawRequested => {
-                    // This is the primary trigger for rendering a frame.
-                    // Call render only if `lum` (renderer) is initialized
-                    self.render();
-                }
-                WindowEvent::Resized(PhysicalSize { width, height }) => {
-                    // Update the renderer's surface configuration on resize.
-                    log::info!("Resizing renderer surface to: ({width}, {height})");
-                    self.last_size = (width, height);
-                    if let Some(lum) = self.lum.as_mut() {
-                        // let window = self.window.clone();
-                        // log::info!(
-                        //     "window width: {}",
-                        //     window.clone().unwrap().inner_size().width
-                        // );
-                        // log::info!(
-                        //     "window height: {}",
-                        //     window.clone().unwrap().inner_size().height
-                        // );
-                        lum.resize(PhysicalSize { width, height }); // Call your renderer's resize method
-                    }
-                }
-                _ => { /* Ignore other window events for this example */ }
             }
+            WindowEvent::RedrawRequested => {
+                // This is the primary trigger for rendering a frame.
+                // Call render only if `lum` (renderer) is initialized
+                self.render();
+            }
+            WindowEvent::Resized(PhysicalSize { width, height }) => {
+                log::info!("Resizing renderer surface to: ({width}, {height})");
+                self.last_size = (width, height);
+                self.lum.resize(PhysicalSize { width, height });
+            }
+            _ => { /* Ignore other window events for this example */ }
         }
-        // Always request a redraw after processing events to ensure continuous animation.
-        window.request_redraw();
     }
 
     fn device_event(
@@ -556,7 +435,7 @@ pub fn run() {
 
     // Initialize DemoState with its default state.
     // The actual canvas acquisition and asynchronous WGPU setup happens in `resumed`.
-    let mut app = DemoState::<RendererWgpu>::new();
+    let mut app = DemoState::<RendererWgpu>::new(&event_loop);
 
     // Start the event loop. `resumed` will be called.
     event_loop.run_app(&mut app).unwrap();
