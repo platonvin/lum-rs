@@ -138,7 +138,7 @@ pub struct Image {
 }
 
 impl<'window> Wal<'window> {
-    pub async fn new(window: Window) -> Self {
+    pub async fn new(window: std::sync::Arc<Window>) -> Self {
         let window_size = window.inner_size();
 
         // if you dont understand what is happening here i recommend looking into WGPU guide
@@ -178,7 +178,10 @@ impl<'window> Wal<'window> {
             format: *swapchain_format,
             width: window_size.width,
             height: window_size.height,
+            #[cfg(not(target_arch = "wasm32"))]
             present_mode: wgpu::PresentMode::Mailbox,
+            #[cfg(target_arch = "wasm32")]
+            present_mode: wgpu::PresentMode::AutoVsync,
             desired_maximum_frame_latency: 2, // two is enough for FIF but not too many for delays
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],

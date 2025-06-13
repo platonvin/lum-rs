@@ -156,10 +156,18 @@ impl<'window> InternalRendererWebGPU<'window> {
 
     /// Starts the stage where you can "request drawing" things
     pub fn start_frame(&mut self) {
-        let now = Instant::now();
-        let delta = now - self.last_time;
-        self.delta_time = (delta.subsec_nanos() as f64 / 1e9_f64) as f32;
-        self.last_time = now;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let now = Instant::now();
+            let delta = now - self.last_time;
+            self.delta_time = (delta.subsec_nanos() as f64 / 1e9_f64) as f32;
+            self.last_time = now;
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.delta_time = 15.0 / 1000.0;
+        }
 
         self.update_camera();
         self.update_light_transform();
@@ -2223,7 +2231,11 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         }
     }
 
-    async fn new_async(settings: &Settings, window: Window, foliages: &[MeshFoliageDesc]) -> Self {
+    async fn new_async(
+        settings: &Settings,
+        window: std::sync::Arc<Window>,
+        foliages: &[MeshFoliageDesc],
+    ) -> Self {
         Self {
             renderer: InternalRendererWebGPU::new_async(settings, window, foliages.to_vec()).await,
             block_que: vec![],
@@ -2539,6 +2551,10 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         self.renderer.counter += 1;
 
         // atrace!();
+    }
+
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        self.renderer.recreate_window(new_size);
     }
 
     fn get_world_blocks(&self) -> Array3DView<InternalBlockId, MeshBlock> {

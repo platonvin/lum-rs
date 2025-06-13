@@ -146,6 +146,7 @@ pub struct InternalRendererWebGPU<'window> {
 
     // we update it right before doing rendering to have most accurate timestamp
     pub delta_time: f32,
+    #[cfg(not(target_arch = "wasm32"))]
     pub last_time: Instant,
 
     pub has_palette: bool,
@@ -165,7 +166,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         foliage_descriptions: Vec<MeshFoliageDesc>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
-        let mut wal = executor::block_on(wal::Wal::new(window));
+        let mut wal = executor::block_on(wal::Wal::new(window.into()));
 
         // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
         let lightmap_extent = Extent3d {
@@ -217,6 +218,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             wal,
             settings: Settings::default(),
             delta_time: 0.0,
+            #[cfg(not(target_arch = "wasm32"))]
             last_time: Instant::now(),
 
             // rpasses: renderpasses,
@@ -260,7 +262,7 @@ impl<'window> InternalRendererWebGPU<'window> {
 
     pub async fn new_async(
         lum_settings: &Settings,
-        window: Window,
+        window: std::sync::Arc<Window>,
         foliage_descriptions: Vec<MeshFoliageDesc>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
@@ -316,6 +318,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             wal,
             settings: Settings::default(),
             delta_time: 0.0,
+            #[cfg(not(target_arch = "wasm32"))]
             last_time: Instant::now(),
 
             // rpasses: renderpasses,
@@ -358,12 +361,12 @@ impl<'window> InternalRendererWebGPU<'window> {
     }
 
     /// Called when the window is resized. This method recreates dependent resources.
-    pub fn recreate_window(&mut self, window: &Window) {
+    pub fn recreate_window(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         // poll the device to make sure work is finished:
         self.wal.device.poll(wgpu::MaintainBase::Wait).unwrap();
 
         // 2. Reconfigure the surface (swapchain) using our Wal's resize method.
-        self.wal.resize(window.inner_size());
+        self.wal.resize(new_size);
 
         // 4. Recreate dependent resources.
         let settings_copy = self.settings;

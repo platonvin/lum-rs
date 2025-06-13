@@ -137,7 +137,7 @@ pub trait RendererInterface {
     ) -> Self;
     async fn new_async(
         settings: &super::Settings,
-        window: Window,
+        window: std::sync::Arc<Window>,
         foliages: &[Self::FoliageDescription],
     ) -> Self;
 
@@ -170,6 +170,8 @@ pub trait RendererInterface {
     fn start_frame(&mut self);
     fn prepare_frame(&mut self);
     fn end_frame(&mut self);
+
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>);
 
     fn is_block_visible(&self, pos: vec3) -> bool;
     fn is_model_visible(&self, model_size: &uvec3, trans: &MeshTransform) -> bool;

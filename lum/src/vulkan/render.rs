@@ -2342,7 +2342,7 @@ impl RendererInterface for RendererVulkan<'_> {
 
     async fn new_async(
         settings: &crate::Settings,
-        window: Window,
+        window: std::sync::Arc<winit::window::Window>,
         foliages: &[Self::FoliageDescription],
     ) -> Self {
         todo!()
