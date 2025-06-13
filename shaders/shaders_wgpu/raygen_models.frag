@@ -19,11 +19,11 @@ struct UboData {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) sample_point: vec3<f32>,
-    @location(1) normal_encoded_packed: u32,
+    @location(1) @interpolate(flat) normal_encoded_packed: u32,
 };
 
 struct FragmentOutput {
-    @location(0) outMatNorm: vec4<u32>,
+    @location(0) @interpolate(flat) outMatNorm: vec4<u32>,
 };
 
 fn GetModelVoxel(relative_voxel_pos: vec3<i32>) -> u32 {

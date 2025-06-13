@@ -20,12 +20,12 @@ struct InstanceInput {
     @location(0) posIn: vec3<f32>,
     @location(1) velIn: vec3<f32>,
     @location(2) lifeTimeIn: f32,
-    @location(3) matIDIn: u32,
+    @location(3) @interpolate(flat) matIDIn: u32,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) mat_norm: vec4<u32>,
+    @location(0) @interpolate(flat) mat_norm: vec4<u32>,
 };
 
 // --- Define a standard 36-vertex cube (12 triangles) ---

@@ -2347,6 +2347,10 @@ impl RendererInterface for RendererVulkan<'_> {
     ) -> Self {
         todo!()
     }
+
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        todo!()
+    }
 }
 
 // TODO: is there a simpler shorter)way to do this?

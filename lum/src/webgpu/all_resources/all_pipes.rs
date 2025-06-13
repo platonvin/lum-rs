@@ -164,7 +164,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("lightmap blocks pipe"),
+            Some("lightmap blocks"),
         );
         let lightmap_models_pipe = Wal::create_raster_pipe(
             wal,
@@ -219,7 +219,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Lightmap Models Pipe"),
+            Some("Lightmap Models"),
         );
 
         let raygen_blocks_pipe = Wal::create_raster_pipe(
@@ -281,7 +281,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Blocks Pipe"),
+            Some("Raygen Blocks"),
         );
 
         let raygen_models_pipe = Wal::create_raster_pipe(
@@ -341,7 +341,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Models Pipe"),
+            Some("Raygen Models"),
         );
 
         let raygen_particles_pipe = Wal::create_raster_pipe(
@@ -399,7 +399,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Particles Pipe"),
+            Some("Raygen Particles"),
         );
 
         let raygen_water_pipe = Wal::create_raster_pipe(
@@ -462,7 +462,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Water Pipe"),
+            Some("Raygen Water"),
         );
 
         let raygen_water_pipe = {
@@ -591,7 +591,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             })],
             None,
             None,
-            Some("Diffuse Pipe"),
+            Some("Diffuse"),
         );
 
         // darkens certain areas on the frame image depending on screen-space normal variation of pixels
@@ -662,7 +662,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             })],
             None,
             None,
-            Some("Ambient Occlusion Pipe"),
+            Some("Ambient Occlusion"),
         );
         let fill_stencil_glossy_pipe = Wal::create_raster_pipe(
             wal,
@@ -721,7 +721,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Fill Stencil for Glossy Pipe"),
+            Some("Fill Stencil for Glossy"),
         );
 
         let fill_stencil_smoke_pipe = Wal::create_raster_pipe(
@@ -809,7 +809,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Fill Stencil for Smoke Pipe"),
+            Some("Fill Stencil for Smoke"),
         );
 
         let fill_stencil_smoke_pipe = {
@@ -992,7 +992,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Glossy Pipe"),
+            Some("Glossy"),
         );
 
         // Like AO, Volumetrics are just blending into frame with their color.
@@ -1090,7 +1090,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Smoke Pipe"),
+            Some("Smoke"),
         );
 
         // Tonemap Pipe is also responsible for putting frame image into swapchain. It does some... well, tonemapping as well as any simple other color filters. TODO: LUT?
@@ -1119,7 +1119,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             })],
             None,
             None,
-            Some("Tonemap Pipe"),
+            Some("Tonemap"),
         );
 
         let radiance_pipe = Wal::create_compute_pipe(
@@ -1212,7 +1212,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("radiance.comp"),
             },
-            Some("Radiance Pipe"),
+            Some("Radiance"),
         );
 
         let update_grass_pipe = Wal::create_compute_pipe(
@@ -1265,7 +1265,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("update_grass.comp"),
             },
-            Some("Update Grass Pipe"),
+            Some("Update Grass"),
         );
 
         let update_water_pipe = Wal::create_compute_pipe(
@@ -1300,7 +1300,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("update_water.comp"),
             },
-            Some("Water Updates Pipe"),
+            Some("Water Updates"),
         );
         let gen_perlin2d_pipe = Wal::create_compute_pipe(
             wal,
@@ -1321,7 +1321,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("perlin2.comp"),
             },
-            Some("Gen Perlin 2D Pipe"),
+            Some("Gen Perlin 2D"),
         );
         let gen_perlin3d_pipe = Wal::create_compute_pipe(
             wal,
@@ -1342,7 +1342,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("perlin3.comp"),
             },
-            Some("Gen Perlin 3D Pipe"),
+            Some("Gen Perlin 3D"),
         );
         let map_pipe = Wal::create_compute_pipe(
             wal,
@@ -1395,7 +1395,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 stage: ShaderStages::COMPUTE,
                 code: shaders::get_wgsl("map.comp"),
             },
-            Some("Mapping Models Voxels Pipe"),
+            Some("Mapping Models Voxels"),
         );
 
         // let pc_buffer_bind_group_layout =
@@ -1477,7 +1477,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         bias: wgpu::DepthBiasState::default(),
                     }),
                     None,
-                    Some("foliage pipe"),
+                    Some("foliage"),
                 );
 
                 let pc_buffer = wal.create_buffer(

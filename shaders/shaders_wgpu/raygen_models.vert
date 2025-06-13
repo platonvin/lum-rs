@@ -23,13 +23,13 @@ struct Constants {
 // @group(1) @binding(1) var modelVoxels: texture_3d<i32>; 
 
 struct VertexInput {
-    @location(0) posIn: vec3<u32>,
+    @location(0) @interpolate(flat) posIn: vec3<u32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) sample_point: vec3<f32>,
-    @location(1) normal_encoded_packed: u32,
+    @location(1) @interpolate(flat) normal_encoded_packed: u32,
 };
 
 fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {

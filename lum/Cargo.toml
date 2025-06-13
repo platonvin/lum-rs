@@ -11,11 +11,18 @@ path = "src/lib.rs"
 default = []
 vk_backend = ["lumal", "shaders/vk_backend"]
 wgpu_backend = ["wgpu", "futures", "shaders/wgpu_backend"]
+# these do nothing if wgpu_backend is not enabled
+wgpu_gl = []
+wgpu_vk = []
+wgpu_dx12 = []
+wgpu_web = []
 # controls wether Lum uses Lumal feature for validation layer names
+# TODO: same for wgpu with some sort of conditional?
 debug_validation_names = ["lumal/debug_validation_names"]
 
 [profile.dev]
 # enable debug names for validation_layers use in Lum
+# this gives unique readable labels to Vulkan objects for validation layers reports
 features = ["debug_validation_names"]
 
 

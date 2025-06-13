@@ -133,11 +133,13 @@ pub trait RendererInterface {
     fn new(
         settings: &super::Settings,
         window: Window,
+        size: winit::dpi::PhysicalSize<u32>,
         foliage: &[Self::FoliageDescription],
     ) -> Self;
     async fn new_async(
         settings: &super::Settings,
         window: std::sync::Arc<Window>,
+        size: winit::dpi::PhysicalSize<u32>,
         foliages: &[Self::FoliageDescription],
     ) -> Self;
 

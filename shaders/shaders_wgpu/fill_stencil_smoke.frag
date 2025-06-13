@@ -6,7 +6,7 @@ struct FragmentOutput {
     @location(0) far_depth_out: f32,
     @location(1) near_depth_out: f32,
     // Built-in for writing fragment depth
-    @builtin(frag_depth) frag_depth: f32,
+    // @builtin(frag_depth) frag_depth: f32,
 };
 
 // --- Fragment Entry Point ---
@@ -18,11 +18,11 @@ fn main(
     var output: FragmentOutput;
 
     // Set fragment depth based on front-facing property
-    if (!is_front) {
-        output.frag_depth = end_depth_in - 0.01;
-    } else {
-        output.frag_depth = end_depth_in;
-    }
+    // if (!is_front) {
+    //     output.frag_depth = end_depth_in - 0.01;
+    // } else {
+    //     output.frag_depth = end_depth_in;
+    // }
 
     // Write the input depth to both color attachments
     // The min/max blending happens in the pipeline state

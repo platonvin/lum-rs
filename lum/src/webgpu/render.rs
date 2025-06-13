@@ -31,7 +31,7 @@ use wgpu::{
     BufferSize, Color, ComputePassDescriptor, Extent3d, Origin3d, TexelCopyBufferInfo,
     TexelCopyTextureInfo, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
@@ -597,10 +597,7 @@ impl<'window> RendererWgpu<'window> {
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
+                    depth_ops: None,
                     stencil_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0),
                         store: wgpu::StoreOp::Store,
@@ -737,10 +734,7 @@ impl<'window> RendererWgpu<'window> {
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
+                    depth_ops: None,
                     stencil_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -2217,9 +2211,15 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder;
     type InternalBlockId = InternalBlockId;
 
-    fn new(settings: &Settings, window: Window, foliages: &[MeshFoliageDesc]) -> Self {
+    fn new(
+        settings: &Settings,
+        window: Window,
+        size: PhysicalSize<u32>,
+        foliages: &[MeshFoliageDesc],
+    ) -> Self {
+        let size = window.inner_size();
         Self {
-            renderer: InternalRendererWebGPU::new(settings, window, foliages.to_vec()),
+            renderer: InternalRendererWebGPU::new(settings, window, size, foliages.to_vec()),
             block_que: vec![],
             // mesh_que: vec![],
             foliage_ques: vec![vec![]; foliages.len()],
@@ -2234,10 +2234,12 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     async fn new_async(
         settings: &Settings,
         window: std::sync::Arc<Window>,
+        size: PhysicalSize<u32>,
         foliages: &[MeshFoliageDesc],
     ) -> Self {
         Self {
-            renderer: InternalRendererWebGPU::new_async(settings, window, foliages.to_vec()).await,
+            renderer: InternalRendererWebGPU::new_async(settings, window, size, foliages.to_vec())
+                .await,
             block_que: vec![],
             // mesh_que: vec![],
             foliage_ques: vec![vec![]; foliages.len()],

@@ -9,7 +9,7 @@ struct FragmentInput {
 // Define output structure
 struct FragmentOutput {
     // Match GLSL output location and type (uvec4 -> vec4<u32>)
-    @location(0) outMatNorm: vec4<u32>,
+    @location(0) @interpolate(flat) outMatNorm: vec4<u32>,
 };
 
 @fragment

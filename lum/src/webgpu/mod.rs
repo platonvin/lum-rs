@@ -15,6 +15,7 @@ use futures::executor;
 use std::time::Instant;
 use wal::{ComputePipe, Image, RasterPipe, Wal};
 use wgpu::{Extent3d, TextureFormat};
+use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 const FRAME_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
@@ -163,10 +164,11 @@ impl<'window> InternalRendererWebGPU<'window> {
     pub fn new(
         lum_settings: &Settings,
         window: Window,
+        size: PhysicalSize<u32>,
         foliage_descriptions: Vec<MeshFoliageDesc>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
-        let mut wal = executor::block_on(wal::Wal::new(window.into()));
+        let mut wal = executor::block_on(wal::Wal::new(window.into(), size));
 
         // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
         let lightmap_extent = Extent3d {
@@ -263,10 +265,11 @@ impl<'window> InternalRendererWebGPU<'window> {
     pub async fn new_async(
         lum_settings: &Settings,
         window: std::sync::Arc<Window>,
+        size: PhysicalSize<u32>,
         foliage_descriptions: Vec<MeshFoliageDesc>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
-        let mut wal = wal::Wal::new(window).await;
+        let mut wal = wal::Wal::new(window, size).await;
 
         // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
         let lightmap_extent = Extent3d {

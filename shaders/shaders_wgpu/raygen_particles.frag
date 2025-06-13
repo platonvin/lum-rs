@@ -22,11 +22,11 @@ struct UboData {
 // @group(1) @binding(0) var<uniform> pco: Constants;
 
 struct VertexOutput {
-    @location(0) mat_norm: vec4<u32>,
+    @location(0) @interpolate(flat) mat_norm: vec4<u32>,
 };
 
 struct FragmentOutput {
-    @location(0) outMatNorm: vec4<u32>,
+    @location(0) @interpolate(flat) outMatNorm: vec4<u32>,
 };
 
 @fragment

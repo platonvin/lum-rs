@@ -24,7 +24,7 @@ struct VertexOutput {
 };
 
 struct FragmentOutput {
-    @location(0) outMatNorm: vec4<u32>,
+    @location(0) @interpolate(flat) outMatNorm: vec4<u32>,
 };
 
 const BLOCK_PALETTE_SIZE_X: i32 = 64;

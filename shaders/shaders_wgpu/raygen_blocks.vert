@@ -25,7 +25,7 @@ struct Constants {
 @group(1) @binding(0) var<storage, read> pco_shared: array<Constants>;
 
 struct VertexInput {
-    @location(0) posIn: vec4<u32>,
+    @location(0) @interpolate(flat) posIn: vec4<u32>,
 };
 
 struct VertexOutput {

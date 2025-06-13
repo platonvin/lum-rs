@@ -21,7 +21,7 @@ struct PushConstants {
 @group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 struct VertexInput {
-    @location(0) pos_in: vec4<u32>, // Matches layout(location = 0) in lowp uvec3 posIn;
+    @location(0) @interpolate(flat) pos_in: vec4<u32>, // Matches layout(location = 0) in lowp uvec3 posIn;
 };
 
 struct VertexOutput {
