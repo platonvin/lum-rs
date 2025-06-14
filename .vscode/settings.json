@@ -4,6 +4,4 @@
         "wgpu_backend",
         "vk_backend"
     ],
-    "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
-    :
 }

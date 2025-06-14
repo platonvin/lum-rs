@@ -12,11 +12,13 @@ use crate::{types::*, BLOCK_SIZE};
 use containers::Array3D;
 use containers::Ring;
 use futures::executor;
-use std::time::Instant;
 use wal::{ComputePipe, Image, RasterPipe, Wal};
 use wgpu::{Extent3d, TextureFormat};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 
 const FRAME_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth32Float;
@@ -119,7 +121,8 @@ pub struct InternalRendererWebGPU<'window> {
     pub lightmap_extent: Extent3d,
 
     pub pipes: AllPipes,
-    pub foliage_descriptions: Vec<MeshFoliageDesc>,
+    // foliage descriptions live as long as renderer ('window)
+    pub foliage_descriptions: Vec<MeshFoliageDesc<'window>>,
     pub dependent_images: Option<AllSwapchainDependentImages>,
     pub independent_images: AllIndependentImages,
     pub buffers: AllBuffers,
@@ -163,12 +166,12 @@ impl<'window> InternalRendererWebGPU<'window> {
     /// create our independent and dependent resources, and then fill our render‑state.
     pub fn new(
         lum_settings: &Settings,
-        window: Window,
+        window: std::sync::Arc<Window>,
         size: PhysicalSize<u32>,
-        foliage_descriptions: Vec<MeshFoliageDesc>,
+        foliage_descriptions: Vec<MeshFoliageDesc<'window>>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
-        let mut wal = executor::block_on(wal::Wal::new(window.into(), size));
+        let mut wal = executor::block_on(wal::Wal::new(window, size));
 
         // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
         let lightmap_extent = Extent3d {
@@ -266,7 +269,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         lum_settings: &Settings,
         window: std::sync::Arc<Window>,
         size: PhysicalSize<u32>,
-        foliage_descriptions: Vec<MeshFoliageDesc>,
+        foliage_descriptions: Vec<MeshFoliageDesc<'window>>,
     ) -> InternalRendererWebGPU<'window> {
         // 1. Create our Wal context (the WGPU abstraction layer)
         let mut wal = wal::Wal::new(window, size).await;

@@ -6,7 +6,7 @@ use crate::{
 use lumal::vk;
 use lumal::{LumalSettings, Renderer};
 
-impl InternalRendererVulkan {
+impl<'a> InternalRendererVulkan<'a> {
     pub fn create_all_samplers(
         lumal: &Renderer,
         _lum_settings: &Settings,
@@ -187,7 +187,7 @@ impl InternalRendererVulkan {
         }
     }
 
-    pub fn destroy_all_samplers(lumal: &mut Renderer, samplers: &mut AllSamplers) {
+    pub fn destroy_all_samplers(lumal: &mut Renderer, samplers: AllSamplers) {
         lumal.destroy_sampler(samplers.nearest_sampler);
         lumal.destroy_sampler(samplers.linear_sampler);
         lumal.destroy_sampler(samplers.linear_sampler_tiled);

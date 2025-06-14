@@ -48,3 +48,6 @@ All types like Voxe, MatId, BlockId... are CPU-side and shared across backends. 
 Lum operates on memory, not files, and it expects your assets to have special format (in memory). However, you dont have to "compile" assets yourselves - Lum has built-in tools for creating assets from magicavoxel (good voxel editor with) format (.vox) - both meshing and repacking
 
 frontend types are different from backend but not for vulkan (so wgpu needs conversions, but its good cause compression)
+
+//! I highly recommend looking into winit/wgpu examples
+//! Also, if you are going to compile your project into web, its better to start doing so as soon as possible

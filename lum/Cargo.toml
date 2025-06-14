@@ -39,7 +39,7 @@ as_u8_slice_derive = { path = "../as_u8_slice_derive" }
 # qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
 qvek = { path = "../../qvek/qvek" }
 winit = "0.30.11"
-wgpu = { version = "25.0.0", optional = true }
+wgpu = { version = "25.0.2", optional = true }
 futures = { version = "0.3.31", optional = true }
 
 [dev-dependencies]

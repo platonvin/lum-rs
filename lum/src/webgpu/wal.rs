@@ -4,6 +4,7 @@
 
 use containers::Ring;
 use std::borrow::Cow;
+use wgpu::DepthStencilState;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, ColorTargetState, ComputePipelineDescriptor, Features, FragmentState,
@@ -11,7 +12,6 @@ use wgpu::{
     PrimitiveTopology, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource,
     VertexBufferLayout, VertexState,
 };
-use wgpu::{DepthStencilState, Limits};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
@@ -555,6 +555,7 @@ impl<'window> Wal<'window> {
         let mut bind_index = 0;
         if let Some(static_bind_groups) = static_bind_groups {
             render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
     }
@@ -564,11 +565,12 @@ impl<'window> Wal<'window> {
         compute_pass: &mut wgpu::ComputePass<'a>,
         pipe: &ComputePipe,
     ) {
-        compute_pass.set_pipeline(&pipe.line.as_ref().unwrap());
+        compute_pass.set_pipeline(pipe.line.as_ref().unwrap());
 
         let mut bind_index = 0;
         if let Some(ref static_bind_groups) = pipe.static_bind_groups {
             compute_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
     }
@@ -590,6 +592,7 @@ impl<'window> Wal<'window> {
 
         if let Some(bind_group) = dynamic_bind_group {
             render_pass.set_bind_group(bind_index, bind_group, &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
 
@@ -613,6 +616,7 @@ impl<'window> Wal<'window> {
 
         if let Some(bind_group) = dynamic_bind_group {
             render_pass.set_bind_group(bind_index, bind_group, &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
 
@@ -636,6 +640,7 @@ impl<'window> Wal<'window> {
 
         if let Some(bind_group) = dynamic_bind_group {
             compute_pass.set_bind_group(bind_index, bind_group, &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
 

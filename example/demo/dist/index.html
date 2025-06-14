@@ -20,13 +20,13 @@
             height: 100vh;
         }
     </style>
-<link rel="modulepreload" href="/demo-94351f674e8c2f77.js" crossorigin="anonymous" integrity="sha384-9r2WSX8U1laLQ7tyhiHuFFAI3pKSISajocdUnOswPV/Smuc+RN2V7Z0ZX1d0x7gg"><link rel="preload" href="/demo-94351f674e8c2f77_bg.wasm" crossorigin="anonymous" integrity="sha384-r9GQZUlMuTXsCkoZEPalw4yBE/jQL4mZFIq5WalILqjSJBkx55alL1CXHBo/0tXI" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="/demo-ab3add89a916d8da.js" crossorigin="anonymous" integrity="sha384-Rl346f6okOR6lmHLFw+FusbONBqnGwdqml8uPCu8/Em9z7gAqNIfj1ZWJvqlDGz+"><link rel="preload" href="/demo-ab3add89a916d8da_bg.wasm" crossorigin="anonymous" integrity="sha384-QheY6UXe6rncxODHP3yri0lO2qU+apuu8iP3zlDsAsr43k+53hhmEG9tVtxP+UCj" as="fetch" type="application/wasm"></head>
 
 <body>
     
 <script type="module">
-import init, * as bindings from '/demo-94351f674e8c2f77.js';
-const wasm = await init({ module_or_path: '/demo-94351f674e8c2f77_bg.wasm' });
+import init, * as bindings from '/demo-ab3add89a916d8da.js';
+const wasm = await init({ module_or_path: '/demo-ab3add89a916d8da_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -36,7 +36,7 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
     <div class="root">
-        <canvas class="main-canvas" id="canvas"></canvas>
+        <canvas class="main-canvas" id="lum_canvas"></canvas>
     </div>
 <script>"use strict";
 

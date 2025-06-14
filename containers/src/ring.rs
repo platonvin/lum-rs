@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut}; // lol
 
 #[derive(Debug)]
 pub struct Ring<T> {
-    pub data: Box<[T]>, // i would love to move len out from Box
+    pub data: Box<[T]>,
     pub index: usize,
 }
 
@@ -50,11 +50,6 @@ impl<T: Clone> Ring<T> {
             new_data[i] = std::mem::replace(&mut self.data[i], value.clone());
         }
 
-        // Drop remaining elements from the old data if shrinking
-        if size < self.data.len() {
-            // No need to explicitly drop, Box will handle it when it goes out of scope
-        }
-
         self.data = new_data.into_boxed_slice();
 
         if self.data.len() <= self.index {
@@ -94,15 +89,17 @@ impl<T: Default> Ring<T> {
 }
 
 impl<T> Ring<T> {
-    /// Returns the current element in the Ring.
+    /// Returns the current (to index) element in the Ring.
     pub fn current(&self) -> &T {
         &self.data[self.index]
     }
+    /// Returns the previous (to index, wrapping around len) element in the Ring.
     pub fn previous(&self) -> &T {
         let index = self.index + self.data.len() - 1;
         let wrapped_index = index % self.data.len();
         &self.data[wrapped_index]
     }
+    /// Returns the next (to index, wrapping around len) element in the Ring.
     pub fn next(&self) -> &T {
         let index = self.index + 1;
         let wrapped_index = index % self.data.len();
@@ -112,6 +109,18 @@ impl<T> Ring<T> {
     /// Mutably access the current element in the Ring.
     pub fn current_mut(&mut self) -> &mut T {
         &mut self.data[self.index]
+    }
+    /// Mutably access the previous (to index, wrapping around len) element in the Ring.
+    pub fn previous_mut(&self) -> &T {
+        let index = self.index + self.data.len() - 1;
+        let wrapped_index = index % self.data.len();
+        &self.data[wrapped_index]
+    }
+    /// Mutably access the next (to index, wrapping around len) element in the Ring.
+    pub fn next_mut(&self) -> &T {
+        let index = self.index + 1;
+        let wrapped_index = index % self.data.len();
+        &self.data[wrapped_index]
     }
 
     /// Moves to the next element in the Ring (circularly).
@@ -154,18 +163,6 @@ impl<T> Ring<T> {
         self.data.is_empty()
     }
 
-    pub fn as_mut_ptr(&mut self) -> *mut Ring<T> {
-        self as *mut Ring<T>
-    }
-
-    pub fn as_mut_ref(&mut self) -> &mut Ring<T> {
-        self
-    }
-
-    pub fn as_ptr(&self) -> *const Ring<T> {
-        self as *const Ring<T>
-    }
-
     pub fn as_slice(&self) -> &[T] {
         &self.data
     }
@@ -174,7 +171,7 @@ impl<T> Ring<T> {
         &mut self.data
     }
 
-    pub fn iter(&self) -> RingIterator<T> {
+    pub fn iter(&'_ self) -> RingIterator<'_, T> {
         RingIterator {
             ring: self,
             position: 0,
@@ -192,6 +189,7 @@ impl<T> Ring<T> {
         let data = (0..size).map(lambda).collect::<Vec<_>>().into_boxed_slice();
         Self { data, index: 0 }
     }
+    /// Creates a new `Ring` from a given Vec.
     pub fn from_vec(data: Vec<T>) -> Self {
         Self {
             data: data.into_boxed_slice(),
@@ -207,11 +205,6 @@ impl<T> Ring<T> {
 
         for i in 0..len {
             new_data[i] = std::mem::replace(&mut self.data[i], lambda(i));
-        }
-
-        // Drop remaining elements from the old data if shrinking
-        if size < self.data.len() {
-            // No need to explicitly drop, Box will handle it when it goes out of scope
         }
 
         self.data = new_data.into_boxed_slice();

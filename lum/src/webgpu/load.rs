@@ -263,8 +263,8 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                 )),
                 pc_bg: None,
             },
-            vertexes: vertexes,
-            indices: indices,
+            vertexes,
+            indices,
         };
 
         let create_face_bind_group = |face: &mut IndexedVerticesQueue| {
@@ -389,10 +389,15 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
 
     fn load_block(&mut self, block_id: MeshBlock, block_data: BlockData) {
         let block = &mut self.block_palette_voxels[block_id as usize];
-        for_zyx!(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, |x, y, z| {
-            block[x as usize][y as usize][z as usize] =
-                block_data.voxels[x + y * sBLOCK_SIZE + z * sBLOCK_SIZE * sBLOCK_SIZE];
-        });
+        for_zyx!(
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            |x: usize, y: usize, z: usize| {
+                block[x][y][z] =
+                    block_data.voxels[x + y * sBLOCK_SIZE + z * sBLOCK_SIZE * sBLOCK_SIZE];
+            }
+        );
 
         let circ_verts: Vec<_> = block_data
             .vertices

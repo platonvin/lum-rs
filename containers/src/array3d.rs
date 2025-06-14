@@ -325,18 +325,6 @@ impl ToUsize3 for qvek::vek::Vec4<i8> {
     }
 }
 
-impl<'a, T, U, I> Index<I> for Array3DView<'a, T, U>
-where
-    I: ToUsize3,
-    T: Clone + Into<U>,
-{
-    type Output = U;
-
-    fn index(&self, index: I) -> &Self::Output {
-        panic!("By-value conversion required — use get() instead.")
-    }
-}
-
 impl<'a, T, U> Array3DView<'a, T, U>
 where
     T: From<U> + Into<U> + Clone,
@@ -391,6 +379,6 @@ mod tests {
     #[should_panic]
     fn test_out_of_bounds() {
         let array = Array3D::new(2, 2, 2);
-        let _: i32 = array[(2, 2, 2)]; // Should panic in debug mode
+        let _: i32 = array[(2, 2, 2)]; // Should panic
     }
 }

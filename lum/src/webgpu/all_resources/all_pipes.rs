@@ -11,6 +11,7 @@ use crate::{
     Settings,
 };
 use containers::Ring;
+use shaders::Shader;
 use std::mem::offset_of;
 use wgpu::*;
 
@@ -143,7 +144,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("lightmap_blocks.vert"),
+            shaders::Shader::get_wgsl(Shader::LightmapBlocksVert),
             None,
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
@@ -198,7 +199,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     },
                 },
             ],
-            shaders::get_wgsl("lightmap_models.vert"),
+            shaders::Shader::get_wgsl(Shader::LightmapModelsVert),
             None,
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
@@ -256,8 +257,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("raygen_blocks.vert"),
-            Some(shaders::get_wgsl("raygen_blocks.frag")),
+            shaders::Shader::get_wgsl(Shader::RaygenBlocksVert),
+            Some(shaders::Shader::get_wgsl(Shader::RaygenBlocksFrag)),
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -316,8 +317,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     }, // aka push descriptor sets in vk
                 },
             ],
-            shaders::get_wgsl("raygen_models.vert"),
-            Some(shaders::get_wgsl("raygen_models.frag")),
+            shaders::Shader::get_wgsl(Shader::RaygenModelsVert),
+            Some(shaders::Shader::get_wgsl(Shader::RaygenModelsFrag)),
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -357,8 +358,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 resources: buffers_to_binding_resources(&buffers.uniform),
             }],
             &[],
-            shaders::get_wgsl("raygen_particles.vert"),
-            Some(shaders::get_wgsl("raygen_particles.frag")),
+            shaders::Shader::get_wgsl(Shader::RaygenParticlesVert),
+            Some(shaders::Shader::get_wgsl(Shader::RaygenParticlesFrag)),
             &[VertexBufferLayout {
                 array_stride: size_of::<Particle>() as u64,
                 step_mode: VertexStepMode::Instance,
@@ -445,8 +446,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("water.vert"),
-            Some(shaders::get_wgsl("water.frag")),
+            shaders::Shader::get_wgsl(Shader::WaterVert),
+            Some(shaders::Shader::get_wgsl(Shader::WaterFrag)),
             &[],
             PrimitiveTopology::TriangleStrip,
             vec![Some(ColorTargetState {
@@ -580,8 +581,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("diffuse.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::DiffuseFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -651,8 +652,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("hbao.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::HbaoFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -693,8 +694,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("fill_stencil_glossy.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::FillStencilGlossyFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![],
@@ -745,8 +746,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("fill_stencil_smoke.vert"),
-            Some(shaders::get_wgsl("fill_stencil_smoke.frag")),
+            shaders::Shader::get_wgsl(Shader::FillStencilSmokeVert),
+            Some(shaders::Shader::get_wgsl(Shader::FillStencilSmokeFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             // these are emulating depth in a single pass
@@ -965,8 +966,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("glossy.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::GrassFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -1063,8 +1064,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("smoke.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::SmokeFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -1108,8 +1109,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 resources: Ring::from_vec(vec![BindingResource::TextureView(&dimages.frame.view)]),
             }],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("tonemap.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::TonemapFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -1210,7 +1211,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("radiance.comp"),
+                code: shaders::Shader::get_wgsl(Shader::RadianceComp),
             },
             Some("Radiance"),
         );
@@ -1263,7 +1264,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("update_grass.comp"),
+                code: shaders::Shader::get_wgsl(Shader::UpdateGrassComp),
             },
             Some("Update Grass"),
         );
@@ -1298,7 +1299,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("update_water.comp"),
+                code: shaders::Shader::get_wgsl(Shader::UpdateWaterComp),
             },
             Some("Water Updates"),
         );
@@ -1319,7 +1320,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("perlin2.comp"),
+                code: shaders::Shader::get_wgsl(Shader::Perlin2Comp),
             },
             Some("Gen Perlin 2D"),
         );
@@ -1340,7 +1341,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("perlin3.comp"),
+                code: shaders::Shader::get_wgsl(Shader::Perlin3Comp),
             },
             Some("Gen Perlin 3D"),
         );
@@ -1393,7 +1394,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             ],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("map.comp"),
+                code: shaders::Shader::get_wgsl(Shader::MapComp),
             },
             Some("Mapping Models Voxels"),
         );
@@ -1461,7 +1462,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         },
                     }],
                     foliage_description.code,
-                    Some(shaders::get_wgsl("grass.frag")),
+                    Some(shaders::Shader::get_wgsl(Shader::GrassFrag)),
                     &[], // no vertex buffers
                     PrimitiveTopology::TriangleList,
                     vec![Some(ColorTargetState {

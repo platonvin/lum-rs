@@ -8,7 +8,7 @@ use crate::{
 };
 use containers::Ring;
 use lumal::descriptors::{
-    AttrFormOffs, BlendAttachment, DepthTesting, DescriptorInfo, DescriptorResource, ShaderStage,
+    AttrFormOffs, BlendAttachment, DepthTesting, DescriptorInfo, DescriptorResource,
     ShortDescriptorInfo,
 };
 use lumal::{vk, LumalSettings, Renderer};
@@ -17,10 +17,10 @@ use std::mem::offset_of;
 // This file could be just data?
 // it is setting up all the descriptors/layouts for pipes and pipes themeselves
 
-impl InternalRendererVulkan {
+impl<'a> InternalRendererVulkan<'a> {
     /// Creates bundle of all pipes
     /// Most pipes are hardcoded, but foliage pipes are defined by shaders
-    pub unsafe fn create_all_pipes(
+    pub fn create_all_pipes(
         lumal: &mut Renderer,
         lum_settings: &Settings,
         _lumal_settings: &LumalSettings,
@@ -65,12 +65,8 @@ impl InternalRendererVulkan {
         lumal.create_raster_pipe(
             &mut pipes.lightmap_blocks_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("lightmapBlocks.vert.spv"),
-                }, // Fragment shader is not needed
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::LightmapBlocksVert),
+            None,
             &[AttrFormOffs {
                 binding: 0,
                 format: vk::Format::R8G8B8_UINT,
@@ -85,22 +81,19 @@ impl InternalRendererVulkan {
             },
             &[BlendAttachment::NoBlend],
             std::mem::size_of::<i16vec4>() as u32,
-            DepthTesting::DT_ReadWrite,
+            DepthTesting::ReadWrite,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            #[cfg(feature = "debug_validation_names")]
             Some("Lightmap Blocks"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.lightmap_models_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("lightmapModels.vert.spv"),
-                }, // Fragment shader is not needed
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::LightmapModelsVert),
+            None,
             &[AttrFormOffs {
                 binding: 0,
                 format: vk::Format::R8G8B8_UINT,
@@ -115,27 +108,22 @@ impl InternalRendererVulkan {
             },
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<quat>() + std::mem::size_of::<vec4>()) as u32, // push size
-            DepthTesting::DT_ReadWrite,
+            DepthTesting::ReadWrite,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            #[cfg(feature = "debug_validation_names")]
             Some("Lightmap Models"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_blocks_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("rayGenBlocks.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("rayGenBlocks.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::RaygenBlocksVert),
+            Some(shaders::Shader::get_spirv(
+                shaders::Shader::RaygenBlocksFrag,
+            )),
             &[AttrFormOffs {
                 binding: 0,
                 format: vk::Format::R8G8B8_UINT, // TODO: automatic in macro
@@ -147,27 +135,22 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             12, // push size
-            DepthTesting::DT_ReadWrite,
+            DepthTesting::ReadWrite,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            #[cfg(feature = "debug_validation_names")]
             Some("Raygen Blocks"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_models_pipe,
             Some(pipes.raygen_models_push_layout),
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("rayGenModels.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("rayGenModels.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::RaygenModelsVert),
+            Some(shaders::Shader::get_spirv(
+                shaders::Shader::RaygenModelsFrag,
+            )),
             &[AttrFormOffs {
                 binding: 0,
                 format: vk::Format::R8G8B8_UINT,
@@ -179,31 +162,22 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() * 3) as u32,
-            DepthTesting::DT_ReadWrite,
+            DepthTesting::ReadWrite,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            #[cfg(feature = "debug_validation_names")]
             Some("Raygen Models"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_particles_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("rayGenParticles.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::GEOMETRY,
-                    spirv_code: shaders::get_shader("rayGenParticles.geom.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("rayGenParticles.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::RaygenParticlesVert),
+            Some(shaders::Shader::get_spirv(
+                shaders::Shader::RaygenParticlesFrag,
+            )),
             &[
                 AttrFormOffs {
                     binding: 0,
@@ -232,27 +206,20 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0,
-            DepthTesting::DT_ReadWrite,
+            DepthTesting::ReadWrite,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            #[cfg(feature = "debug_validation_names")]
             Some("Raygen Particles"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.raygen_water_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("water.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("water.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::WaterVert),
+            Some(shaders::Shader::get_spirv(shaders::Shader::WaterFrag)),
             &[],
             0,
             vk::VertexInputRate::VERTEX,
@@ -260,11 +227,12 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() + (std::mem::size_of::<i32>() * 2)) as u32,
-            DepthTesting::DT_ReadWrite,
+            DepthTesting::ReadWrite,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            #[cfg(feature = "debug_validation_names")]
             Some("Raygen Water"),
         );
 
@@ -274,16 +242,8 @@ impl InternalRendererVulkan {
             lumal.create_raster_pipe(
                 foliage,
                 None,
-                &[
-                    ShaderStage {
-                        stage: vk::ShaderStageFlags::VERTEX,
-                        spirv_code: &desc.spirv_code,
-                    },
-                    ShaderStage {
-                        stage: vk::ShaderStageFlags::FRAGMENT,
-                        spirv_code: shaders::get_shader("grass.frag.spv"),
-                    },
-                ],
+                &desc.spirv_code,
+                Some(shaders::Shader::get_spirv(shaders::Shader::GrassFrag)),
                 &[AttrFormOffs {
                     binding: 0,
                     format: vk::Format::R8G8B8_UINT,
@@ -295,11 +255,12 @@ impl InternalRendererVulkan {
                 lumal.swapchain_extent,
                 &[BlendAttachment::NoBlend],
                 (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32, // push size
-                DepthTesting::DT_ReadWrite,
+                DepthTesting::ReadWrite,
                 // DepthTesting::DT_None,
                 vk::CompareOp::LESS,
                 vk::CullModeFlags::NONE,
                 vk::StencilOpState::default(),
+                #[cfg(feature = "debug_validation_names")]
                 Some("Raygen Foliage"),
             );
         }
@@ -307,16 +268,8 @@ impl InternalRendererVulkan {
         lumal.create_raster_pipe(
             &mut pipes.diffuse_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("diffuse.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_spirv(shaders::Shader::DiffuseFrag)),
             &[],
             0,
             vk::VertexInputRate::VERTEX,
@@ -326,27 +279,20 @@ impl InternalRendererVulkan {
             (std::mem::size_of::<ivec4>()
                 + (std::mem::size_of::<vec4>() * 4)
                 + std::mem::size_of::<mat4>()) as u32,
-            DepthTesting::DT_None,
+            DepthTesting::None,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            #[cfg(feature = "debug_validation_names")]
             Some("Diffuse"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.ao_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("hbao.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_spirv(shaders::Shader::HbaoFrag)),
             &[],
             0,
             vk::VertexInputRate::VERTEX,
@@ -354,27 +300,22 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0,
-            DepthTesting::DT_None,
+            DepthTesting::None,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
+            #[cfg(feature = "debug_validation_names")]
             Some("Ambient Occlusion"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.fill_stencil_glossy_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("fillStencilGlossy.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_spirv(
+                shaders::Shader::FillStencilGlossyFrag,
+            )),
             &[], // Fullscreen pass, no attributes
             0,
             vk::VertexInputRate::VERTEX,
@@ -382,7 +323,7 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
-            DepthTesting::DT_None,
+            DepthTesting::None,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
@@ -395,22 +336,17 @@ impl InternalRendererVulkan {
                 write_mask: 0b01, // 01 for reflection
                 reference: 0b01,
             },
+            #[cfg(feature = "debug_validation_names")]
             Some("Fill Stencil+Glossy"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.fill_stencil_smoke_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("fillStencilSmoke.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("fillStencilSmoke.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::FillStencilSmokeVert),
+            Some(shaders::Shader::get_spirv(
+                shaders::Shader::FillStencilSmokeFrag,
+            )),
             &[], // Push constants only
             0,
             vk::VertexInputRate::VERTEX,
@@ -422,7 +358,7 @@ impl InternalRendererVulkan {
             ],
             (std::mem::size_of::<vec3>() + std::mem::size_of::<i32>() + std::mem::size_of::<vec4>())
                 as u32,
-            DepthTesting::DT_Read,
+            DepthTesting::Read,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
@@ -435,22 +371,15 @@ impl InternalRendererVulkan {
                 write_mask: 0b10, // 10 for smoke
                 reference: 0b10,
             },
+            #[cfg(feature = "debug_validation_names")]
             Some("Fill Stencil for Smoke"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.glossy_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("glossy.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_spirv(shaders::Shader::GlossyFrag)),
             &[], // Fullscreen pass, no attributes
             0,
             vk::VertexInputRate::VERTEX,
@@ -458,7 +387,7 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::BlendMix],
             (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32,
-            DepthTesting::DT_None,
+            DepthTesting::None,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
@@ -471,22 +400,15 @@ impl InternalRendererVulkan {
                 write_mask: 0b00, // 01 for glossy
                 reference: 0b01,
             },
+            #[cfg(feature = "debug_validation_names")]
             Some("Glossy"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.smoke_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("smoke.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_spirv(shaders::Shader::SmokeFrag)),
             &[], // Fullscreen pass, no attributes
             0,
             vk::VertexInputRate::VERTEX,
@@ -494,7 +416,7 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::BlendMix],
             0, // No push constants
-            DepthTesting::DT_None,
+            DepthTesting::None,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
@@ -507,22 +429,15 @@ impl InternalRendererVulkan {
                 write_mask: 0b00, // 10 for smoke
                 reference: 0b10,
             },
+            #[cfg(feature = "debug_validation_names")]
             Some("Smoke"),
         );
 
         lumal.create_raster_pipe(
             &mut pipes.tonemap_pipe,
             None,
-            &[
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::VERTEX,
-                    spirv_code: shaders::get_shader("fullscreenTriag.vert.spv"),
-                },
-                ShaderStage {
-                    stage: vk::ShaderStageFlags::FRAGMENT,
-                    spirv_code: shaders::get_shader("tonemap.frag.spv"),
-                },
-            ],
+            shaders::Shader::get_spirv(shaders::Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_spirv(shaders::Shader::TonemapFrag)),
             &[], // Fullscreen pass, no attributes
             0,   // No vk::ShaderStageFlags::vertex size
             vk::VertexInputRate::VERTEX,
@@ -530,11 +445,12 @@ impl InternalRendererVulkan {
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0, // No push constants
-            DepthTesting::DT_None,
+            DepthTesting::None,
             // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
+            #[cfg(feature = "debug_validation_names")]
             Some("Tonemap"),
         );
 
@@ -586,7 +502,7 @@ impl InternalRendererVulkan {
         lumal.create_compute_pipe(
             &mut pipes.radiance_pipe,
             None,
-            shaders::get_shader("radiance.comp.spv"),
+            shaders::Shader::get_spirv(shaders::Shader::RadianceComp),
             (std::mem::size_of::<i32>() * 2) as u32,
             vk::PipelineCreateFlags::DISPATCH_BASE,
             #[cfg(feature = "debug_validation_names")]
@@ -596,7 +512,7 @@ impl InternalRendererVulkan {
         lumal.create_compute_pipe(
             &mut pipes.update_grass_pipe,
             None,
-            shaders::get_shader("updateGrass.comp.spv"),
+            shaders::Shader::get_spirv(shaders::Shader::UpdateGrassComp),
             (std::mem::size_of::<vec2>() * 2 + std::mem::size_of::<f32>()) as u32,
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -606,7 +522,7 @@ impl InternalRendererVulkan {
         lumal.create_compute_pipe(
             &mut pipes.update_water_pipe,
             None,
-            shaders::get_shader("updateWater.comp.spv"),
+            shaders::Shader::get_spirv(shaders::Shader::UpdateWaterComp),
             (std::mem::size_of::<f32>() + std::mem::size_of::<vec2>() * 2) as u32,
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -616,7 +532,7 @@ impl InternalRendererVulkan {
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin2d_pipe,
             None,
-            shaders::get_shader("perlin2.comp.spv"),
+            shaders::Shader::get_spirv(shaders::Shader::Perlin2Comp),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -626,7 +542,7 @@ impl InternalRendererVulkan {
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin3d_pipe,
             None,
-            shaders::get_shader("perlin3.comp.spv"),
+            shaders::Shader::get_spirv(shaders::Shader::Perlin3Comp),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -636,7 +552,7 @@ impl InternalRendererVulkan {
         lumal.create_compute_pipe(
             &mut pipes.map_pipe,
             Some(pipes.map_push_layout),
-            shaders::get_shader("map.comp.spv"),
+            shaders::Shader::get_spirv(shaders::Shader::MapComp),
             (std::mem::size_of::<mat4>() + std::mem::size_of::<ivec4>()) as u32,
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -671,13 +587,13 @@ impl InternalRendererVulkan {
         lumal.destroy_raster_pipe(pipes.tonemap_pipe);
         unsafe { lumal.device.destroy_descriptor_set_layout(pipes.overlay_pipe.set_layout, None) };
 
-        lumal.destroy_compute_pipe(&mut pipes.radiance_pipe);
-        lumal.destroy_compute_pipe(&mut pipes.map_pipe);
+        lumal.destroy_compute_pipe(pipes.radiance_pipe);
+        lumal.destroy_compute_pipe(pipes.map_pipe);
         unsafe { lumal.device.destroy_descriptor_set_layout(pipes.map_push_layout, None) };
-        lumal.destroy_compute_pipe(&mut pipes.update_grass_pipe);
-        lumal.destroy_compute_pipe(&mut pipes.update_water_pipe);
-        lumal.destroy_compute_pipe(&mut pipes.gen_perlin2d_pipe); // generate noise for grass
-        lumal.destroy_compute_pipe(&mut pipes.gen_perlin3d_pipe); // generate noise for grass
+        lumal.destroy_compute_pipe(pipes.update_grass_pipe);
+        lumal.destroy_compute_pipe(pipes.update_water_pipe);
+        lumal.destroy_compute_pipe(pipes.gen_perlin2d_pipe); // generate noise for grass
+        lumal.destroy_compute_pipe(pipes.gen_perlin3d_pipe); // generate noise for grass
     }
 
     fn do_smth_all_descriptors<FunWithoutDebugNames>(

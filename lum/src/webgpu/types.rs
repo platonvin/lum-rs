@@ -1,7 +1,11 @@
 #![allow(non_camel_case_types)]
 //! module with types for wgpu backend, including Push Constant structs (PcName)
 
-use crate::{render_interface::FoliageDescriptionCreate, types::*, webgpu::wal};
+use crate::{
+    render_interface::{FoliageDescriptionCreate, ShaderSource},
+    types::*,
+    webgpu::wal,
+};
 use as_u8_slice_derive::AsU8Slice; // cast struct to u8 slice
 
 pub type InternalBlockId = i32;
@@ -20,10 +24,13 @@ pub struct InternalParticle {
     pub mat_id: InternalMatId,
 }
 
-impl FoliageDescriptionCreate for MeshFoliageDesc {
-    fn new(name: &str, vertices: usize, dencity: usize) -> Self {
+impl<'a> FoliageDescriptionCreate<'a> for MeshFoliageDesc<'a> {
+    fn new(code: ShaderSource<'a>, vertices: usize, dencity: usize) -> Self {
+        let ShaderSource::Wgsl(code) = code else {
+            panic!()
+        };
         Self {
-            code: shaders::get_wgsl(name),
+            code: code,
             vertices: vertices as u32,
             density: dencity as u32,
         }
@@ -31,8 +38,8 @@ impl FoliageDescriptionCreate for MeshFoliageDesc {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct MeshFoliageDesc {
-    pub code: &'static str,
+pub struct MeshFoliageDesc<'a> {
+    pub code: &'a str,
 
     // Stored separately cause im fell in love with ecs
     // pub pipe: lumal::RasterPipe,

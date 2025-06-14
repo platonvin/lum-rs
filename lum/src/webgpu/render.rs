@@ -17,16 +17,13 @@ use crate::{
 use as_u8_slice_derive::AsU8Slice;
 use containers::{
     array3d::{Array3DView, Array3DViewMut},
-    Arena, Array3D, BitArray3d,
+    Arena, BitArray3d,
 };
 use qvek::{
     i16vec3, ivec3, ivec4, uvec2, uvec3, vec2, vec3, vec4,
     vek::{Clamp, Vec3},
 };
-use std::{
-    mem::{size_of, transmute},
-    time::Instant,
-};
+use std::mem::{size_of, transmute};
 use wgpu::{
     BufferSize, Color, ComputePassDescriptor, Extent3d, Origin3d, TexelCopyBufferInfo,
     TexelCopyTextureInfo, COPY_BYTES_PER_ROW_ALIGNMENT,
@@ -158,7 +155,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     pub fn start_frame(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let now = Instant::now();
+            let now = std::time::Instant::now();
             let delta = now - self.last_time;
             self.delta_time = (delta.subsec_nanos() as f64 / 1e9_f64) as f32;
             self.last_time = now;
@@ -1046,8 +1043,8 @@ impl<'window> RendererWgpu<'window> {
                             if (current_block as u32) < this.static_block_palette_size {
                                 // static
                                 //add to copy queue
-                                let src_block = this.index_block_xy(current_block as usize);
-                                let dst_block = this.index_block_xy(this.palette_counter);
+                                let _src_block = this.index_block_xy(current_block as usize);
+                                let _dst_block = this.index_block_xy(this.palette_counter);
 
                                 // do image copy on for non-zero-src blocks. Other things still done for every allocated block
                                 // because zeroing is fast
@@ -2176,23 +2173,23 @@ impl<'window> RendererWgpu<'window> {
     }
 }
 
-pub struct SimpleFoliageDescriptionBuilder {
-    foliage_descriptions: Vec<MeshFoliageDesc>,
+pub struct SimpleFoliageDescriptionBuilder<'a> {
+    foliage_descriptions: Vec<MeshFoliageDesc<'a>>,
 }
 
 // impl very exact thing
-impl FoliageDescriptionBuilder<MeshFoliageDesc> for SimpleFoliageDescriptionBuilder {
+impl<'a> FoliageDescriptionBuilder<MeshFoliageDesc<'a>> for SimpleFoliageDescriptionBuilder<'a> {
     fn new() -> Self {
         Self {
             foliage_descriptions: vec![],
         }
     }
-    fn load_foliage(&mut self, foliage: MeshFoliageDesc) -> MeshFoliage {
+    fn load_foliage(&mut self, foliage: MeshFoliageDesc<'a>) -> MeshFoliage {
         let index = self.foliage_descriptions.len() as u32;
         self.foliage_descriptions.push(foliage);
         index as MeshFoliage
     }
-    fn build(self) -> Vec<MeshFoliageDesc> {
+    fn build(self) -> Vec<MeshFoliageDesc<'a>> {
         self.foliage_descriptions
     }
 }
@@ -2206,18 +2203,17 @@ impl FoliageDescriptionBuilder<MeshFoliageDesc> for SimpleFoliageDescriptionBuil
 // * done this way for simplicity (aka pre-counting size)
 // **: Lum is not trying to be general-purpose engine at all. Some very basic parts that are expected from game engine
 // are and will forever be missing. You cant make fast abstraction on top of everything.
-impl<'window> RendererInterface for RendererWgpu<'window> {
-    type FoliageDescription = MeshFoliageDesc;
-    type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder;
+impl<'window> RendererInterface<'window> for RendererWgpu<'window> {
+    type FoliageDescription = MeshFoliageDesc<'window>;
+    type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder<'window>;
     type InternalBlockId = InternalBlockId;
 
     fn new(
         settings: &Settings,
-        window: Window,
+        window: std::sync::Arc<Window>,
         size: PhysicalSize<u32>,
-        foliages: &[MeshFoliageDesc],
+        foliages: &[MeshFoliageDesc<'window>],
     ) -> Self {
-        let size = window.inner_size();
         Self {
             renderer: InternalRendererWebGPU::new(settings, window, size, foliages.to_vec()),
             block_que: vec![],
@@ -2235,7 +2231,7 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         settings: &Settings,
         window: std::sync::Arc<Window>,
         size: PhysicalSize<u32>,
-        foliages: &[MeshFoliageDesc],
+        foliages: &[MeshFoliageDesc<'window>],
     ) -> Self {
         Self {
             renderer: InternalRendererWebGPU::new_async(settings, window, size, foliages.to_vec())

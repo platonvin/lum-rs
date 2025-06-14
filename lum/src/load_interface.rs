@@ -1,5 +1,5 @@
 use crate::sBLOCK_SIZE;
-use crate::types::{ivec3, u8vec3, uvec3, BlockId, MeshModel, Voxel};
+use crate::types::{ivec3, u8vec3, uvec3, BlockId, Voxel};
 use qvek::vek::num_traits::{One, Zero};
 
 #[repr(C)]

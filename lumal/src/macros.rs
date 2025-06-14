@@ -1,4 +1,5 @@
-// pub
+//! Various macros used by Lumal
+
 #[macro_export]
 macro_rules! function {
     () => {{

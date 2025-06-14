@@ -1,6 +1,6 @@
 use lumal::vk;
 
-impl super::InternalRendererVulkan {
+impl<'a> super::InternalRendererVulkan<'a> {
     pub fn gen_perlin_2d(&mut self) {
         let cmb = self.lumal.begin_single_time_command_buffer();
 
@@ -58,11 +58,11 @@ impl super::InternalRendererVulkan {
     pub fn gen_perlin_3d(&mut self) {
         let lumal = &mut self.lumal;
 
-        let mut cmb = lumal.begin_single_time_command_buffer();
+        let cmb = lumal.begin_single_time_command_buffer();
 
         let pipe = &self.pipes.gen_perlin3d_pipe;
 
-        lumal.bind_compute_pipe(&mut cmb, pipe);
+        lumal.bind_compute_pipe(&cmb, pipe);
 
         // bind sets
         // place barriers

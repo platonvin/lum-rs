@@ -6,6 +6,7 @@
 #![feature(optimize_attribute)]
 #![feature(const_type_id)]
 #![feature(default_field_values)]
+#![feature(const_slice_make_iter)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 #![warn(missing_docs)]
@@ -14,7 +15,7 @@
 // Rust is so good that figuring it out only took 1 hour
 
 pub mod barriers;
-pub mod blit_copy;
+// pub mod blit_copy;
 pub mod buffers;
 pub mod descriptors;
 pub mod images;
@@ -47,6 +48,7 @@ use std::{
     process::exit,
 };
 use winit::{
+    dpi::PhysicalSize,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,
 };
@@ -54,10 +56,10 @@ use winit::{
 const VALIDATION_LAYERS: &CStr = c"VK_LAYER_KHRONOS_validation";
 const LUNARG_MONITOR_LAYER: &CStr = c"VK_LAYER_LUNARG_monitor";
 /// The required device extensions.
-const DEVICE_EXTENSIONS: &[&CStr] = &[
-    vk::KHR_SWAPCHAIN_NAME,
-    vk::EXT_HOST_QUERY_RESET_NAME,
-    vk::KHR_PUSH_DESCRIPTOR_NAME,
+const REQUIRED_DEVICE_EXTENSIONS: &[VkExtName] = &[
+    VkExtName::from_str("VK_KHR_swapchain\0"),
+    VkExtName::from_str("VK_EXT_host_query_reset\0"),
+    VkExtName::from_str("VK_KHR_push_descriptor\0"),
 ];
 /// Vulkan SDK version that started requiring the portability subset extension for macOS.
 const PORTABILITY_MACOS_VERSION: ConformanceVersion = ConformanceVersion {
@@ -72,7 +74,9 @@ const DEFAULT_FRAMES_IN_FLIGHT: usize = 2;
 /// Simple vk::Buffer wrapper
 #[derive(Debug)]
 pub struct Buffer {
+    /// Vulkan buffer
     pub buffer: vk::Buffer,
+    /// A for the buffer
     pub allocation: vma::Allocation,
 }
 impl Default for Buffer {
@@ -84,14 +88,21 @@ impl Default for Buffer {
     }
 }
 
+/// Simple vk::Image + vk::ImageView + some metadata wrapper
 #[derive(Debug)]
 pub struct Image {
+    /// Vulkan image
     pub image: vk::Image,
+    /// Allocation for the image
     pub allocation: vma::Allocation,
+    /// "default" (fullsize all aspects) view to the image
     pub view: vk::ImageView,
     // TODO: can we just keep everything in GENERAL?
+    /// Current format of the image
     pub format: vk::Format,
+    /// Aspects of the image
     pub aspect: vk::ImageAspectFlags,
+    /// Size of the image
     pub extent: vk::Extent3D,
 }
 impl Default for Image {
@@ -107,61 +118,85 @@ impl Default for Image {
     }
 }
 
-// #[derive(Default)]
+/// Wrapper around rasterization vk::Pipeline with some metadata, used for simplication of managing pipelines
 #[derive(Clone, Debug, Default)]
 pub struct RasterPipe {
+    /// Pipeline of this pipe
     pub line: vk::Pipeline,
+    /// Pipeline Layout for the pipeline of this pipe
     pub layout: vk::PipelineLayout,
-    // WHERE IS MY FUCKING DEFAULT VALUE WHY NO ONE WRITES BINDINGS THAT JUST WORK
+    /// FIF amount of descriptor sets to cover CPU-GPU and GPU resources
+    /// we move to next set every frame to ensure no concurrent use of the same resource
+    // TODO: LCM ??
     pub sets: Ring<vk::DescriptorSet>,
+    /// Descriptor Set Layout of each set in sets
     pub set_layout: vk::DescriptorSetLayout,
-    pub render_pass: vk::RenderPass, // We don't need to store it in here but why not
+    /// Renderpass in which this Pipe is going to be used.
+    ///
+    /// We don't strictly have to store it here, but it simplifies things
+    pub renderpass: vk::RenderPass,
+    /// Index of the subpass, which this Pipe is going to be used in that renderpass
     pub subpass_id: i32,
 }
 
-// #[derive(Default)]
+/// Wrapper around Compute vk::Pipeline with some metadata, used for simplication of managing pipelines
 #[derive(Clone, Default)]
 pub struct ComputePipe {
+    /// Pipeline of this pipe
     pub line: vk::Pipeline,
+    /// Pipeline Layout for the pipeline of this pipe
     pub line_layout: vk::PipelineLayout,
+    /// FIF amount of descriptor sets to cover CPU-GPU and GPU resources
+    /// we move to next set every frame to ensure no concurrent use of the same resource
+    // TODO: LCM ??
     pub sets: Ring<vk::DescriptorSet>,
+    /// Descriptor Set Layout of each set in sets
     pub set_layout: vk::DescriptorSetLayout,
 }
 
-// Structure for RenderPass
+/// Wrapper around Vulkan renderpass with some metadata
 #[derive(Default)]
 pub struct RenderPass {
-    pub clear_colors: Vec<vk::ClearValue>,   // Colors to clear
-    pub framebuffers: Ring<vk::Framebuffer>, // Framebuffers for the pass
-    pub extent: vk::Extent2D,                // Extent of the render pass
-    pub render_pass: vk::RenderPass,         // The actual RenderPass object
+    /// The actual vk::RenderPass object
+    pub render_pass: vk::RenderPass,
+    /// ClearColor values for each attachment in this renderpass
+    /// LoadStoreOp::Clear will use them
+    pub clear_colors: Vec<vk::ClearValue>,
+    /// Framebuffers containing views to all attachments
+    ///
+    /// there is lcm of them, to cover every combination of attachements
+    pub framebuffers: Ring<vk::Framebuffer>,
+    /// Size of every attachment in the renderpass
+    pub extent: vk::Extent2D,
 }
 
-// Structure for SwapChainSupportDetails
-pub struct SwapChainSupportDetails {
-    pub capabilities: vk::SurfaceCapabilitiesKHR,
-    pub formats: Vec<vk::SurfaceFormatKHR>,
-    pub present_modes: Vec<vk::PresentModeKHR>,
-}
+// // Structure for SwapChainSupportDetails
+// pub(crate) struct SwapChainSupportDetails {
+//     pub capabilities: vk::SurfaceCapabilitiesKHR,
+//     pub formats: Vec<vk::SurfaceFormatKHR>,
+//     pub present_modes: Vec<vk::PresentModeKHR>,
+// }
 
-impl SwapChainSupportDetails {
-    pub fn is_suitable(&self) -> bool {
-        !self.formats.is_empty() && !self.present_modes.is_empty()
-    }
-}
+// impl SwapChainSupportDetails {
+//     pub fn is_suitable(&self) -> bool {
+//         !self.formats.is_empty() && !self.present_modes.is_empty()
+//     }
+// }
 
-// Structure for Settings
+/// Settings for some runtime properties of Lumal
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LumalSettings {
+    /// how many timestamps to allocate (currently unused)
     pub timestamp_count: i32 = 0,
-    // Same as desired frame latency in wgpu
-    // also means how many resources are going to be in Rings for CPU-GPU resources
-    // also means "how many frames might there be in flight at the same time"
+    /// Same as desired frame latency in wgpu
+    /// also means how many resources are going to be in Rings for CPU-GPU resources
+    /// also means "how many frames might there be in flight at the same time"
     pub fif: usize = DEFAULT_FRAMES_IN_FLIGHT,
+    /// FIFO / Mailbox
     pub vsync: bool = false,
-    // if renderer starts fullscreen initially. There is nothing stopping user from going into fullscreen / windowed mode after
-    pub fullscreen: bool = false,
+    /// Wether to enable validation layers
     pub debug: bool = false,
+    /// wether to profile (with timestamps (currently unused))
     pub profile: bool = false,
     // pub device_features: vk::PhysicalDeviceFeatures,
     // pub device_features11: vk::PhysicalDeviceVulkan11Features,
@@ -241,12 +276,18 @@ impl DescriptorCounter {
 }
 
 // TODO: not copy? or Copy image?
+/// Request for destroying an Image (after some time)
 #[derive(Default, Debug)]
 pub struct ImageDeletion {
+    /// vk::Image to destroy
     pub image: vk::Image,
+    /// Allocation of that image
     pub allocation: vma::Allocation,
+    /// View to that image
     pub view: vk::ImageView, // Main view
-    // pub mip_views: Vec<vk::ImageView>, // Vec for mip views
+    /// How many frames (including this one) should the image be kept alive for.
+    ///
+    /// This is needed becuase immediately destroying image will make it invalid for already in flight frames
     pub lifetime: i32,
 }
 
@@ -255,39 +296,63 @@ impl Clone for ImageDeletion {
         Self {
             image: self.image,
             view: self.view,
-            // mip_views: self.mip_views.clone(),
             lifetime: self.lifetime,
-            allocation: vma::Allocation::default(),
+            // TODO:
+            allocation: unsafe { std::ptr::read(&self.allocation) },
         }
     }
 }
 
-// TODO: not copy? or Copy buffer
+/// Request for destroying a Image (after some time)
 #[derive(Default, Debug)]
 pub struct BufferDeletion {
+    /// Lumal Buffer to destroy
     pub buffer: Buffer,
+    /// How many frames (including this one) should the buffer be kept alive for.
+    ///
+    /// This is needed becuase immediately destroying buffer will make it invalid for already in flight frames
     pub lifetime: i32,
 }
 
 pub struct Renderer {
+    /// Vulkan memory allocator (for buffer and images)
+    /// we do not allocate a lot in runtime so small overhead is fine
     pub allocator: vma::Allocator,
+    /// Settings for some runtime properties of Lumal
     pub settings: LumalSettings,
 
+    /// Current surface to render
     pub surface: vk::SurfaceKHR,
+    /// Picked physical device
     pub physical_device: vk::PhysicalDevice,
+    /// Queue for rasterization and compute (maybe TODO: ?)
     pub graphics_queue: vk::Queue,
+    /// Queue for presentation to swapchain
     pub present_queue: vk::Queue,
+    /// picked swapchain format
     pub swapchain_format: vk::Format,
+    /// Size of the swapchain images, specified / queried from windows
     pub swapchain_extent: vk::Extent2D,
+    /// Swap chain of image used for presentation
     pub swapchain: vk::SwapchainKHR,
+    /// Actual images of the swapchain
     pub swapchain_images: Ring<crate::Image>,
+    /// Single (shared between all cmd buffers) CommandPool
     pub command_pool: vk::CommandPool,
+    /// Semaphore, which is signaled when corresponding swapchain image is available to render to (and present)
     pub image_available_semaphores: Ring<vk::Semaphore>,
+    /// Semaphore, which is signaled when corresponding frame is finished rendering
     pub render_finished_semaphores: Ring<vk::Semaphore>,
+    /// Fences for syncronizing different frames in flight
+    /// (example for FIF=2 - prevents CPU from starting frame 0 when CPU is done with frame 1, but GPU is not done with frame 0 yet (and GPU did not even start frame 1))
     pub in_flight_fences: Ring<vk::Fence>,
+    /// Pool for all descriptor sets - allocated once. Its size is precomputed for simplicity (so no runtime descriptor sets (re)allocation)
     pub descriptor_pool: vk::DescriptorPool,
-    pub entry: Entry, // internal vk entry point
+    /// Internal vk entry point
+    pub entry: Entry,
+    /// Internal Vulkan instance
     pub instance: Instance,
+    /// Internal Vulkan (logical) device
     pub device: Device,
     pub surface_loader: surface::Instance,
     pub swapchain_loader: swapchain::Device,
@@ -295,24 +360,29 @@ pub struct Renderer {
     pub debug_utils_device_loader: debug_utils::Device,
     pub push_descriptors_loader: push_descriptor::Device,
 
-    pub frame: i32, // global counter of rendered frame, mostly for internal use
+    /// Global counter of rendered frames, mostly for rng
+    pub frame: i32,
+    /// Current frame index in FIF. Equals to (frame % fif)
     pub image_index: u32,
+    /// If swapchain should be recreated (as soon as possible)
     pub should_recreate: bool,
+    /// Counts how many descriptors of each type are anounced for allocating descriptor pool
     pub descriptor_counter: DescriptorCounter,
+    /// Counts how many descriptor sets total are anounced
     pub descriptor_sets_count: u32,
 
-    pub main_command_buffers: Ring<vk::CommandBuffer>, // yep, copied
-    pub extra_command_buffers: Ring<vk::CommandBuffer>, // yep, copied
-
-    // Queues of defered (delayed) GPU-side deletion of resources
-    // this is not immediate because there are some frames in flight
-    // that might still be using resources
+    /// Queue of deferred (delayed) GPU-side deletion of buffers
+    /// this is not immediate because there are some frames in flight that might still be using resources
     pub buffer_deletion_queue: Vec<BufferDeletion>,
+    /// Queue of deferred (delayed) GPU-side deletion of images
+    /// this is not immediate because there are some frames in flight that might still be using resources
     pub image_deletion_queue: Vec<ImageDeletion>,
 }
 
 impl Renderer {
-    pub fn create(settings: &LumalSettings, window: &Window) -> Renderer {
+    /// Constructs new Renderer for rendering into given Window
+    /// You should probably construct it only once
+    pub fn new(settings: &LumalSettings, window: &Window, size: PhysicalSize<u32>) -> Renderer {
         println!("Starting app.");
 
         unsafe {
@@ -327,13 +397,8 @@ impl Renderer {
             )
             .unwrap();
             let physical_device = pick_physical_device(&instance, &entry, &surface);
-            let (device, graphics_queue, present_queue) = create_logical_device(
-                &entry,
-                &instance,
-                &surface,
-                &physical_device,
-                settings.debug,
-            );
+            let (device, graphics_queue, present_queue) =
+                create_logical_device(&entry, &instance, &surface, &physical_device);
 
             let allocator = Allocator::new(&AllocatorCreateDesc {
                 instance: instance.clone(),
@@ -348,7 +413,7 @@ impl Renderer {
             let (swapchain, swapchain_images, swapchain_extent, swapchain_format) =
                 create_swapchain(
                     settings,
-                    window,
+                    size,
                     &instance,
                     &entry,
                     &device,
@@ -356,18 +421,12 @@ impl Renderer {
                     &physical_device,
                 );
 
-            // these are handled by downstream user. Makes no sense to hardcode pipelines in renderer
-            // example.create_render_pass(&device, &mut data);
-            // example.create_pipeline(&device, &mut data);
-            // create_framebuffers(&device, &mut data);
-            // create_command_buffers(&device, &mut vulkan_data);
-
             let command_pool =
                 create_command_pool(&instance, &entry, &device, &surface, &physical_device);
             let (image_available_semaphores, render_finished_semaphores, in_flight_fences) =
                 create_sync_objects(&device);
 
-            // these are loading functions (separate because they might not be presented)
+            // these are loading functions (i mean this code is loading function pointers) (separate because they might not be presented)
             let surface_loader = surface::Instance::new(&entry, &instance);
             let swapchain_loader = swapchain::Device::new(&instance, &device);
             let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
@@ -402,8 +461,6 @@ impl Renderer {
                 descriptor_sets_count: 0,
                 image_index: 0, // cause just init'ed, no descriptor setup deferred yet
                 // delayed_descriptor_setups: vec![],
-                main_command_buffers: Default::default(),
-                extra_command_buffers: Default::default(),
                 buffer_deletion_queue: vec![],
                 image_deletion_queue: vec![],
 
@@ -416,12 +473,8 @@ impl Renderer {
         }
     }
 
-    pub unsafe fn create_instance(
-        window: &Window,
-        entry: &Entry,
-        validation: bool, // data: &mut Vulkan
-    ) -> Instance {
-        // Application Info
+    /// Creates Vulkan instance
+    pub fn create_instance(window: &Window, entry: &Entry, validation: bool) -> Instance {
         let application_info = vk::ApplicationInfo {
             p_application_name: c"renderer_vk".as_ptr(),
             application_version: vk::make_api_version(0, 1, 3, 0),
@@ -431,23 +484,24 @@ impl Renderer {
             ..Default::default()
         };
 
-        // Layers
-        let available_layers = entry
-            .enumerate_instance_layer_properties()
-            .unwrap()
-            .iter()
-            .map(|l| l.layer_name)
-            .collect::<HashSet<[i8; 256]>>();
+        let available_layers = unsafe {
+            entry
+                .enumerate_instance_layer_properties()
+                .unwrap()
+                .iter()
+                .map(|l| l.layer_name)
+                .collect::<HashSet<[i8; 256]>>()
+        };
 
-        let mut _validation_layers = VALIDATION_LAYERS
+        let mut validation_layers = VALIDATION_LAYERS
             .to_bytes_with_nul()
             .iter()
             .map(|c| *c as i8)
             .collect::<Vec<_>>();
-        _validation_layers.resize(256, 0);
-        let _validation_layers: [i8; 256] = _validation_layers.try_into().unwrap();
+        validation_layers.resize(256, 0);
+        let validation_layers: [i8; 256] = validation_layers.try_into().unwrap();
 
-        if validation && !available_layers.contains(&_validation_layers) {
+        if validation && !available_layers.contains(&validation_layers) {
             panic!("Validation layers requested but not supported");
         }
 
@@ -469,15 +523,14 @@ impl Renderer {
             layers.push(LUNARG_MONITOR_LAYER.as_ptr());
         }
 
-        // Extensions
         let mut extensions =
             ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
                 .unwrap()
                 .to_vec();
 
-        // Required by Vulkan SDK on macOS since 1.3.216.
+        // Required by Vulkan SDK on macOS since 1.3.216 (i actually have no idea how this works, i dont own any apple devices).
         let flags = if cfg!(target_os = "macos")
-            && entry.try_enumerate_instance_version().unwrap().unwrap()
+            && unsafe { entry.try_enumerate_instance_version().unwrap().unwrap() }
                 >= PORTABILITY_MACOS_VERSION.major as u32
         {
             println!("Enabling extensions for macOS portability.");
@@ -493,7 +546,6 @@ impl Renderer {
             extensions.push(EXT_DEBUG_UTILS_NAME.as_ptr());
         }
 
-        // Create
         let mut info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             enabled_layer_count: layers.len() as u32,
@@ -518,9 +570,11 @@ impl Renderer {
             info.p_next = &mut debug_info as *mut _ as *mut c_void;
         }
 
-        entry.create_instance(&info, None).unwrap()
+        unsafe { entry.create_instance(&info, None).unwrap() }
     }
-    /// buffers, images, pipelines - everything created manually should be destroyed manually before this funcall
+
+    /// Destroys the renderer.
+    /// Buffers, images, pipelines - everything created manually should be destroyed manually before this call
     pub unsafe fn destroy(mut self) {
         self.process_deletion_queues_untill_all_done();
         {
@@ -561,6 +615,8 @@ impl Renderer {
             .for_each(|s| self.device.destroy_semaphore(*s, None));
     }
 
+    /// Creates command buffer for single-time use (like loading resource in runtime)
+    /// You should use existing command buffers if possible (because likely you will stall pipeline waiting for this to execute)
     pub fn begin_single_time_command_buffer(&self) -> vk::CommandBuffer {
         let alloc_info = vk::CommandBufferAllocateInfo {
             level: vk::CommandBufferLevel::PRIMARY,
@@ -578,6 +634,7 @@ impl Renderer {
         command_buffer
     }
 
+    /// Executes single-time-use command buffer on graphics queue. Stalls the pipeline until done. You should avoid using it
     pub fn end_single_time_command_buffer(&self, command_buffer: vk::CommandBuffer) {
         unsafe {
             self.device.end_command_buffer(command_buffer).unwrap();
@@ -590,7 +647,7 @@ impl Renderer {
             ..Default::default()
         };
         unsafe {
-            // grapics is also capable of compute and transfer btw
+            // grapics is also capable of compute and transfer
             self.device
                 .queue_submit(self.graphics_queue, &[submit_info], vk::Fence::null())
                 .unwrap();
@@ -602,6 +659,7 @@ impl Renderer {
         }
     }
 
+    /// Binds given ComputePipe to the command buffer, along with current() descriptor set
     pub fn bind_compute_pipe(&self, cmb: &vk::CommandBuffer, pipe: &ComputePipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::COMPUTE, pipe.line);
@@ -616,6 +674,7 @@ impl Renderer {
         }
     }
 
+    /// Binds given RasterPipe to the command buffer, along with current() descriptor set
     pub fn bind_raster_pipe(&self, cmb: &vk::CommandBuffer, pipe: &RasterPipe) {
         unsafe {
             self.device.cmd_bind_pipeline(*cmb, vk::PipelineBindPoint::GRAPHICS, pipe.line);
@@ -630,8 +689,7 @@ impl Renderer {
         }
     }
 
-    // creates primary command buffer. Lumal does not interact with non-primary command buffers
-
+    /// creates primary command buffers. Lumal does not interact with non-primary command buffers
     pub fn create_command_buffer(&self) -> Ring<vk::CommandBuffer> {
         let info = vk::CommandBufferAllocateInfo {
             command_pool: self.command_pool,
@@ -643,6 +701,7 @@ impl Renderer {
         Ring::from_vec(unsafe { self.device.allocate_command_buffers(&info).unwrap() })
     }
 
+    /// Destroys command buffers (thin wrapper)
     pub fn destroy_command_buffer(&self, compute_command_buffers: &Ring<vk::CommandBuffer>) {
         unsafe {
             self.device
@@ -650,6 +709,7 @@ impl Renderer {
         };
     }
 
+    /// Create single-time-use cmd buffer and transition image layout with barriers. You should avoid using it
     pub fn transition_image_layout_single_time(
         &self,
         image: &Image,
@@ -686,6 +746,7 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
+    /// Create single-time-use cmd buffer and copy buffer data to an image. You should avoid using it
     pub fn copy_buffer_to_image_single_time(
         &self,
         buffer: vk::Buffer,
@@ -716,6 +777,7 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
+    /// Create single-time-use cmd buffer and copy buffer data to another buffer. You should avoid using it
     pub fn copy_buffer_to_buffer_single_time(
         &mut self,
         src_buffer: vk::Buffer,
@@ -738,6 +800,7 @@ impl Renderer {
         self.end_single_time_command_buffer(command_buffer);
     }
 
+    /// Iterate over all deletion, queues decrease lifetime of resources left, and destroy resources whose lifetime is over
     pub fn process_deletion_queues(&mut self) {
         let mut write_index = 0;
         let len = self.buffer_deletion_queue.len();
@@ -793,21 +856,21 @@ impl Renderer {
         self.image_deletion_queue.truncate(write_index);
     }
 
-    // The only use i can imagine for this is the indented one - freing resources
-
+    /// Process deletion queues untill all resources are destroyed
     pub fn process_deletion_queues_untill_all_done(&mut self) {
         while !self.buffer_deletion_queue.is_empty() || !self.image_deletion_queue.is_empty() {
             self.process_deletion_queues();
         }
     }
 
-    pub fn recreate_swapchain(&mut self, window: &Window) {
+    /// Recreates swapchain, its images and all dependent resources
+    pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
         // like catching an exception
         self.should_recreate = false;
 
-        let size = window.inner_size();
         if size.width == 0 || size.height == 0 {
             // like throwing an exception back
+            // TODO: do not render until recreated but invalid?
             self.should_recreate = true;
             return;
         }
@@ -820,59 +883,101 @@ impl Renderer {
             //     Some(ref mut fun) => fun(window),
             //     None => { /* not fun */ }
             // }
+            // TODO: investigate storing settings/arenas/lambdas more for auto-recreation
 
             self.destroy_swapchain();
 
             self.device.device_wait_idle().unwrap();
 
-            let (swapchain, swapchain_images, swapchain_extent, swapchain_format) =
-                create_swapchain(
-                    &self.settings,
-                    window,
-                    &self.instance,
-                    &self.entry,
-                    &self.device,
-                    &self.surface,
-                    &self.physical_device,
-                );
+            let (swapchain, images, extent, format) = create_swapchain(
+                &self.settings,
+                size,
+                &self.instance,
+                &self.entry,
+                &self.device,
+                &self.surface,
+                &self.physical_device,
+            );
 
             self.swapchain = swapchain;
-            self.swapchain_images = swapchain_images;
-            self.swapchain_extent = swapchain_extent;
-            self.swapchain_format = swapchain_format;
-
-            // create_swapchain_image_views(&self.device, &mut self).unwrap();
-            // create_command_pool(&self.instance, &self.device, &mut self).unwrap();
-
-            // match self.create_swapchain_dependent_resources {
-            //     Some(ref mut fun) => fun(window),
-            //     None => { /* not fun */ }
-            // }
+            self.swapchain_images = images;
+            self.swapchain_extent = extent;
+            self.swapchain_format = format;
 
             self.image_index = 0;
             self.should_recreate = false;
         };
     }
 
+    /// Finds first image format from given candidates that is supported by device (for given type, tiling and usage)
+    pub fn find_supported_format(
+        &self,
+        candidates: &[vk::Format],
+        ty: vk::ImageType,
+        tiling: vk::ImageTiling,
+        usage: vk::ImageUsageFlags,
+    ) -> Option<vk::Format> {
+        for &format in candidates {
+            let result = unsafe {
+                self.instance.get_physical_device_image_format_properties(
+                    self.physical_device,
+                    format,
+                    ty,
+                    tiling,
+                    usage,
+                    vk::ImageCreateFlags::empty(),
+                )
+            };
+
+            if result.is_ok() {
+                return Some(format);
+            }
+        }
+        None
+    }
+
+    /// Vulkan set viewport/scissors wrapper
+    pub fn cmd_set_viewport(&self, cmdbuf: vk::CommandBuffer, width: u32, height: u32) {
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: width as f32,
+            height: height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        };
+
+        let scissor = vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: vk::Extent2D { width, height },
+        };
+
+        unsafe {
+            self.device.cmd_set_viewport(cmdbuf, 0, &[viewport]);
+            self.device.cmd_set_scissor(cmdbuf, 0, &[scissor]);
+        }
+    }
+
+    /// Gives name(label) for Vulkan object, visible validation layers
+    #[cfg(feature = "debug_validation_names")]
     pub fn name_var(&self, o_type: vk::ObjectType, o: u64, o_name: &str) {
         let name_info = DebugUtilsObjectNameInfoEXT {
-            // TODO: get rid of vk, trait get_s_type & get_type_name
             object_type: o_type,
             object_handle: o,
             p_object_name: o_name.as_bytes().as_ptr() as *const i8,
             ..Default::default()
         };
         unsafe {
-            self.debug_utils_device_loader.set_debug_utils_object_name(&name_info);
+            self.debug_utils_device_loader.set_debug_utils_object_name(&name_info).unwrap();
         }
     }
 }
 
+/// Converts Rust type into vk::ObjectType enum. Used for giving names to Vulkan objects
 #[rustfmt::skip]
 pub fn get_vulkan_object_type<T: Any>(_object: &T) -> Option<vk::ObjectType> {
     let type_id = TypeId::of::<T>();
 
-    // use vk::ObjectType::*;
     use vk::Buffer;
     use vk::*;
 
@@ -916,13 +1021,14 @@ pub fn get_vulkan_object_type<T: Any>(_object: &T) -> Option<vk::ObjectType> {
     Some(vk::ObjectType::UNKNOWN)
 }
 
+/// Gives name (label) to Vulkan object, visible to validation lyaers.
 #[macro_export]
 macro_rules! set_debug_name {
     ($lumal:expr, $variable:expr, $debug_name:expr) => {{
+        #[cfg(feature = "debug_validation_names")]
         if let Some(debug_name) = $debug_name {
             let object_handle = $variable.as_raw();
-            // dbg!(std::any::type_name::<$variable>());
-            let object_type_option = $crate::get_vulkan_object_type($variable); // Call the function
+            let object_type_option = $crate::get_vulkan_object_type($variable);
 
             if let Some(object_type_vk) = object_type_option {
                 let object_type_debug_report = object_type_vk;
@@ -932,6 +1038,7 @@ macro_rules! set_debug_name {
     }};
 }
 
+/// Gives names (labels) to Vulkan objects, visible to validation lyaers.
 #[macro_export]
 macro_rules! set_debug_names {
     ($renderer:expr, $base_name:expr, $( ($object:expr, $suffix:expr) ),*) => {
@@ -951,27 +1058,8 @@ macro_rules! set_debug_names {
     };
 }
 
-/// The Vulkan handles and associated properties used by an example Vulkan app.
-// #[derive(Debug, Default)]
-// pub struct VulkanData {
-//     pub validation: bool,
-//     pub surface: vk::SurfaceKHR,
-//     pub physical_device: vk::PhysicalDevice,
-//     pub graphics_queue: vk::Queue,
-//     pub present_queue: vk::Queue,
-//     pub swapchain_format: vk::Format,
-//     pub swapchain_extent: vk::Extent2D,
-//     pub swapchain: vk::SwapchainKHR,
-//     pub swapchain_images: Ring<crate::Image>,
-//     pub command_pool: vk::CommandPool,
-//     pub image_available_semaphores: Ring<vk::Semaphore>,
-//     pub render_finished_semaphores: Ring<vk::Semaphore>,
-//     pub in_flight_fences: Ring<vk::Fence>,
-//     pub descriptor_pool: vk::DescriptorPool,
-// }
-
-/// Logs debug messages.
-
+/// Callback function called by validation layers to print messages
+// TODO: optional for binary size?
 extern "system" fn debug_callback(
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     type_: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -991,7 +1079,6 @@ extern "system" fn debug_callback(
 }
 
 /// Picks a suitable physical device.
-
 unsafe fn pick_physical_device(
     instance: &Instance,
     entry: &Entry,
@@ -999,12 +1086,12 @@ unsafe fn pick_physical_device(
 ) -> PhysicalDevice {
     for physical_device in instance.enumerate_physical_devices().unwrap() {
         let properties = instance.get_physical_device_properties(physical_device);
-        if let Err(error) = check_physical_device(instance, entry, surface, &physical_device) {
+        if let Err(err) = check_physical_device(instance, entry, surface, &physical_device) {
             //TODO:
             println!(
-                "Skipping physical device (`{}`): {}",
+                "Skipping physical device: `{}`, error: {}",
                 properties.device_name_as_c_str().unwrap().to_string_lossy(),
-                error
+                err
             );
         } else {
             println!(
@@ -1019,7 +1106,6 @@ unsafe fn pick_physical_device(
 }
 
 /// Checks that a physical device is suitable.
-
 unsafe fn check_physical_device(
     instance: &Instance,
     entry: &Entry,
@@ -1030,48 +1116,89 @@ unsafe fn check_physical_device(
     check_physical_device_extensions(instance, physical_device)?;
     let support = SwapchainSupport::get(instance, entry, physical_device, surface)?;
     if support.formats.is_empty() || support.present_modes.is_empty() {
-        // return Err(anyhow!(SuitabilityError("Insufficient swapchain support.")));
-        println!("Insufficient swapchain support");
-        exit(1);
+        return Err(vk::Result::ERROR_UNKNOWN);
     }
     Ok(())
 }
 
-/// Checks that a physical device supports the required device extensions.
+/// Wrapper around the raw Vulkan extension name
+#[derive(Copy, Clone)]
+struct VkExtName([i8; 256]);
+impl VkExtName {
+    /// Build from raw array returned by Vulkan
+    pub fn from_raw(raw: [i8; 256]) -> Self {
+        VkExtName(raw)
+    }
 
+    /// Build from &str
+    pub const fn from_str(s: &str) -> Self {
+        let bytes = s.as_bytes();
+        let mut arr = [0i8; 256];
+        let mut i = 0;
+        // copy up to the length of the string
+        while i < bytes.len() {
+            arr[i] = bytes[i] as i8;
+            i += 1;
+        }
+        // the byte at arr[bytes.len()] is still 0
+        VkExtName(arr)
+    }
+
+    /// Slice to "real" bytes - up to the first 0
+    fn bytes(&self) -> &[i8] {
+        let raw = &self.0;
+        let len = raw.iter().position(|&c| c == 0).unwrap_or(raw.len());
+        &raw[0..len]
+    }
+}
+
+// TODO: is this safe?
+impl std::fmt::Display for VkExtName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Get the slice up to the first null byte
+        let raw = self.bytes();
+
+        let bytes = raw.iter().map(|&b| b as u8).collect::<Vec<u8>>();
+        let name = std::str::from_utf8(&bytes).unwrap_or("<invalid utf8>");
+
+        write!(f, "{name:?}")
+    }
+}
+
+impl PartialEq for VkExtName {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes() == other.bytes()
+    }
+}
+impl Eq for VkExtName {}
+impl std::hash::Hash for VkExtName {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // only hash the bytes up to the null terminator
+        for &b in self.bytes() {
+            state.write_i8(b);
+        }
+    }
+}
+
+/// Checks that a physical device supports the required device extensions.
 unsafe fn check_physical_device_extensions(
     instance: &Instance,
     physical_device: &vk::PhysicalDevice,
 ) -> VkResult<()> {
-    let extensions = instance
+    let available_exts: HashSet<VkExtName> = instance
         .enumerate_device_extension_properties(*physical_device)?
         .iter()
-        .map(|e| e.extension_name)
+        .map(|prop| VkExtName::from_raw(prop.extension_name))
         .collect::<HashSet<_>>();
 
-    // Check if all required extensions are supported
-    for required_ext in DEVICE_EXTENSIONS {
-        let required_bytes = required_ext.to_bytes();
-        let required_len = required_bytes.len();
-
-        // Check if any extension in the set matches our required extension
-        let extension_found = extensions.iter().any(|ext| {
-            // Compare characters for the length of required_bytes
-            for i in 0..required_len {
-                if ext[i] != required_bytes[i] as i8 {
-                    return false;
-                }
+    for &req in REQUIRED_DEVICE_EXTENSIONS.iter() {
+        if !available_exts.contains(&req) {
+            eprintln!("Missing required extension: {}", &req);
+            eprintln!("Available extensions:");
+            for ext in &available_exts {
+                let bytes: Vec<u8> = ext.bytes().iter().map(|&c| c as u8).collect();
+                eprintln!("  - {}", String::from_utf8_lossy(&bytes));
             }
-            // Check if the extension name ends with a null terminator
-            ext[required_len] == 0
-        });
-
-        if !extension_found {
-            println!(
-                "Missing required device extension: {:?}",
-                required_ext.to_bytes()
-            );
-            println!("all extensions: {extensions:?}");
             exit(34);
         }
     }
@@ -1080,14 +1207,11 @@ unsafe fn check_physical_device_extensions(
 }
 
 /// Creates a logical device for the picked physical device.
-#[allow(unused_variables)]
-
 unsafe fn create_logical_device(
     entry: &Entry,
     instance: &Instance,
     surface: &SurfaceKHR,
     physical_device: &PhysicalDevice,
-    validation: bool,
 ) -> (Device, Queue, Queue) {
     let indices = QueueFamilyIndices::get(instance, entry, surface, physical_device).unwrap();
 
@@ -1106,13 +1230,8 @@ unsafe fn create_logical_device(
         })
         .collect::<Vec<_>>();
 
-    let layers = if validation {
-        vec![VALIDATION_LAYERS.as_ptr()]
-    } else {
-        vec![]
-    };
-
-    let mut extensions = DEVICE_EXTENSIONS.iter().map(|n| n.as_ptr()).collect::<Vec<_>>();
+    let mut extensions =
+        REQUIRED_DEVICE_EXTENSIONS.iter().map(|n| n.0.as_ptr()).collect::<Vec<_>>();
 
     // Required by Vulkan SDK on macOS since 1.3.216.
     if cfg!(target_os = "macos")
@@ -1155,8 +1274,6 @@ unsafe fn create_logical_device(
     let info = vk::DeviceCreateInfo {
         queue_create_info_count: queue_infos.len() as u32,
         p_queue_create_infos: queue_infos.as_ptr(),
-        // enabled_layer_count: layers.len() as u32,
-        // pp_enabled_layer_names: layers.as_ptr(),
         enabled_extension_count: extensions.len() as u32,
         pp_enabled_extension_names: extensions.as_ptr(),
         p_next: &mut features2 as *mut vk::PhysicalDeviceFeatures2 as *mut c_void,
@@ -1172,10 +1289,9 @@ unsafe fn create_logical_device(
 }
 
 /// Creates a swapchain and swapchain images.
-
 unsafe fn create_swapchain(
     settings: &LumalSettings,
-    window: &Window,
+    size: PhysicalSize<u32>,
     instance: &Instance,
     entry: &Entry,
     device: &Device,
@@ -1186,7 +1302,7 @@ unsafe fn create_swapchain(
     let support = SwapchainSupport::get(instance, entry, physical_device, surface).unwrap();
     let surface_format = get_swapchain_surface_format(&support.formats);
     let present_mode = get_swapchain_present_mode(&support.present_modes);
-    let extent = get_swapchain_extent(window, support.capabilities);
+    let extent = get_swapchain_extent(size, support.capabilities);
 
     let max_image_count = if support.capabilities.max_image_count != 0 {
         support.capabilities.max_image_count
@@ -1195,10 +1311,6 @@ unsafe fn create_swapchain(
     };
     let image_count =
         ((support.capabilities.min_image_count).max(settings.fif as u32)).min(max_image_count);
-
-    dbg!(support.capabilities.min_image_count);
-    dbg!(support.capabilities.max_image_count);
-    dbg!(image_count);
 
     let mut queue_family_indices = vec![];
     let image_sharing_mode = if indices.graphics != indices.present {
@@ -1237,6 +1349,7 @@ unsafe fn create_swapchain(
             .iter()
             .enumerate()
             .map(|(i, vk_img)| {
+                // TODO: enumerate only when feature flag?
                 let components = vk::ComponentMapping {
                     r: vk::ComponentSwizzle::IDENTITY,
                     g: vk::ComponentSwizzle::IDENTITY,
@@ -1290,10 +1403,8 @@ unsafe fn create_swapchain(
 
                 Image {
                     image: *vk_img,
-                    // fuck vk
                     allocation: vma::Allocation::default(),
                     view,
-                    // mip_views: vec![],
                     format: surface_format.format,
                     aspect: ImageAspectFlags::COLOR,
                     extent: vk::Extent3D {
@@ -1301,7 +1412,6 @@ unsafe fn create_swapchain(
                         height: extent.height,
                         depth: 1,
                     },
-                    // mip_levels: 0,
                 }
             })
             .collect(),
@@ -1310,8 +1420,7 @@ unsafe fn create_swapchain(
     (swapchain, swapchain_images, extent, surface_format.format)
 }
 
-/// Gets a suitable swapchain surface format.
-
+/// Gets a suitable swapchain surface format
 fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
     for f in formats {
         if f.format == vk::Format::B8G8R8A8_UNORM
@@ -1330,8 +1439,7 @@ fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::Surface
     formats[0]
 }
 
-/// Gets a suitable swapchain present mode.
-
+/// Gets a suitable swapchain present mode
 fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
     present_modes
         .iter()
@@ -1340,20 +1448,20 @@ fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::Prese
         .unwrap_or(vk::PresentModeKHR::FIFO)
 }
 
-/// Gets a suitable swapchain extent.
-#[rustfmt::skip]
-
-
-fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
+/// Gets a suitable swapchain extent
+fn get_swapchain_extent(
+    size: PhysicalSize<u32>,
+    capabilities: vk::SurfaceCapabilitiesKHR,
+) -> vk::Extent2D {
     if capabilities.current_extent.width != u32::MAX {
         capabilities.current_extent
     } else {
         vk::Extent2D {
-            width: window.inner_size().width.clamp(
+            width: size.width.clamp(
                 capabilities.min_image_extent.width,
                 capabilities.max_image_extent.width,
             ),
-            height: window.inner_size().height.clamp(
+            height: size.height.clamp(
                 capabilities.min_image_extent.height,
                 capabilities.max_image_extent.height,
             ),
@@ -1361,6 +1469,7 @@ fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKH
     }
 }
 
+/// Creates a command pool
 unsafe fn create_command_pool(
     instance: &Instance,
     entry: &Entry,
@@ -1368,7 +1477,7 @@ unsafe fn create_command_pool(
     surface: &SurfaceKHR,
     physical_device: &PhysicalDevice,
 ) -> CommandPool {
-    let indices = QueueFamilyIndices::get(instance, entry, &surface, physical_device).unwrap();
+    let indices = QueueFamilyIndices::get(instance, entry, surface, physical_device).unwrap();
     let info = vk::CommandPoolCreateInfo {
         flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
         queue_family_index: indices.graphics,
@@ -1389,8 +1498,8 @@ unsafe fn create_sync_objects(device: &Device) -> (Ring<Semaphore>, Ring<Semapho
     let mut render_finished_semaphores = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
     let mut in_flight_fences = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
     for i in 0..DEFAULT_FRAMES_IN_FLIGHT {
-        image_available_semaphores[i] = (device.create_semaphore(&semaphore_info, None).unwrap());
-        render_finished_semaphores[i] = (device.create_semaphore(&semaphore_info, None).unwrap());
+        image_available_semaphores[i] = device.create_semaphore(&semaphore_info, None).unwrap();
+        render_finished_semaphores[i] = device.create_semaphore(&semaphore_info, None).unwrap();
         in_flight_fences[i] = device.create_fence(&fence_info, None).unwrap();
     }
 
@@ -1468,22 +1577,4 @@ impl SwapchainSupport {
                 .get_physical_device_surface_present_modes(*physical_device, *surface)?,
         })
     }
-}
-
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-
-fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
-    let possible_error = "Failed to open file: ".to_owned() + path.as_ref().to_str().unwrap();
-    let mut file = File::open(path).expect(&possible_error);
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).expect("Failed to read file");
-
-    assert!(
-        buffer.len() % 4 == 0,
-        "Shader file must be aligned to 4 bytes"
-    );
-
-    unsafe { std::slice::from_raw_parts(buffer.as_ptr(), buffer.len() / 4).to_vec() }
 }

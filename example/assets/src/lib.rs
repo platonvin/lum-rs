@@ -5,16 +5,21 @@ use lum::{
 
 include!(concat!(env!("OUT_DIR"), "/asset_enums.rs"));
 
+/// Returns Voxel and meshed (triangles - vertices + indices) data
+/// for a given block asset (slices aligned as 16)
 pub fn get_block(id: BlockAsset) -> BlockData<'static> {
     id.load()
 }
 
+/// Returns Voxel and meshed (triangles - vertices + indices) data
+/// for a given model asset (slices aligned as 16)
 pub fn get_model(id: ModelAsset) -> ModelData<'static> {
     id.load()
 }
 
+/// Returns scene block data (blocks slice is aligned as 16)
 pub fn get_scene() -> SceneData<'static> {
-    const SCENE_BYTES: &'static [u8] =
+    const SCENE_BYTES: &[u8] =
         include_bytes_aligned!(16, concat!(env!("CARGO_MANIFEST_DIR"), "/assets/scene"));
 
     const HEADER_SIZE: usize = size_of::<ivec3>();
@@ -45,11 +50,8 @@ pub fn get_scene() -> SceneData<'static> {
     }
 }
 
-/// Loads the embedded global material palette.
-/// Returns a static reference to an array of 256 materials.
+/// Returns material palette data (aligned as 16)
 pub fn get_palette() -> &'static [Material; 256] {
-    // The alignment of the Material struct is 4 bytes (from Vec3<f32>).
-    // Using 16-byte alignment for safety and potential SIMD performance.
     let bytes = include_bytes_aligned!(16, concat!(env!("OUT_DIR"), "/palette.bin"));
     unsafe { &*(bytes.as_ptr() as *const [Material; 256]) }
 }

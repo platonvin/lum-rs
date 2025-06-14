@@ -4,10 +4,7 @@ use crate::{
     load_interface::{BlockData, ModelData},
     BLOCK_SIZE,
 };
-use containers::{
-    array3d::{Array3DView, Array3DViewMut},
-    Array3D,
-};
+use containers::array3d::{Array3DView, Array3DViewMut};
 use qvek::{vec3, vek::FrustumPlanes};
 use winit::window::Window;
 
@@ -53,8 +50,8 @@ impl Default for Camera {
 
 #[derive(Debug, Clone, Copy)]
 pub struct SunLight {
-    light_transform: mat4,
-    light_dir: vec3,
+    pub light_transform: mat4,
+    pub light_dir: vec3,
 }
 impl Default for SunLight {
     fn default() -> Self {
@@ -118,30 +115,39 @@ pub trait FoliageDescriptionBuilder<FoliageDescType> {
     fn build(self) -> Vec<FoliageDescType>;
 }
 
-pub trait FoliageDescriptionCreate {
-    fn new(name: &str, vertices: usize, dencity: usize) -> Self;
+/// Represents a (compiled for Vulkan) shader module
+pub enum ShaderSource<'a> {
+    /// SPIR-V binary data for Vulkan.
+    SpirV(&'a [u8]),
+    /// WGSL string for WebGPU.
+    Wgsl(&'a str),
+}
+
+pub trait FoliageDescriptionCreate<'a> {
+    fn new(code: ShaderSource<'a>, vertices: usize, dencity: usize) -> Self;
 }
 
 // not over Vulkan, but over Lum needs
 // this is sync, async is automatically implemented by Rust
-pub trait RendererInterface {
-    type FoliageDescription: FoliageDescriptionCreate;
+pub trait RendererInterface<'a> {
+    type FoliageDescription: FoliageDescriptionCreate<'a>;
     type FoliageDescriptionBuilder: FoliageDescriptionBuilder<Self::FoliageDescription>;
 
     type InternalBlockId: From<MeshBlock>;
 
     fn new(
         settings: &super::Settings,
-        window: Window,
+        window: std::sync::Arc<Window>,
         size: winit::dpi::PhysicalSize<u32>,
         foliage: &[Self::FoliageDescription],
     ) -> Self;
-    async fn new_async(
+
+    fn new_async(
         settings: &super::Settings,
         window: std::sync::Arc<Window>,
         size: winit::dpi::PhysicalSize<u32>,
         foliages: &[Self::FoliageDescription],
-    ) -> Self;
+    ) -> impl std::future::Future<Output = Self>;
 
     fn destroy(self);
 
@@ -166,7 +172,6 @@ pub trait RendererInterface {
     fn load_liquid(&mut self, main_mat: MatId, foam_mat: MatId) -> MeshLiquid;
     fn unload_liquid(&mut self, liquid: MeshLiquid);
 
-    // fn load foliage
     fn unload_foliage(&mut self, foliage: MeshFoliage);
 
     fn start_frame(&mut self);

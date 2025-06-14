@@ -1,11 +1,13 @@
+//! Module for managing Pipes
+
 use crate::*;
 use crate::{ComputePipe, RasterPipe};
 use ash::vk::{self, CompareOp, StencilOp};
-use containers::Ring;
 use descriptors::*;
 
 impl Renderer {
-    pub fn destroy_compute_pipe(&mut self, pipe: &mut ComputePipe) {
+    /// Destroys ComputePipe
+    pub fn destroy_compute_pipe(&mut self, pipe: ComputePipe) {
         assert!(pipe.line != vk::Pipeline::null());
         assert!(pipe.line_layout != vk::PipelineLayout::null());
         assert!(pipe.set_layout != vk::DescriptorSetLayout::null());
@@ -17,15 +19,9 @@ impl Renderer {
                 .free_descriptor_sets(self.descriptor_pool, pipe.sets.as_slice())
                 .unwrap();
         }
-        // reset the whole thing. Its like raii but explicit
-        *pipe = ComputePipe {
-            line: vk::Pipeline::null(),
-            line_layout: vk::PipelineLayout::null(),
-            sets: Ring::new(0),
-            set_layout: vk::DescriptorSetLayout::null(),
-        };
     }
 
+    /// Destroys RasterPipe
     pub fn destroy_raster_pipe(&mut self, pipe: RasterPipe) {
         assert!(pipe.line != vk::Pipeline::null());
         assert!(pipe.layout != vk::PipelineLayout::null());
@@ -38,18 +34,10 @@ impl Renderer {
                 .free_descriptor_sets(self.descriptor_pool, pipe.sets.as_slice())
                 .unwrap();
         }
-        // reset the whole thing. Its like raii but explicit
-        // *pipe = RasterPipe {
-        //     line: vk::Pipeline::null(),
-        //     line_layout: vk::PipelineLayout::null(),
-        //     sets: Ring::new(0, vk::DescriptorSet::null()),
-        //     set_layout: vk::DescriptorSetLayout::null(),
-        //     render_pass: vk::RenderPass::null(),
-        //     subpass_id: 0,
-        // };
     }
 
-    // descriptors in extra_dynamic_layout are going to set 1, all others are going to set 0
+    /// Creates ComputePipe
+    /// dynamic descriptors are going to set 1, static are going to set 0
     pub fn create_compute_pipe(
         &self,
         pipe: &mut ComputePipe,
@@ -61,9 +49,7 @@ impl Renderer {
     ) {
         assert!(!spirv_code.is_empty());
 
-        // Shader stage info
         let (module, comp_shader_stage_info) = {
-            // Create Vulkan compute shader module
             let module = Self::load_shader_module(&self.device, spirv_code);
 
             set_debug_names!(self, debug_name, (&module, "Shader Module"));
@@ -80,17 +66,6 @@ impl Renderer {
                 },
             )
         };
-
-        // Push constant range
-        // let push_constant_range = if push_size > 0 {
-        //     Some(vk::PushConstantRange {
-        //         stage_flags: vk::ShaderStageFlags::COMPUTE,
-        //         offset: 0,
-        //         size: push_size,
-        //     })
-        // } else {
-        //     None
-        // };
 
         // Descriptor set layouts
         let mut used_dset_layouts = vec![pipe.set_layout];
@@ -156,11 +131,13 @@ impl Renderer {
     }
 
     // descriptors in extra_dynamic_layout are going to set 1, all others are going to set 0
+    /// Simple constructor for RasterPipe
     pub fn create_raster_pipe(
         &self,
         pipe: &mut RasterPipe,
         extra_dynamic_layout: Option<vk::DescriptorSetLayout>,
-        shader_stages: &[ShaderStage],
+        vertex_code: &[u8],
+        fragment_code: Option<&[u8]>,
         attr_desc: &[AttrFormOffs],
         stride: u32,
         input_rate: vk::VertexInputRate,
@@ -172,25 +149,25 @@ impl Renderer {
         depth_compare_op: vk::CompareOp,
         culling: vk::CullModeFlags,
         stencil: vk::StencilOpState,
-        debug_name: Option<&str>,
+        #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
-        // Create Vulkan shader stages
-        let mut modules_to_destroy = vec![];
-
-        let pipeline_shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = shader_stages
-            .iter()
-            .map(|stage| {
-                let module = Self::load_shader_module(&self.device, stage.spirv_code);
-                modules_to_destroy.push(module);
-
-                vk::PipelineShaderStageCreateInfo {
-                    stage: stage.stage,
-                    module,
-                    p_name: c"main".as_ptr(),
-                    ..Default::default()
-                }
-            })
-            .collect();
+        let vertex_module = Self::load_shader_module(&self.device, vertex_code);
+        let vertex_stage = vk::PipelineShaderStageCreateInfo {
+            stage: vk::ShaderStageFlags::VERTEX,
+            module: vertex_module,
+            p_name: c"main".as_ptr(),
+            ..Default::default()
+        };
+        let fragment_module =
+            fragment_code.map(|code| Self::load_shader_module(&self.device, code));
+        let fragment_stage = fragment_module.map(|module| vk::PipelineShaderStageCreateInfo {
+            stage: vk::ShaderStageFlags::FRAGMENT,
+            module,
+            p_name: c"main".as_ptr(),
+            ..Default::default()
+        });
+        let pipeline_stages: Vec<vk::PipelineShaderStageCreateInfo> =
+            std::iter::once(vertex_stage).chain(fragment_stage).collect(); // TODO: check asm of this functional style
 
         // Create color blend state
         let color_blend_attachments: Vec<vk::PipelineColorBlendAttachmentState> = blends
@@ -248,15 +225,6 @@ impl Renderer {
             })
             .collect();
 
-        let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
-            logic_op_enable: vk::FALSE,
-            logic_op: vk::LogicOp::COPY,
-            attachment_count: color_blend_attachments.len() as u32,
-            p_attachments: color_blend_attachments.as_ptr(),
-            blend_constants: [0.0; 4],
-            ..Default::default()
-        };
-
         // Just vec of enabled dynamic states
         let dynamic_states: Vec<vk::DynamicState> =
             vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
@@ -278,8 +246,12 @@ impl Renderer {
             offset: 0,
             size: push_size,
         };
-        for shader_stage in shader_stages {
-            push_range.stage_flags |= shader_stage.stage;
+        // for shader_stage in shader_stages {
+        //     push_range.stage_flags |= shader_stage.stage;
+        // }
+        push_range.stage_flags |= vk::ShaderStageFlags::VERTEX;
+        if fragment_code.is_some() {
+            push_range.stage_flags |= vk::ShaderStageFlags::VERTEX;
         }
 
         // Setup pipeline layout
@@ -287,7 +259,7 @@ impl Renderer {
             set_layout_count: used_dset_layouts.len() as u32,
             p_set_layouts: used_dset_layouts.as_ptr(),
             push_constant_range_count: (push_size > 0) as u32,
-            p_push_constant_ranges: if (push_size > 0) {
+            p_push_constant_ranges: if push_size > 0 {
                 &push_range
             } else {
                 std::ptr::null()
@@ -362,10 +334,10 @@ impl Renderer {
         };
 
         let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
-            depth_test_enable: (depth_test == DepthTesting::DT_Read
-                || depth_test == DepthTesting::DT_ReadWrite) as u32,
-            depth_write_enable: (depth_test == DepthTesting::DT_Write
-                || depth_test == DepthTesting::DT_ReadWrite) as u32,
+            depth_test_enable: (depth_test == DepthTesting::Read
+                || depth_test == DepthTesting::ReadWrite) as u32,
+            depth_write_enable: (depth_test == DepthTesting::Write
+                || depth_test == DepthTesting::ReadWrite) as u32,
             depth_compare_op,
             depth_bounds_test_enable: vk::FALSE,
             stencil_test_enable: !Self::stencil_is_empty(stencil) as u32,
@@ -387,8 +359,8 @@ impl Renderer {
 
         // Finalize pipeline creation
         let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
-            stage_count: pipeline_shader_stages.len() as u32,
-            p_stages: pipeline_shader_stages.as_ptr(),
+            stage_count: pipeline_stages.len() as u32,
+            p_stages: pipeline_stages.as_ptr(),
             p_vertex_input_state: &vertex_input_info,
             p_input_assembly_state: &input_assembly_state,
             p_tessellation_state: std::ptr::null(),
@@ -396,7 +368,7 @@ impl Renderer {
             p_rasterization_state: &rasterizer,
             p_multisample_state: &multisample_state,
             p_depth_stencil_state: {
-                if (depth_test == DepthTesting::DT_None && Self::stencil_is_empty(stencil)) {
+                if depth_test == DepthTesting::None && Self::stencil_is_empty(stencil) {
                     std::ptr::null()
                 } else {
                     &depth_stencil
@@ -405,7 +377,7 @@ impl Renderer {
             p_color_blend_state: &color_blend_state,
             p_dynamic_state: &dynamic_state,
             layout: pipeline_layout,
-            render_pass: pipe.render_pass, // you HAVE TO set id in advance
+            render_pass: pipe.renderpass, // you HAVE TO set id in advance
             subpass: pipe.subpass_id as u32, // you HAVE TO set it in advance
             base_pipeline_index: -1,
             ..Default::default()
@@ -417,15 +389,19 @@ impl Renderer {
                 .unwrap()
         }[0];
 
-        modules_to_destroy
-            .iter()
-            .for_each(|m| unsafe { self.device.destroy_shader_module(*m, None) });
+        unsafe {
+            self.device.destroy_shader_module(vertex_module, None);
+            if let Some(module) = fragment_module {
+                self.device.destroy_shader_module(module, None)
+            }
+        };
 
         // dots never meant anything]
         pipe.line = pipeline;
         pipe.layout = pipeline_layout;
 
         // give debug names to vulkan objects
+        #[cfg(feature = "debug_validation_names")]
         set_debug_names!(
             self,
             debug_name,
@@ -434,6 +410,7 @@ impl Renderer {
         );
     }
 
+    /// Helper function for determining if stencel test is doing anything
     fn stencil_is_empty(stencil: vk::StencilOpState) -> bool {
         (stencil.fail_op == StencilOp::KEEP)
             && (stencil.pass_op == StencilOp::KEEP)
@@ -444,48 +421,13 @@ impl Renderer {
             && (stencil.reference == 0)
     }
 
-    fn create_shader_module(&self, code: &[u8]) -> vk::ShaderModule {
-        let code_u32 =
-            unsafe { std::slice::from_raw_parts(code.as_ptr() as *const u32, code.len() / 4) };
-
-        let create_info = vk::ShaderModuleCreateInfo {
-            code_size: code.len(),
-            p_code: code_u32.as_ptr(),
-            ..Default::default()
-        };
-
-        unsafe {
-            self.device
-                .create_shader_module(&create_info, None)
-                .expect("Failed to create shader module")
-        }
-    }
-
-    // // Helper function for resolving shader paths
-    //
-    //
-    // fn resolve_shader_path(prefixes: &[&str], file_name: String) -> Option<std::path::PathBuf> {
-    //     for prefix in prefixes {
-    //         let candidate = std::path::Path::new(prefix).join(file_name.as_str());
-    //         if candidate.exists() {
-    //             return Some(candidate);
-    //         }
-    //     }
-    //     None
-    // }
-
-    // Helper function for loading SPIR-V shader modules
-
+    /// Helper function for loading SPIR-V shader modules
     fn load_shader_module(device: &Device, spirv_code: &[u8]) -> vk::ShaderModule {
         let create_info = vk::ShaderModuleCreateInfo {
             code_size: spirv_code.len(),
             p_code: spirv_code.as_ptr() as *const u32,
             ..Default::default()
         };
-        unsafe {
-            device
-                .create_shader_module(&create_info, None)
-                .expect("Failed to create shader module")
-        }
+        unsafe { device.create_shader_module(&create_info, None).unwrap() }
     }
 }

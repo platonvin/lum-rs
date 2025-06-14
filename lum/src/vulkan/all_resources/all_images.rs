@@ -7,7 +7,9 @@ use crate::{
     },
     Settings,
 };
-use lumal::{set_debug_names, vk, LumalSettings, Renderer};
+#[cfg(feature = "debug_validation_names")]
+use lumal::set_debug_names;
+use lumal::{vk, LumalSettings, Renderer};
 
 fn uvec3_to_extent3d(size: uvec3) -> vk::Extent3D {
     vk::Extent3D {
@@ -17,7 +19,7 @@ fn uvec3_to_extent3d(size: uvec3) -> vk::Extent3D {
     }
 }
 
-impl InternalRendererVulkan {
+impl<'a> InternalRendererVulkan<'a> {
     /// Creates bundle of all swapchain size INdependent images
     /// You DONT need to recreate them when swapchain resizes (so they are created only once)
     pub fn create_independent_images(
@@ -257,6 +259,8 @@ impl InternalRendererVulkan {
             };
             let stencil_view_for_ds =
                 unsafe { lumal.device.create_image_view(&view_info, None).unwrap() };
+
+            #[cfg(feature = "debug_validation_names")]
             set_debug_names!(
                 lumal,
                 Some("Stencil View for DS"),

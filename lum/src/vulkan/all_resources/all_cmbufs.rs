@@ -4,7 +4,7 @@ use crate::{
 };
 use lumal::{LumalSettings, Renderer};
 
-impl InternalRendererVulkan {
+impl<'a> InternalRendererVulkan<'a> {
     /// Creates all command buffer.
     pub fn create_all_command_buffers(
         lumal: &Renderer,

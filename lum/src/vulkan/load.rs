@@ -20,7 +20,7 @@ fn uvec3_to_extent3d(size: uvec3) -> vk::Extent3D {
     }
 }
 
-impl LoadInterface for InternalRendererVulkan {
+impl<'a> LoadInterface for InternalRendererVulkan<'a> {
     type Buffer = lumal::Buffer;
     type Image = lumal::Image;
     type BlockId = MeshBlock;
@@ -421,10 +421,15 @@ impl LoadInterface for InternalRendererVulkan {
         // self.block_palette_voxels[block_id as usize] = * /*some cast to BlockVoxels*/ block_data.voxels;
         let block = &mut self.block_palette_voxels[block_id as usize];
         //TODO: get rid of this repacking?
-        for_zyx!(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, |x, y, z| {
-            block[x as usize][y as usize][z as usize] =
-                block_data.voxels[x + sBLOCK_SIZE * y + sBLOCK_SIZE * sBLOCK_SIZE * z];
-        });
+        for_zyx!(
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            |x: usize, y: usize, z: usize| {
+                block[x][y][z] =
+                    block_data.voxels[x + sBLOCK_SIZE * y + sBLOCK_SIZE * sBLOCK_SIZE * z];
+            }
+        );
 
         let triangles = FaceBuffers {
             Pzz: IndexedVertices {

@@ -1,5 +1,5 @@
 use crate::{
-    types::{i8vec4, ivec4, mat4, AoLut, Particle},
+    types::{i8vec4, ivec4, AoLut, Particle},
     vulkan::{
         pc_types::{self, LightmapUBO},
         types::InternalBlockId,
@@ -10,7 +10,7 @@ use crate::{
 use lumal::{vk, LumalSettings, Renderer};
 use std::mem;
 
-impl InternalRendererVulkan {
+impl<'a> InternalRendererVulkan<'a> {
     /// Creates a bundle of all static buffers.
     pub fn create_all_buffers(
         lumal: &mut Renderer,
