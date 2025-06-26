@@ -10,18 +10,17 @@ struct UboData {
     wind_direction: vec2<f32>,
     timeseed: i32,
     delta_time: f32,
-}
-;
+};
 
 @group(0) @binding(0) var<uniform> ubo: UboData;
 @group(0) @binding(1) var water_state: texture_storage_2d<rgba32float, write>;
 
 fn calculate_height(local_pos: vec2<f32>, time: f32) -> f32 {
     var height = 0.0;
-    let direction = vec2<f32>(1.0, 1.0); // Consider making this a UBO or constant
+    let direction = vec2<f32>(1.0, 1.0);
     var ampl = 1.0;
     var freq = 1.0;
-    for (var i: i32 = 0; i < 18; i++) { // Loop adjusted to approximate < 20 with *= 1.15
+    for (var i: i32 = 0; i < 18; i++) {
         ampl *= 0.8;
         var current_direction = direction;
         current_direction.x += 0.1;
@@ -43,12 +42,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let ftime = f32(ubo.timeseed);
     let time = ftime / 30.0;
 
-    // pos *= 100000.0;
-
     height.x = calculate_height(pos / 1.01, time / 1.25);
     height.y = calculate_height(pos / 1.02, time / 1.5);
     height.z = calculate_height(pos / 1.03, time / 2.5);
     height.w = calculate_height(pos / 1.04, time / 3.5);
 
-    textureStore(water_state, pix, vec4<f32>(height)); // Storing only xy as format is rg32float
+    textureStore(water_state, pix, vec4<f32>(height));
 }

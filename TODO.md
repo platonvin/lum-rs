@@ -1,3 +1,5 @@
+IMPORTANT: Lum uses a RIGHT-HANDED coordinate system everywhere.
+
 todoy:
   docs
   code cleanup
@@ -14,9 +16,10 @@ todoy:
   single index / vertex buffer?
   merge models & blocks since they both are some sort of slot arenas
   block palette in image layout with array views
+  is ConstDims / RuntimeDims worth keeping?
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
-wgpui better pcnherit TODO from lum++
+inherit TODO from lum++
 try_into<Type>().unwrap() -> as Type 
 
 profile query

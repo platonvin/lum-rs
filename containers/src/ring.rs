@@ -1,7 +1,7 @@
 // vector that has index that moves by one untile reaches the end and then wraps
 // primarly used for CPU-GPU resources, where GPU operates on previous frame resources, and CPU operates on current (frame resources)
 
-use std::ops::{Index, IndexMut}; // lol
+use std::ops::{Index, IndexMut};
 
 #[derive(Debug)]
 pub struct Ring<T> {
@@ -40,10 +40,9 @@ impl<T: Clone> Ring<T> {
         }
     }
     /// Resizes the `Ring` and initializes new elements with `T::default()`.
-    /// Existing elements are moved to the new `data` array.
     pub fn resize_clone(&mut self, size: usize, value: T) {
         let mut new_data = (0..size).map(|_| value.clone()).collect::<Vec<_>>();
-        // Move existing data, up to the smaller of the old and new sizes.
+        // move existing data, up to the smaller of the old and new sizes
         let len = std::cmp::min(self.data.len(), size);
 
         for i in 0..len {
@@ -68,16 +67,11 @@ impl<T: Default> Ring<T> {
     /// Existing elements are moved to the new `data` array.
     pub fn resize(&mut self, size: usize) {
         let mut new_data = (0..size).map(|_| T::default()).collect::<Vec<_>>();
-        // Move existing data, up to the smaller of the old and new sizes.
+        // move existing data, up to the smaller of the old and new sizes
         let len = std::cmp::min(self.data.len(), size);
 
         for i in 0..len {
             new_data[i] = std::mem::replace(&mut self.data[i], T::default());
-        }
-
-        // Drop remaining elements from the old data if shrinking
-        if size < self.data.len() {
-            // No need to explicitly drop, Box will handle it when it goes out of scope
         }
 
         self.data = new_data.into_boxed_slice();

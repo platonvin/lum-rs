@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- Just a fullscreen canvas and Lum demo rendering to it -->
+
+<head>
+    <meta charset="utf-8">
+    <title>Lumal</title>
+    <style>
+        /* Specifying width / height is actually important, otherwise canvas infinitely grows (idk why) */
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="root">
+        <canvas class="main-canvas" id="lum_canvas"></canvas>
+    </div>
+
+    <script type="module">
+        import init from '/pkg/demo_lib.js';
+
+        async function startWasmApp() {
+            console.log("Initializing WASM...");
+            try {
+                await init('/pkg/demo_lib_bg.wasm');
+            } catch (e) {
+                console.error("Failed to load or initialize WASM:", e);
+            }
+        }
+
+        startWasmApp();
+    </script>
+</body>
+
+</html>

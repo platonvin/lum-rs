@@ -1,3 +1,9 @@
+const COLOR_ENCODE_VALUE: f32 = 1.0;
+const MAX_STEPS: i32 = 8;
+const TRESHOLD: f32 = 0.7;
+const MULTIPLIER: f32 = 1.7;
+const WORLD_SIZE: vec3<i32> = vec3<i32>(48, 48, 16);
+
 struct UboData {
     trans_w2s: mat4x4<f32>,
     campos: vec4<f32>,
@@ -31,15 +37,8 @@ struct FragmentOutput {
 @group(0) @binding(2) var smoke_depth_near: texture_2d<f32>;
 @group(0) @binding(3) var radianceCache: texture_3d<f32>;
 @group(0) @binding(4) var noise: texture_3d<f32>;
-@group(0) @binding(5) var linear_sampler_tiled: sampler; // Assuming linear filtering
-
+@group(0) @binding(5) var linear_sampler_tiled: sampler;
 @group(1) @binding(0) var<uniform> pc: Constants;
-
-const COLOR_ENCODE_VALUE: f32 = 1.0;
-const MAX_STEPS: i32 = 8;
-const TRESHOLD: f32 = 0.7;
-const MULTIPLIER: f32 = 1.7;
-const WORLD_SIZE: vec3<i32> = vec3<i32>(48, 48, 16);
 
 fn sample_probe(probe_ipos: vec3<i32>, direction: vec3<f32>) -> vec3<f32> {
     let probe_ipos_clamped = clamp(probe_ipos, vec3<i32>(0), WORLD_SIZE);
@@ -191,6 +190,11 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
 
     let step_size = diff / f32(MAX_STEPS);
 
+    //https://en.wikipedia.org/wiki/Beer%E2%80%93Lambert_law
+    //I = I0 * exp(-K * L)
+    //dI = -K*dL * I0 * exp(-K * L)
+    //In+1 = (1-denisty_n*ΔL) * In
+
     var I = 1.0;
     var position: vec3<f32>;
     var total_dencity = 0.0;
@@ -200,10 +204,11 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
     let time = 1.0;
     for (var i: i32 = 0; i < MAX_STEPS; i++) {
         fraction += step_size;
-        let pix: vec2<f32> = pos.xy;                          // pixel coords
+        let pix: vec2<f32> = pos.xy;
         let clip_pos: vec2<f32> = (pix / ubo.frame_size) * 2.0 - vec2<f32>(1.0, 1.0);
-        // let clip_pos = pos.xy;
+
         position = get_origin_from_depth(fraction, clip_pos);
+
         let voxel_pos = position;
         let noise_clip_pos = voxel_pos / 32.0;
         var noises: vec4<f32>;
@@ -224,7 +229,7 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
         let close_to_border = clamp(diff, 0.1, 16.0) / 16.0;
         var dencity = (noises.x + noises.y + noises.z - noises.w / close_to_border) / 2.0 - TRESHOLD;
         dencity = clamp(dencity, 0.0, TRESHOLD) * MULTIPLIER;
-        // dencity = 1.0;
+
         I = (1.0 - dencity * step_size) * I;
         total_dencity += dencity * step_size;
     }
@@ -232,11 +237,10 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
     // let final_light = sample_radiance_no_normal(position);
     var smoke_opacity = 1.0 - I;
     // smoke_opacity = diff / 10.0;
-    // smoke_opacity = clamp(diff, -100000.0, 100000.0);
     
 
     var out: FragmentOutput;
     out.smoke_color = vec4<f32>(encode_color(vec3f(0.15)), smoke_opacity);
-    // out.smoke_color = vec4<f32>(encode_color(vec3f(0.15)), 1.0);
+
     return out;
 }

@@ -12,10 +12,6 @@ struct UboData {
     delta_time: f32,
 };
 
-@group(0) @binding(0) var<uniform> ubo: UboData;
-// @group(0) @binding(1) var blocks: texture_3d<i32>;
-// @group(0) @binding(2) var blockPalette: texture_storage_3d<r32sint, write>; // Assuming write access
-
 struct InstanceInput {
     @location(0) posIn: vec3<f32>,
     @location(1) velIn: vec3<f32>,
@@ -28,7 +24,10 @@ struct VertexOutput {
     @location(0) @interpolate(flat) mat_norm: vec4<u32>,
 };
 
-// --- Define a standard 36-vertex cube (12 triangles) ---
+@group(0) @binding(0) var<uniform> ubo: UboData;
+// @group(0) @binding(1) var blocks: texture_3d<i32>;
+// @group(0) @binding(2) var blockPalette: texture_storage_3d<r32sint, write>;
+
 const CUBE_VERTICES: array<vec3<f32>, 36> = array<vec3<f32>, 36>(
     // +X face
     vec3<f32>(1, -1,  1), vec3<f32>(1, -1, -1), vec3<f32>(1,  1, -1),
@@ -82,18 +81,13 @@ fn main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) insta
     let corner = CUBE_VERTICES[vertex_index] * life_size;
     let world_pos = vec4<f32>(base_pos + corner, 1.0);
 
-    // project correctly
     var clip = ubo.trans_w2s * world_pos;
     clip.z = 1.0 + clip.z;
 
-
     var out: VertexOutput;
 
-    // let uv = vec2<f32>(f32((vertex_index << 1u) & 2u), f32(vertex_index & 2u));
-    // out.position = vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);;
     out.position = clip;
 
-    // pack material & normal
     let norm = CUBE_NORMALS[vertex_index];
     out.mat_norm = vec4<u32>(material_id, vec3<u32>(norm));
 

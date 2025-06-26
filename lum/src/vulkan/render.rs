@@ -4,7 +4,7 @@ use crate::{
     load_interface::{BlockData, ModelData},
     render_interface::{FoliageDescriptionCreate, ShaderSource},
     vulkan::{pc_types, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y},
-    *,
+    Settings, *,
 };
 use crate::{
     load_interface::LoadInterface, render_interface::RendererInterface, types::*, vulkan::types::*,
@@ -22,7 +22,7 @@ use winit::window::Window;
 
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
-impl<'a> InternalRendererVulkan<'a> {
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     fn update_camera(&mut self) {
         self.camera.update_camera(false);
     }
@@ -62,12 +62,12 @@ impl<'a> InternalRendererVulkan<'a> {
         border.min = ivec3::clamped(
             border.min,
             ivec3::zero(),
-            ivec3!(self.settings.world_size - 1),
+            ivec3!(self.settings.world_size.xyz() - 1),
         );
         border.max = ivec3::clamped(
             border.max,
             ivec3::zero(),
-            ivec3!(self.settings.world_size - 1),
+            ivec3!(self.settings.world_size.xyz() - 1),
         );
 
         for zz in border.min.z..=border.max.z {
@@ -166,10 +166,8 @@ impl<'a> InternalRendererVulkan<'a> {
 
         // like a hash_set, but optimized (no hashing, no collisions)
         // its literally 3d array of bools, each corresponding to "if set"
-        let mut visited = BitArray3d::<usize>::new_filled(
-            self.settings.world_size.x as usize,
-            self.settings.world_size.y as usize,
-            self.settings.world_size.z as usize,
+        let mut visited = BitArray3d::<usize, D>::new_filled(
+            self.settings.world_size,
             false, // each value in set corresponds to "if the block is already updated"
         );
 
@@ -183,10 +181,10 @@ impl<'a> InternalRendererVulkan<'a> {
 
         let mut pushed_radiance_count = 0;
         // push block into queue of update requests if the block has neighbours
-        for xx in (0 as TheType)..(self.settings.world_size.x as TheType) {
-            for yy in (0 as TheType)..(self.settings.world_size.y as TheType) {
+        for xx in (0 as TheType)..(self.settings.world_size.x() as TheType) {
+            for yy in (0 as TheType)..(self.settings.world_size.y() as TheType) {
                 // skip some blocks to reduce the number of requests
-                for zz in ((current_offset as TheType)..(self.settings.world_size.z as TheType))
+                for zz in ((current_offset as TheType)..(self.settings.world_size.z() as TheType))
                     .step_by(magic_number as usize)
                 {
                     // simple version that is also ~2/570 slower (so not much)
@@ -196,19 +194,19 @@ impl<'a> InternalRendererVulkan<'a> {
                                 // clamp has an assert inside LOL
                                 let x = (xx as TheType + dx)
                                     .max(0)
-                                    .min(self.settings.world_size.x as TheType - 1);
+                                    .min(self.settings.world_size.x() as TheType - 1);
                                 let y = (yy as TheType + dy)
                                     .max(0)
-                                    .min(self.settings.world_size.y as TheType - 1);
+                                    .min(self.settings.world_size.y() as TheType - 1);
                                 let z = (zz as TheType + dz)
                                     .max(0)
-                                    .min(self.settings.world_size.z as TheType - 1);
+                                    .min(self.settings.world_size.z() as TheType - 1);
                                 let block =
                                     self.current_world.get(x as usize, y as usize, z as usize);
 
-                                assert_assume!((block > 0) == (block != 0));
+                                assert_assume!((*block > 0) == (*block != 0));
 
-                                if block > 0 {
+                                if *block > 0 {
                                     visited.set(xx as usize, yy as usize, zz as usize, true);
                                     pushed_radiance_count += 1;
                                     //i want to
@@ -224,9 +222,9 @@ impl<'a> InternalRendererVulkan<'a> {
         self.radiance_updates.resize(pushed_radiance_count as usize, i8vec4::zero());
 
         let mut i = 0;
-        for zz in 0..self.settings.world_size.z {
-            for yy in 0..self.settings.world_size.y {
-                for xx in 0..self.settings.world_size.x {
+        for zz in 0..self.settings.world_size.z() {
+            for yy in 0..self.settings.world_size.y() {
+                for xx in 0..self.settings.world_size.x() {
                     if visited.get(xx as usize, yy as usize, zz as usize) {
                         assert_assume!(i < self.radiance_updates.len());
                         self.radiance_updates[i] = i8vec4!(xx, yy, zz, 0);
@@ -379,9 +377,9 @@ impl<'a> InternalRendererVulkan<'a> {
 
         let cam_shift = radiance_shift + 0;
 
-        if cam_shift.x.abs() >= self.settings.world_size.x as i32
-            || cam_shift.y.abs() >= self.settings.world_size.y as i32
-            || cam_shift.z.abs() >= self.settings.world_size.z as i32
+        if cam_shift.x.abs() >= self.settings.world_size.x() as i32
+            || cam_shift.y.abs() >= self.settings.world_size.y() as i32
+            || cam_shift.z.abs() >= self.settings.world_size.z() as i32
         {
             return; // then its pointless (zero-volume intersection). We can set it to zero os some pre-computed value in future, tho
         }
@@ -394,17 +392,17 @@ impl<'a> InternalRendererVulkan<'a> {
         };
 
         let self_src_offset = ivec3!(
-            process_axis(cam_shift.x, self.settings.world_size.x as i32).x,
-            process_axis(cam_shift.y, self.settings.world_size.y as i32).x,
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).x
+            process_axis(cam_shift.x, self.settings.world_size.x() as i32).x,
+            process_axis(cam_shift.y, self.settings.world_size.y() as i32).x,
+            process_axis(cam_shift.z, self.settings.world_size.z() as i32).x
         );
         let self_dst_offset = ivec3!(
-            process_axis(cam_shift.x, self.settings.world_size.x as i32).y,
-            process_axis(cam_shift.y, self.settings.world_size.y as i32).y,
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).y
+            process_axis(cam_shift.x, self.settings.world_size.x() as i32).y,
+            process_axis(cam_shift.y, self.settings.world_size.y() as i32).y,
+            process_axis(cam_shift.z, self.settings.world_size.z() as i32).y
         );
 
-        let intersection_size = self.settings.world_size
+        let intersection_size = uvec3!(self.settings.world_size.xyz())
             - uvec3!(
                 cam_shift.x.unsigned_abs(),
                 cam_shift.y.unsigned_abs(),
@@ -722,9 +720,9 @@ impl<'a> InternalRendererVulkan<'a> {
             },
             image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
             image_extent: vk::Extent3D {
-                width: self.settings.world_size.x,
-                height: self.settings.world_size.y,
-                depth: self.settings.world_size.z,
+                width: self.settings.world_size.x() as u32,
+                height: self.settings.world_size.y() as u32,
+                depth: self.settings.world_size.z() as u32,
             },
         };
 
@@ -1408,8 +1406,8 @@ impl<'a> InternalRendererVulkan<'a> {
             self.lumal.device.cmd_dispatch(
                 //2x8 2x8 1x1
                 *command_buffer,
-                (self.settings.world_size.x * 2).div_ceil(8),
-                (self.settings.world_size.y * 2).div_ceil(8),
+                (self.settings.world_size.x() * 2).div_ceil(8) as u32,
+                (self.settings.world_size.y() * 2).div_ceil(8) as u32,
                 1,
             );
         }
@@ -1449,8 +1447,8 @@ impl<'a> InternalRendererVulkan<'a> {
             self.lumal.device.cmd_dispatch(
                 //2x8 2x8 1x1
                 *command_buffer,
-                (self.settings.world_size.x * 2).div_ceil(8),
-                (self.settings.world_size.y * 2).div_ceil(8),
+                (self.settings.world_size.x() * 2).div_ceil(8) as u32,
+                (self.settings.world_size.y() * 2).div_ceil(8) as u32,
                 1,
             );
         }
@@ -1830,8 +1828,8 @@ pub struct RendererStorage {
 }
 
 // initialized fully working Renderer that can be used to draw voxels on screen
-pub struct RendererVulkan<'a> {
-    pub renderer: InternalRendererVulkan<'a>,
+pub struct RendererVulkan<'a, D: Dim3> {
+    pub renderer: InternalRendererVulkan<'a, D>,
     pub window: std::sync::Arc<Window>,
     pub block_que: Vec<BlockRenderRequest>,
     pub model_que: Vec<ModelRenderRequest>,
@@ -1896,7 +1894,7 @@ impl<'a> render_interface::FoliageDescriptionBuilder<MeshFoliageDescription<'a>>
     }
 }
 
-impl RendererVulkan<'_> {
+impl<'a, D: Dim3> RendererVulkan<'a, D> {
     /// Function to sort our requests by depth (unlike wgpu backend, where we sort by state. State change in Vulkan is fast)
     pub fn calculate_and_sort_by_cam_dist<Type>(rqueue: &mut [Type], camera_transform: mat4)
     where
@@ -1917,13 +1915,13 @@ impl RendererVulkan<'_> {
     }
 }
 
-impl<'a> RendererInterface<'a> for RendererVulkan<'a> {
+impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
     type FoliageDescription = MeshFoliageDescription<'a>;
     type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder<'a>;
     type InternalBlockId = InternalBlockId;
 
     fn new(
-        settings: &crate::Settings,
+        settings: &Settings<D>,
         window: std::sync::Arc<Window>,
         size: winit::dpi::PhysicalSize<u32>,
         foliage: &[Self::FoliageDescription],
@@ -1943,7 +1941,7 @@ impl<'a> RendererInterface<'a> for RendererVulkan<'a> {
     }
 
     async fn new_async(
-        _settings: &crate::Settings,
+        _settings: &Settings<D>,
         _window: std::sync::Arc<winit::window::Window>,
         _size: winit::dpi::PhysicalSize<u32>,
         _foliages: &[Self::FoliageDescription],
@@ -2028,9 +2026,9 @@ impl<'a> RendererInterface<'a> for RendererVulkan<'a> {
     // TODO: calculate distance here vs separate
     // TODO: check visibility here vs separate
     fn draw_world(&mut self) {
-        for zz in 0..self.renderer.settings.world_size.z {
-            for yy in 0..self.renderer.settings.world_size.y {
-                for xx in 0..self.renderer.settings.world_size.x {
+        for zz in 0..self.renderer.settings.world_size.z() {
+            for yy in 0..self.renderer.settings.world_size.y() {
+                for xx in 0..self.renderer.settings.world_size.x() {
                     let block = self.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
                     if block == 0 {
                         continue;
@@ -2215,11 +2213,11 @@ impl<'a> RendererInterface<'a> for RendererVulkan<'a> {
         self.renderer.end_frame(self.window.as_ref());
     }
 
-    fn get_world_blocks(&'_ self) -> Array3DView<'_, InternalBlockId, MeshBlock> {
+    fn get_world_blocks(&'_ self) -> Array3DView<'_, InternalBlockId, MeshBlock, D> {
         self.renderer.origin_world.as_view()
     }
 
-    fn get_world_blocks_mut(&'_ mut self) -> Array3DViewMut<'_, InternalBlockId, MeshBlock> {
+    fn get_world_blocks_mut(&'_ mut self) -> Array3DViewMut<'_, InternalBlockId, MeshBlock, D> {
         self.renderer.origin_world.as_view_mut()
     }
 

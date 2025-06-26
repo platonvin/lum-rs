@@ -6,6 +6,7 @@ use crate::{
     },
     Settings,
 };
+use containers::array3d::Dim3;
 use containers::Ring;
 use lumal::descriptors::{
     AttrFormOffs, BlendAttachment, DepthTesting, DescriptorInfo, DescriptorResource,
@@ -17,12 +18,12 @@ use std::mem::offset_of;
 // This file could be just data?
 // it is setting up all the descriptors/layouts for pipes and pipes themeselves
 
-impl<'a> InternalRendererVulkan<'a> {
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     /// Creates bundle of all pipes
     /// Most pipes are hardcoded, but foliage pipes are defined by shaders
     pub fn create_all_pipes(
         lumal: &mut Renderer,
-        lum_settings: &Settings,
+        lum_settings: &Settings<D>,
         _lumal_settings: &LumalSettings,
         buffers: &AllBuffers,
         iimages: &AllIndependentImages,
@@ -37,7 +38,7 @@ impl<'a> InternalRendererVulkan<'a> {
 
         // anounce (count) all descriptors
         Self::do_smth_all_descriptors(
-            &InternalRendererVulkan::anounce_descriptor_setup_wrapper,
+            &InternalRendererVulkan::<D>::anounce_descriptor_setup_wrapper,
             lumal,
             buffers,
             iimages,
@@ -53,7 +54,7 @@ impl<'a> InternalRendererVulkan<'a> {
 
         // allocate each descriptor set
         Self::do_smth_all_descriptors(
-            &InternalRendererVulkan::acutally_setup_descriptor_wrapper,
+            &InternalRendererVulkan::<D>::acutally_setup_descriptor_wrapper,
             lumal,
             buffers,
             iimages,

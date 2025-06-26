@@ -1,6 +1,5 @@
 #version 450 
 
-// layout (location = 0) out vec2 outUV;
 layout (location = 0) out float end_depth;
 
 #extension GL_GOOGLE_include_directive : require
@@ -51,11 +50,6 @@ const vec3 vertices[] = {
     vec3(0,0,1),
 };
 
-// const uint elements [] = {
-// 	3, 2, 6, 7, 4, 2, 0,
-// 	3, 1, 6, 5, 4, 1, 0
-// };
-
 vec3 get_vert(int index){
     int tri = index / 3;
     int idx = index % 3;
@@ -84,9 +78,6 @@ vec3 get_vert(int index){
 
 void main() 
 {
-    // end_depth = 10;
-    // uint index = elements[gl_VertexIndex];
-    // vec3 vertex = get_vert(gl_VertexIndex);
     vec3 vertex = vertices[gl_VertexIndex];
     
     vertex*= pco.originSize.w*1;
@@ -95,7 +86,6 @@ void main()
     vec3 clip_coords = (ubo.trans_w2s*world_pos).xyz;
          clip_coords.z = 1.0+clip_coords.z;
     end_depth = clip_coords.z;
-        //  clip_coords.z = 0;
 
     gl_Position = vec4(clip_coords, 1);
 }

@@ -12,10 +12,6 @@ struct UboData {
     delta_time: f32,
 };
 
-@group(0) @binding(0) var<uniform> ubo: UboData;
-// @group(1) @binding(0) var<storage, read> pco_shared: array<Constants>;
-@group(1) @binding(1) var modelVoxels: texture_3d<i32>; 
-
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) sample_point: vec3<f32>,
@@ -25,6 +21,10 @@ struct VertexOutput {
 struct FragmentOutput {
     @location(0) @interpolate(flat) outMatNorm: vec4<u32>,
 };
+
+@group(0) @binding(0) var<uniform> ubo: UboData;
+// @group(1) @binding(0) var<storage, read> pco_shared: array<Constants>;
+@group(1) @binding(1) var modelVoxels: texture_3d<i32>; 
 
 fn GetModelVoxel(relative_voxel_pos: vec3<i32>) -> u32 {
     return u32(textureLoad(modelVoxels, relative_voxel_pos, 0).r);
@@ -40,11 +40,9 @@ fn main(in: VertexOutput) -> FragmentOutput {
     );
 
     var out: FragmentOutput;
-    // out.outMatNorm = (normal_encoded.z << 16u) | (normal_encoded.y << 8u) | normal_encoded.x;
 
     let ipos = vec3<i32>(floor(in.sample_point));
     let voxel = GetModelVoxel(ipos);
-    // out.outMatNorm = (out.outMatNorm & 0xFFFFFF00u) | (voxel & 0xFFu);
     out.outMatNorm = vec4<u32>(voxel, normal_encoded);
 
     return out;

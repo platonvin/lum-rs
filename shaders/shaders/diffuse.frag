@@ -1,7 +1,7 @@
 #version 450 core
 
 /*
-shader to diffuse-color lowres frame
+shader to diffuse-color main frame
 ambient + "radiant" diffuse + lightmaps
 */
 
@@ -185,8 +185,6 @@ float sample_lightmap(vec3 world_pos, vec3 normal) {
     // float bias = 0.0 * (float((dot(normal, ubo.globalLightDir.xyz) < 0.0))*2.0 - 1.0);
 
     vec2 light_uv = (light_clip.xy + 1.0) / 2.0;
-    // float bias = 0.0;
-
 
     float total_light = 00;
     float total_weight = 00;

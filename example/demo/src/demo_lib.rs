@@ -5,6 +5,7 @@
 //! Actual code for the Lum example ([bin]s demo_vk and demo_wgpu are 3-line callers of this [lib])
 
 use assets::{BlockAsset, ModelAsset};
+use containers::array3d::ConstDims;
 use lum::render_interface::ShaderSource;
 use lum::{
     fBLOCK_SIZE, for_zyx,
@@ -34,58 +35,11 @@ use console_error_panic_hook;
 #[cfg(target_arch = "wasm32")]
 use console_log;
 
-// i hardcode it but you probably should use some sort of "Asset library" - hashmap (array) of YourEntityTypeEnum -> LumMeshModel
-#[derive(Default)]
-struct AllMeshes {
-    tank_body: MeshModel,
-    tank_head: MeshModel,
-    tank_rf_leg: MeshModel,
-    tank_lb_leg: MeshModel,
-    tank_lf_leg: MeshModel,
-    tank_rb_leg: MeshModel,
-    water: MeshLiquid,
-    grass: MeshFoliage,
-    smoke: MeshVolumetric,
-}
-#[derive(Default)]
-struct AllTransforms {
-    tank_body: MeshTransform,
-    tank_head: MeshTransform,
-    tank_rf_leg: MeshTransform,
-    tank_lb_leg: MeshTransform,
-    tank_lf_leg: MeshTransform,
-    tank_rb_leg: MeshTransform,
-}
+// we "harcode" world size but it could also be dynamic with `RuntimeDims`
+pub type WorldSize = ConstDims<48, 48, 16>;
+const WORLD_SIZE: WorldSize = WorldSize {};
 
-impl AllMeshes {
-    fn new<'a, T: RendererInterface<'a>>(lum: &mut T, grass: MeshFoliage) -> Self {
-        Self {
-            tank_body: lum.load_model(assets::get_model(ModelAsset::TankBody)),
-            tank_head: lum.load_model(assets::get_model(ModelAsset::TankHead)),
-            tank_rf_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
-            tank_lb_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
-            tank_lf_leg: lum.load_model(assets::get_model(ModelAsset::TankLfRbLeg)),
-            tank_rb_leg: lum.load_model(assets::get_model(ModelAsset::TankLfRbLeg)),
-            water: lum.load_liquid(69, 42),
-            grass,
-            smoke: lum.load_volumetric(1.0, 0.5, u8vec3::zero()),
-        }
-    }
-
-    fn unload<'a, T: RendererInterface<'a>>(self, lum: &mut T) {
-        lum.unload_model(self.tank_body);
-        lum.unload_model(self.tank_head);
-        lum.unload_model(self.tank_rf_leg);
-        lum.unload_model(self.tank_lb_leg);
-        lum.unload_model(self.tank_lf_leg);
-        lum.unload_model(self.tank_rb_leg);
-        lum.unload_liquid(self.water);
-        lum.unload_foliage(self.grass);
-        lum.unload_volumetric(self.smoke);
-    }
-}
-
-struct DemoState<'renderer, Renderer: RendererInterface<'renderer>> {
+struct DemoState<'renderer, Renderer: RendererInterface<'renderer, WorldSize>> {
     window: Arc<Window>,
     lum: Renderer,
     meshes: AllMeshes,
@@ -94,7 +48,7 @@ struct DemoState<'renderer, Renderer: RendererInterface<'renderer>> {
     _phantom: PhantomData<&'renderer Renderer>,
 }
 
-impl<'renderer, Renderer: RendererInterface<'renderer>> DemoState<'renderer, Renderer> {
+impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
     type FoliageDescription = Renderer::FoliageDescription;
 
     fn new(window: Arc<Window>, lum: Renderer) -> Self {
@@ -108,20 +62,17 @@ impl<'renderer, Renderer: RendererInterface<'renderer>> DemoState<'renderer, Ren
         }
     }
 
-    // called when the renderer is ready
     pub fn load_scene(&mut self) {
         let lum = &mut self.lum;
 
-        // These settings and foliage descriptions are part of your scene loading,
-        // and should be performed *after* the renderer is ready.
         // TODO: move to template args?
-        let settings = Settings {
+        let settings = Settings::<WorldSize> {
             static_block_palette_size: 15,
             ..Settings::default()
         };
 
         let mut foliage_desc_builder =
-            <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
+            <Renderer as RendererInterface<WorldSize>>::FoliageDescriptionBuilder::new();
 
         // here im using my `shaders` crate, but you (most likely)
         // need to load it from somewhere else
@@ -229,7 +180,7 @@ impl<'renderer, Renderer: RendererInterface<'renderer>> DemoState<'renderer, Ren
     }
 }
 
-impl<'renderer, Renderer: RendererInterface<'renderer> + 'static> ApplicationHandler
+impl<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static> ApplicationHandler
     for DemoState<'renderer, Renderer>
 {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -345,7 +296,7 @@ pub async fn run() {
     };
 
     let mut foliage_desc_builder =
-        <RendererWgpu as RendererInterface>::FoliageDescriptionBuilder::new();
+        <RendererWgpu<WorldSize> as RendererInterface<WorldSize>>::FoliageDescriptionBuilder::new();
     let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
         ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
         13,
@@ -353,7 +304,7 @@ pub async fn run() {
     ));
 
     log::info!("Requesting WGPU renderer...");
-    let renderer = RendererWgpu::new_async(
+    let renderer = RendererWgpu::<WorldSize>::new_async(
         &settings,
         window.clone(),
         canvas_size,
@@ -370,7 +321,7 @@ pub async fn run() {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn run<'renderer, Renderer: RendererInterface<'renderer> + 'static>() {
+pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static>() {
     use lum::render_interface::ShaderSource;
 
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
@@ -387,7 +338,7 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer> + 'static>() {
     };
 
     let mut foliage_desc_builder =
-        <Renderer as RendererInterface>::FoliageDescriptionBuilder::new();
+        <Renderer as RendererInterface<WorldSize>>::FoliageDescriptionBuilder::new();
     #[cfg(feature = "vk_backend")]
     let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
         ShaderSource::SpirV(shaders::Shader::get_spirv(shaders::Shader::GrassVert)),
@@ -414,4 +365,55 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer> + 'static>() {
     app.load_scene();
 
     event_loop.run_app(&mut app).unwrap();
+}
+
+// You probably should use some sort of "Asset library" - hashmap (array) of YourEntityTypeEnum -> LumMeshModel
+#[derive(Default)]
+struct AllMeshes {
+    tank_body: MeshModel,
+    tank_head: MeshModel,
+    tank_rf_leg: MeshModel,
+    tank_lb_leg: MeshModel,
+    tank_lf_leg: MeshModel,
+    tank_rb_leg: MeshModel,
+    water: MeshLiquid,
+    grass: MeshFoliage,
+    smoke: MeshVolumetric,
+}
+#[derive(Default)]
+struct AllTransforms {
+    tank_body: MeshTransform,
+    tank_head: MeshTransform,
+    tank_rf_leg: MeshTransform,
+    tank_lb_leg: MeshTransform,
+    tank_lf_leg: MeshTransform,
+    tank_rb_leg: MeshTransform,
+}
+
+impl AllMeshes {
+    fn new<'a, T: RendererInterface<'a, WorldSize>>(lum: &mut T, grass: MeshFoliage) -> Self {
+        Self {
+            tank_body: lum.load_model(assets::get_model(ModelAsset::TankBody)),
+            tank_head: lum.load_model(assets::get_model(ModelAsset::TankHead)),
+            tank_rf_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
+            tank_lb_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
+            tank_lf_leg: lum.load_model(assets::get_model(ModelAsset::TankLfRbLeg)),
+            tank_rb_leg: lum.load_model(assets::get_model(ModelAsset::TankLfRbLeg)),
+            water: lum.load_liquid(69, 42),
+            grass,
+            smoke: lum.load_volumetric(1.0, 0.5, u8vec3::zero()),
+        }
+    }
+
+    fn unload<'a, T: RendererInterface<'a, WorldSize>>(self, lum: &mut T) {
+        lum.unload_model(self.tank_body);
+        lum.unload_model(self.tank_head);
+        lum.unload_model(self.tank_rf_leg);
+        lum.unload_model(self.tank_lb_leg);
+        lum.unload_model(self.tank_lf_leg);
+        lum.unload_model(self.tank_rb_leg);
+        lum.unload_liquid(self.water);
+        lum.unload_foliage(self.grass);
+        lum.unload_volumetric(self.smoke);
+    }
 }

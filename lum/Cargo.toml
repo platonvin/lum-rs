@@ -36,8 +36,7 @@ containers = { path = "../containers" }
 # bytemuck but not bytemuck
 as_u8_slice_derive = { path = "../as_u8_slice_derive" }
 # Vek casts
-# qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
-qvek = { path = "../../qvek/qvek" }
+qvek = { version = "0.1.0", path = "../../qvek/qvek" }
 winit = "0.30.11"
 wgpu = { version = "25.0.2", optional = true }
 futures = { version = "0.3.31", optional = true }

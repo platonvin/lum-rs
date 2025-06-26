@@ -1,15 +1,16 @@
+use crate::array3d::Dim3;
 use std::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr};
 
+/// 3D array, but each element is a boolean
 #[derive(Debug)]
-pub struct BitArray3d<T> {
-    x_size: usize,
-    y_size: usize,
-    z_size: usize,
-    data: Box<[T]>,
+pub struct BitArray3d<T, D: Dim3> {
+    pub data: Box<[T]>,
+    pub dims: D,
 }
 
-impl<T> BitArray3d<T>
+impl<T, D> BitArray3d<T, D>
 where
+    D: Dim3,
     T: Default
         + Copy
         + BitAnd<Output = T>
@@ -19,38 +20,28 @@ where
         + Shr<usize, Output = T>
         + Not<Output = T>
         + PartialEq
-        + From<u8>, // Ensure we can construct values safely
+        + From<u8>,
 {
     const BITS: usize = std::mem::size_of::<T>() * 8;
 
-    pub fn new(x_size: usize, y_size: usize, z_size: usize) -> Self {
-        let total_bits = x_size
-            .checked_mul(y_size)
-            .and_then(|xy| xy.checked_mul(z_size))
-            .expect("BitArray3d dimensions cause overflow");
+    pub fn new(dims: D) -> Self {
+        let total_bits = dims.total_len();
         let total_chunks = total_bits.div_ceil(Self::BITS);
 
-        BitArray3d {
-            x_size,
-            y_size,
-            z_size,
+        Self {
+            dims,
             data: vec![T::default(); total_chunks].into_boxed_slice(),
         }
     }
 
-    pub fn new_filled(x_size: usize, y_size: usize, z_size: usize, value: bool) -> Self {
-        let total_bits = x_size
-            .checked_mul(y_size)
-            .and_then(|xy| xy.checked_mul(z_size))
-            .expect("BitArray3d dimensions cause overflow");
+    pub fn new_filled(dims: D, value: bool) -> Self {
+        let total_bits = dims.total_len();
         let total_chunks = total_bits.div_ceil(Self::BITS);
+        let fill_value = if value { !T::default() } else { T::default() };
 
-        BitArray3d {
-            x_size,
-            y_size,
-            z_size,
-            data: vec![if value { !T::default() } else { T::default() }; total_chunks]
-                .into_boxed_slice(),
+        Self {
+            dims,
+            data: vec![fill_value; total_chunks].into_boxed_slice(),
         }
     }
 
@@ -61,12 +52,13 @@ where
         }
     }
 
+    pub fn dimensions(&self) -> (usize, usize, usize) {
+        (self.dims.x(), self.dims.y(), self.dims.z())
+    }
+
     pub fn linear_index(&self, x: usize, y: usize, z: usize) -> usize {
-        debug_assert!(
-            x < self.x_size && y < self.y_size && z < self.z_size,
-            "Index out of bounds"
-        );
-        x + y * self.x_size + z * self.x_size * self.y_size
+        debug_assert!(x < self.dims.x() && y < self.dims.y() && z < self.dims.z());
+        x + y * self.dims.x() + z * self.dims.x() * self.dims.y()
     }
 
     pub fn get(&self, x: usize, y: usize, z: usize) -> bool {
@@ -82,6 +74,15 @@ where
         let mask = one << bit;
 
         (self.data[chunk] & mask) != T::default()
+    }
+
+    pub unsafe fn get_unchecked(&self, x: usize, y: usize, z: usize) -> bool {
+        let pos = self.linear_index(x, y, z);
+        let chunk = pos / Self::BITS;
+        let bit = pos % Self::BITS;
+        let one: T = 1_u8.into();
+        let mask = one << bit;
+        (*self.data.get_unchecked(chunk) & mask) != T::default()
     }
 
     pub fn set(&mut self, x: usize, y: usize, z: usize, value: bool) {
@@ -100,6 +101,20 @@ where
             self.data[chunk] |= mask;
         } else {
             self.data[chunk] &= !mask;
+        }
+    }
+
+    pub unsafe fn set_unchecked(&mut self, x: usize, y: usize, z: usize, value: bool) {
+        let pos = self.linear_index(x, y, z);
+        let chunk = pos / Self::BITS;
+        let bit = pos % Self::BITS;
+        let one: T = 1_u8.into();
+        let mask = one << bit;
+        let slot = self.data.get_unchecked_mut(chunk);
+        if value {
+            *slot |= mask;
+        } else {
+            *slot &= !mask;
         }
     }
 }

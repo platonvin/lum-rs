@@ -1,409 +1,336 @@
-// WGSL Radiance Compute Shader - Corrected
-
 struct Material {
     color: vec3<f32>,
-    emmitance: f32,
+    emittance: f32,
     roughness: f32,
-    transparancy: f32,
-}
-;
+    transparency: f32,
+};
 
-// UBO definition (assuming it's consistent with your setup)
 struct UboData {
-    trans_w2s: mat4x4<f32>,
-    campos: vec4<f32>,
-    camdir: vec4<f32>,
-    horizline_scaled: vec4<f32>,
-    vertiline_scaled: vec4<f32>,
-    global_light_dir: vec4<f32>, // This is likely the one used by the glossy shader, not the hardcoded one below.
-    lightmap_proj: mat4x4<f32>,
+    transform_world_to_screen: mat4x4<f32>,
+    camera_position: vec4<f32>,
+    camera_direction: vec4<f32>,
+    horizontal_line_scaled: vec4<f32>,
+    vertical_line_scaled: vec4<f32>,
+    global_light_direction: vec4<f32>,
+    lightmap_projection: mat4x4<f32>,
     frame_size: vec2<f32>,
     wind_direction: vec2<f32>,
-    timeseed: i32,
+    time_seed: i32,
     delta_time: f32,
-}
-;
+};
 
-// Corrected ReqBuffer structure
 struct UpdateRequest {
-    // GLSL i8vec4 (signed char vec4) is often widened to i32 for storage buffers
-    // .xyz is probe_pos, .w is unused or for other data
     data: vec4<i32>,
-}
-;
+};
 
-struct ReqBuffer {
-    updateReqests: array<UpdateRequest>, // Unsized array, matching SSBO behavior
-}
-;
+struct RequestBuffer {
+    update_requests: array<UpdateRequest>,
+};
 
-@group(0) @binding(0) var<uniform> ubo: UboData; // Assuming ubo.timeseed is used for pco.timeSeed
+@group(0) @binding(0) var<uniform> ubo: UboData;
 @group(0) @binding(1) var blocks: texture_3d<i32>;
-@group(0) @binding(2) var blockPalette: texture_3d<i32>; // Changed to u32 to match GLSL usampler3D more closely
-@group(0) @binding(3) var voxelPalette: texture_2d<f32>;
-@group(0) @binding(4) var radianceCache2read: texture_3d<f32>;
-// Corrected format to rgb10a2unorm if that's the target, or ensure rgba16float is intended.
-// For simplicity with vec4<f32> stores, rgba16float is fine. GLSL used rgb10_a2.
-@group(0) @binding(5) var radianceCache2write: texture_storage_3d<rgba16float, write>;
-@group(0) @binding(6) var<storage, read> reqBuffer_ssbo: ReqBuffer; // Renamed to avoid conflict if ReqBuffer struct name is used elsewhere
+@group(0) @binding(2) var block_palette: texture_3d<i32>;
+@group(0) @binding(3) var voxel_palette: texture_2d<f32>;
+@group(0) @binding(4) var radiance_cache_read: texture_3d<f32>;
+@group(0) @binding(5) var radiance_cache_write: texture_storage_3d<rgba16float, write>;
+@group(0) @binding(6) var<storage, read> request_buffer_ssbo: RequestBuffer;
 @group(0) @binding(7) var linear_sampler: sampler;
 
-// Push constants are not directly available like GLSL.
-// Assuming pco.timeSeed is replaced by ubo.timeseed.
-// const pco_timeSeed: i32 = 0; // Placeholder if needed, ideally from UBO
-
 const BLOCK_PALETTE_SIZE_X: i32 = 64;
-const REACTIVNESS: f32 = 0.01;
-const RAYS_PER_PROBE: u32 = 64u; // Use u32 for consistency with workgroup_size and loop counters
+const REACTIVENESS: f32 = 0.01;
+const RAYS_PER_PROBE: u32 = 64u;
 const PI: f32 = 3.1415926535897932384626433832795;
-const world_size: vec3<f32> = vec3<f32>(48.0, 48.0, 16.0); // Match GLSL's ivec3(48,48,16)
-// Use globalLightDir from UBO if available and intended, otherwise keep this private one.
-var<private> current_globalLightDir: vec3<f32> = (vec3<f32>(0.5, 0.5, -0.9)); // GLSL's hardcoded one
+const WORLD_SIZE: vec3<f32> = vec3<f32>(48.0, 48.0, 16.0);
 
-const K_CONST: u32 = 1103515245u; // Renamed to avoid conflict with k
-var<private> random_state_vector: vec3<u32>; // Renamed from random_storage
+var<private> current_global_light_direction: vec3<f32> = (vec3<f32>(0.5, 0.5, -0.9));
 
-// Shared memory for reduction
+const K_CONSTANT: u32 = 1103515245u;
+var<private> random_state_vector: vec3<u32>;
+
 var<workgroup> accumulated_light_shared: array<vec3<f32>, RAYS_PER_PROBE>;
 
-
-// Corrected hash33 function
-fn hash33(input_val: vec3<u32>) -> vec3<f32> {
-    var x = input_val;
-    // GLSL: x = ((x>>8U)^x.yzx)*k; applied 3 times
-    // x.yzx swizzle means vec3(x.y, x.z, x.x)
+fn hash33(input_value: vec3<u32>) -> vec3<f32> {
+    var x = input_value;
 
     // Iteration 1
     var x_prev_iter = x;
-    x.x = ((x_prev_iter.x >> 8u) ^ x_prev_iter.y) * K_CONST;
-    x.y = ((x_prev_iter.y >> 8u) ^ x_prev_iter.z) * K_CONST;
-    x.z = ((x_prev_iter.z >> 8u) ^ x_prev_iter.x) * K_CONST; // Uses original x_prev_iter.x
+    x.x = ((x_prev_iter.x >> 8u) ^ x_prev_iter.y) * K_CONSTANT;
+    x.y = ((x_prev_iter.y >> 8u) ^ x_prev_iter.z) * K_CONSTANT;
+    x.z = ((x_prev_iter.z >> 8u) ^ x_prev_iter.x) * K_CONSTANT;
 
     // Iteration 2
     x_prev_iter = x;
-    x.x = ((x_prev_iter.x >> 8u) ^ x_prev_iter.y) * K_CONST;
-    x.y = ((x_prev_iter.y >> 8u) ^ x_prev_iter.z) * K_CONST;
-    x.z = ((x_prev_iter.z >> 8u) ^ x_prev_iter.x) * K_CONST;
+    x.x = ((x_prev_iter.x >> 8u) ^ x_prev_iter.y) * K_CONSTANT;
+    x.y = ((x_prev_iter.y >> 8u) ^ x_prev_iter.z) * K_CONSTANT;
+    x.z = ((x_prev_iter.z >> 8u) ^ x_prev_iter.x) * K_CONSTANT;
 
     // Iteration 3
     x_prev_iter = x;
-    x.x = ((x_prev_iter.x >> 8u) ^ x_prev_iter.y) * K_CONST;
-    x.y = ((x_prev_iter.y >> 8u) ^ x_prev_iter.z) * K_CONST;
-    x.z = ((x_prev_iter.z >> 8u) ^ x_prev_iter.x) * K_CONST;
+    x.x = ((x_prev_iter.x >> 8u) ^ x_prev_iter.y) * K_CONSTANT;
+    x.y = ((x_prev_iter.y >> 8u) ^ x_prev_iter.z) * K_CONSTANT;
+    x.z = ((x_prev_iter.z >> 8u) ^ x_prev_iter.x) * K_CONSTANT;
 
-    return vec3<f32>(x) * (1.0 / 4294967295.0); // 0xffffffffu
+    return vec3<f32>(x) * (1.0 / 4294967295.0); // Scale to [0, 1] range
 }
 
-fn Random3D_from_state() -> vec3<f32> { // Renamed
-    let res = hash33(random_state_vector);
-    random_state_vector.x = random_state_vector.x + 1u; // Increment only one component as in GLSL
-    return res;
+fn random_3d_from_state() -> vec3<f32> {
+    let result = hash33(random_state_vector);
+    random_state_vector.x = random_state_vector.x + 1u;
+    return result;
 }
 
-fn randomSpherePoint(rand_vec: vec3<f32>) -> vec3<f32> { // Renamed parameter
-    let ang1 = (rand_vec.x + 1.0) * PI;
-    let u = rand_vec.y;
+fn random_sphere_point(random_vector: vec3<f32>) -> vec3<f32> {
+    let angle1 = (random_vector.x + 1.0) * PI;
+    let u = random_vector.y;
     let u2 = u * u;
-    let sqrt1MinusU2 = sqrt(max(0.0, 1.0 - u2)); // Added max for safety
-    let x = sqrt1MinusU2 * cos(ang1);
-    let y = sqrt1MinusU2 * sin(ang1);
+    let sqrt_1_minus_u2 = sqrt(max(0.0, 1.0 - u2));
+    let x = sqrt_1_minus_u2 * cos(angle1);
+    let y = sqrt_1_minus_u2 * sin(angle1);
     let z = u;
     return vec3<f32>(x, y, z);
 }
 
-fn NormalOrientedHemispherePoint(rand_vec: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
-    let v = randomSpherePoint(rand_vec);
-    return v * sign(dot(v, n));
+fn normal_oriented_hemisphere_point(random_vector: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    let vector_on_sphere = random_sphere_point(random_vector);
+    return vector_on_sphere * sign(dot(vector_on_sphere, normal));
 }
 
-// GetBlock remains largely the same, ensure 'blocks' texture is correctly formatted and sized.
-fn GetBlock(block_pos: vec3<i32>) -> i32 {
-    // Add clamping to prevent out-of-bounds if world_size is strict for 'blocks' texture
-    let world_dims_i32 = vec3<i32>(world_size); // Assuming world_size refers to block dimensions
-    let clamped_pos = clamp(block_pos, vec3<i32>(0), world_dims_i32 - vec3<i32>(1));
-    return textureLoad(blocks, clamped_pos, 0).r;
+fn get_block(block_position: vec3<i32>) -> i32 {
+    let world_dimensions_i32 = vec3<i32>(WORLD_SIZE);
+    // TODO:
+    let clamped_position = clamp(block_position, vec3<i32>(0), world_dimensions_i32 - vec3<i32>(1));
+    return textureLoad(blocks, clamped_position, 0).r;
 }
 
-fn voxel_in_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
+fn voxel_in_palette(relative_voxel_position: vec3<i32>, block_id: i32) -> vec3<i32> {
     let block_x = block_id % BLOCK_PALETTE_SIZE_X;
     let block_y = block_id / BLOCK_PALETTE_SIZE_X;
-    return relative_voxel_pos + vec3<i32>(16 * block_x, 16 * block_y, 0);
+    return relative_voxel_position + vec3<i32>(16 * block_x, 16 * block_y, 0);
 }
 
-fn GetVoxel(pos: vec3<f32>) -> vec2<i32> {
-    let ipos = vec3<i32>(floor(pos));
-    let iblock_pos = ipos / 16;
-    let relative_voxel_pos = ipos % 16;
+fn get_voxel(position: vec3<f32>) -> vec2<i32> {
+    let integer_position = vec3<i32>(floor(position));
+    let integer_block_position = integer_position / 16;
+    let relative_voxel_position = integer_position % 16;
 
-    let block_id = GetBlock(iblock_pos);
-    let voxel_pos_in_palette = voxel_in_palette(relative_voxel_pos, block_id);
-    // blockPalette is now u32
-    let voxel_uint = textureLoad(blockPalette, voxel_pos_in_palette, 0).r;
-    return vec2<i32>(i32(voxel_uint), block_id);
+    let block_id = get_block(integer_block_position);
+    let voxel_position_in_palette = voxel_in_palette(relative_voxel_position, block_id);
+    let voxel_unsigned_int = textureLoad(block_palette, voxel_position_in_palette, 0).r;
+    return vec2<i32>(i32(voxel_unsigned_int), block_id);
 }
 
-fn GetMat(voxel_id: i32) -> Material { // Renamed parameter
-    var mat: Material;
-    // Assuming voxelPalette texture is R32Float per channel, accessed by ivec2(channel_index, voxel_id)
-    mat.color.r = textureLoad(voxelPalette, vec2<i32>(0, voxel_id), 0).r;
-    mat.color.g = textureLoad(voxelPalette, vec2<i32>(1, voxel_id), 0).r;
-    mat.color.b = textureLoad(voxelPalette, vec2<i32>(2, voxel_id), 0).r;
-    // GLSL didn't use transparency, but if it's column 3:
-    // mat.transparancy = 1.0 - textureLoad(voxelPalette, vec2<i32>(3, voxel_id), 0).r;
-    mat.emmitance = textureLoad(voxelPalette, vec2<i32>(4, voxel_id), 0).r;
-    mat.roughness = textureLoad(voxelPalette, vec2<i32>(5, voxel_id), 0).r;
-    mat.transparancy = 0.0; // Explicitly set if not loaded
-    return mat;
+fn get_material(voxel_id: i32) -> Material {
+    var material: Material;
+    material.color.r = textureLoad(voxel_palette, vec2<i32>(0, voxel_id), 0).r;
+    material.color.g = textureLoad(voxel_palette, vec2<i32>(1, voxel_id), 0).r;
+    material.color.b = textureLoad(voxel_palette, vec2<i32>(2, voxel_id), 0).r;
+    material.emittance = textureLoad(voxel_palette, vec2<i32>(4, voxel_id), 0).r;
+    material.roughness = textureLoad(voxel_palette, vec2<i32>(5, voxel_id), 0).r;
+    material.transparency = 0.0;
+    return material;
 }
 
-// sample_radiance: Corrected offset
 fn sample_radiance(position: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
-    let offset_pos = position + normal * 16.0; // Corrected: Was 8.0, GLSL uses 16.0
-    let block_pos_norm = offset_pos / 16.0; // Convert to "radiance block" coordinates
-    let uvw = (block_pos_norm + 0.5) / world_size; // Normalize and sample center
-    return textureSampleLevel(radianceCache2read, linear_sampler, uvw, 0.0).rgb;
+    let offset_position = position + normal * 16.0; // Offset by 16.0.
+    let block_position_normalized = offset_position / 16.0;
+    let uvw = (block_position_normalized + 0.5) / WORLD_SIZE;
+    return textureSampleLevel(radiance_cache_read, linear_sampler, uvw, 0.0).rgb;
 }
 
-// initTvals: Using pointers for out parameters in WGSL is complex.
-// It's often easier to return a struct or multiple values if the language supports it.
-// For direct porting, will try to maintain pointer-like behavior via ptr<function, T>
-// However, for this function, returning a struct is cleaner.
-struct DDAInitResult {
-    tMax: vec3<f32>,
-    tDelta: vec3<f32>,
-    blockPos: vec3<i32>,
+struct DdaInitResult {
+    t_max: vec3<f32>,
+    t_delta: vec3<f32>,
+    block_position: vec3<i32>,
 }
-fn initTvals_struct(rayOrigin: vec3<f32>, rayDirection: vec3<f32>) -> DDAInitResult {
-    var res: DDAInitResult;
-    let effective_origin = rayOrigin;
-    let inv_dir = 1.0 / rayDirection; // Cache this
+fn init_t_values_struct(ray_origin: vec3<f32>, ray_direction: vec3<f32>) -> DdaInitResult {
+    var result: DdaInitResult;
+    let effective_origin = ray_origin;
+    let inverse_direction = 1.0 / ray_direction;
 
-    let floor_eff_origin = floor(effective_origin);
-    let block_corner1 = (floor_eff_origin - effective_origin) * inv_dir;
-    let block_corner2 = (floor_eff_origin + 1.0 - effective_origin) * inv_dir;
+    let floor_effective_origin = floor(effective_origin);
+    let block_corner1 = (floor_effective_origin - effective_origin) * inverse_direction;
+    let block_corner2 = (floor_effective_origin + 1.0 - effective_origin) * inverse_direction;
 
-    res.tMax.x = max(block_corner1.x, block_corner2.x);
-    res.tMax.y = max(block_corner1.y, block_corner2.y);
-    res.tMax.z = max(block_corner1.z, block_corner2.z);
-    res.tDelta = abs(inv_dir);
-    res.blockPos = vec3<i32>(floor_eff_origin);
-    return res;
+    result.t_max.x = max(block_corner1.x, block_corner2.x);
+    result.t_max.y = max(block_corner1.y, block_corner2.y);
+    result.t_max.z = max(block_corner1.z, block_corner2.z);
+    result.t_delta = abs(inverse_direction);
+    result.block_position = vec3<i32>(floor_effective_origin);
+    return result;
 }
 
-// CastRay_fast: Corrected DDA step direction
-fn CastRay_fast(origin: vec3<f32>, direction: vec3<f32>, fraction_out: ptr<function, f32>, normal_out: ptr<function, vec3<f32>>, material_out: ptr<function, Material>, left_bounds_out: ptr<function, bool>) -> bool {
+fn cast_ray_fast(origin: vec3<f32>, direction: vec3<f32>, fraction_output: ptr<function, f32>, normal_output: ptr<function, vec3<f32>>, material_output: ptr<function, Material>, left_bounds_output: ptr<function, bool>) -> bool {
     var block_hit = false;
-    *fraction_out = 0.0; // Initialize out params
-    *left_bounds_out = false;
+    *fraction_output = 0.0;
+    *left_bounds_output = false;
 
-    let one_div_dir = 1.0 / direction;
-    let bprecomputed_corner = direction > vec3<f32>(0.0);
-    let precomputed_corner_offset = vec3<f32>(bprecomputed_corner) * 16.0;
+    let one_div_direction = 1.0 / direction;
+    let precomputed_corner = direction > vec3<f32>(0.0);
+    let precomputed_corner_offset = vec3<f32>(precomputed_corner) * 16.0;
 
-    // Initial voxel check at origin (GLSL does this implicitly or explicitly before loop)
-    var voxel_info = GetVoxel(origin);
+    var voxel_info = get_voxel(origin);
     var current_voxel = voxel_info.x;
     var current_block = voxel_info.y;
 
-    let max_dist = 16.0 * 8.0; // Max ray travel distance
+    let max_distance = 16.0 * 8.0;
 
-    // Coarse stepping loop
     loop {
-        if *fraction_out >= max_dist {
+        if *fraction_output >= max_distance {
             block_hit = false;
-            *left_bounds_out = true;
+            *left_bounds_output = true;
             break;
         }
-        *fraction_out += 0.5; // Step size
-        let pos = origin + direction * (*fraction_out);
+        *fraction_output += 0.5;
+        let position = origin + direction * (*fraction_output);
 
-        voxel_info = GetVoxel(pos);
+        voxel_info = get_voxel(position);
         current_voxel = voxel_info.x;
         current_block = voxel_info.y;
 
-        if (current_block == 0) { // Empty block traversal
-            let block_base_coord = floor(pos / 16.0) * 16.0;
-            let far_corner_of_block = block_base_coord + precomputed_corner_offset;
-            let t_to_far_corner_planes = (far_corner_of_block - pos) * one_div_dir;
+        if (current_block == 0) {
+            let block_base_coordinate = floor(position / 16.0) * 16.0;
+            let far_corner_of_block = block_base_coordinate + precomputed_corner_offset;
+            let t_to_far_corner_planes = (far_corner_of_block - position) * one_div_direction;
             var t_exit = min(t_to_far_corner_planes.x, min(t_to_far_corner_planes.y, t_to_far_corner_planes.z));
-            t_exit = max(t_exit, 0.01); // Safety offset
-            *fraction_out += t_exit;
-        // No continue here in GLSL logic, re-evaluates GetVoxel at new fraction in next iter or breaks if hit
+            t_exit = max(t_exit, 0.01);
+            *fraction_output += t_exit;
         }
 
         if (current_voxel != 0) {
             block_hit = true;
             break;
         }
-        if (any(pos < vec3<f32>(0.0)) || any(pos >= world_size * 16.0)) { // World bounds (voxel units)
+        if (any(position < vec3<f32>(0.0)) || any(position >= WORLD_SIZE * 16.0)) { // World bounds
             block_hit = false;
-            *left_bounds_out = true;
+            *left_bounds_output = true;
             break;
         }
     }
 
-    // DDA Refinement
-    if (block_hit) { // current_voxel != 0 implies block_hit was true
-        let before_hit_pos = origin + direction * (*fraction_out - 1.5); // Backtrack slightly
+    if (block_hit) {
+        let before_hit_position = origin + direction * (*fraction_output - 1.5); // Backtrack slightly.
 
-        let dda_params = initTvals_struct(before_hit_pos, direction);
-        var tMax = dda_params.tMax;
-        let tDelta = dda_params.tDelta;
-        var voxel_pos_dda = dda_params.blockPos;
+        let dda_parameters = init_t_values_struct(before_hit_position, direction);
+        var t_max = dda_parameters.t_max;
+        let t_delta = dda_parameters.t_delta;
+        var voxel_position_dda = dda_parameters.block_position;
 
-        let step_signs = vec3<i32>(sign(direction)); // -1, 0, or 1. GLSL used specific logic for 0.
-        // GLSL: ivec3 steps = ivec3(greaterThan(direction, vec3(0))); steps = 2 * steps + (-1);
-        // This maps dir>0 to 1, dir<=0 to -1.
         let steps = select(vec3<i32>(-1), vec3<i32>(1), direction > vec3<f32>(0.0));
 
-        var dda_voxel_id = GetVoxel(vec3<f32>(voxel_pos_dda) + 0.5).x; // Sample center of initial DDA voxel
-        var f_current_step_direction = vec3<f32>(0.0);
+        var dda_voxel_id = get_voxel(vec3<f32>(voxel_position_dda) + 0.5).x;
+        var float_current_step_direction = vec3<f32>(0.0);
 
         for (var iter = 0; iter < 4 && dda_voxel_id == 0; iter = iter + 1) {
-            // Corrected f_current_step_direction logic
-            if (tMax.x <= tMax.y && tMax.x <= tMax.z) {
-                f_current_step_direction = vec3<f32>(1.0, 0.0, 0.0);
-            } else if (tMax.y <= tMax.z) { // tMax.y < tMax.x implied
-                f_current_step_direction = vec3<f32>(0.0, 1.0, 0.0);
-            } else { // tMax.z smallest
-                f_current_step_direction = vec3<f32>(0.0, 0.0, 1.0);
+            if (t_max.x <= t_max.y && t_max.x <= t_max.z) {
+                float_current_step_direction = vec3<f32>(1.0, 0.0, 0.0);
+            } else if (t_max.y <= t_max.z) {
+                float_current_step_direction = vec3<f32>(0.0, 1.0, 0.0);
+            } else {
+                float_current_step_direction = vec3<f32>(0.0, 0.0, 1.0);
             }
 
-            voxel_pos_dda += vec3<i32>(f_current_step_direction) * steps;
-            tMax += tDelta * f_current_step_direction;
-            dda_voxel_id = GetVoxel(vec3<f32>(voxel_pos_dda) + 0.5).x; // Sample center
+            voxel_position_dda += vec3<i32>(float_current_step_direction) * steps;
+            t_max += t_delta * float_current_step_direction;
+            dda_voxel_id = get_voxel(vec3<f32>(voxel_position_dda) + 0.5).x;
         }
 
-        *normal_out = -vec3<f32>(steps) * f_current_step_direction;
-        // The fraction is relative to before_hit_pos. Total fraction needs to be calculated.
-        // GLSL: fraction = dot(tMax - tDelta, fcurrentStepDiretion); This is distance from before_hit_pos.
-        let dda_fraction_offset = dot(tMax - tDelta * abs(f_current_step_direction), abs(f_current_step_direction)); // Project onto axis
-        *fraction_out = (*fraction_out - 1.5) + dda_fraction_offset;
-        *material_out = GetMat(dda_voxel_id);
+        *normal_output = -vec3<f32>(steps) * float_current_step_direction;
+        let dda_fraction_offset = dot(t_max - t_delta * abs(float_current_step_direction), abs(float_current_step_direction));
+        *fraction_output = (*fraction_output - 1.5) + dda_fraction_offset;
+        *material_output = get_material(dda_voxel_id);
 
-        // If DDA failed to find a non-empty voxel, the original coarse hit was likely an edge case.
-        // GLSL returns (current_voxel != 0), which refers to the coarse hit's current_voxel.
-        // If dda_voxel_id is 0, it means DDA didn't find it.
-        // For safety, if DDA fails, we might consider it a miss for this refined step.
         return (dda_voxel_id != 0);
     }
-    return block_hit; // or (current_voxel != 0) from coarse step if block_hit is true
+    return block_hit;
 }
 
-
-fn sphericalFibonacci(i: f32, n: f32) -> vec3<f32> {
-    let phi_const = sqrt(5.0) * 0.5 + 0.5; // Golden ratio component
-    let phi_angle = 2.0 * PI * fract(i * (phi_const - 1.0)); // Use fract for madfrac
-    let cosTheta = 1.0 - (2.0 * i + 1.0) * (1.0 / n);
-    let sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta)); // Add max for safety
-    return vec3<f32>(cos(phi_angle) * sinTheta, sin(phi_angle) * sinTheta, cosTheta);
+fn spherical_fibonacci(i: f32, n: f32) -> vec3<f32> {
+    let phi_constant = sqrt(5.0) * 0.5 + 0.5;
+    let phi_angle = 2.0 * PI * fract(i * (phi_constant - 1.0));
+    let cos_theta = 1.0 - (2.0 * i + 1.0) * (1.0 / n);
+    let sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+    return vec3<f32>(cos(phi_angle) * sin_theta, sin(phi_angle) * sin_theta, cos_theta);
 }
 
-fn probeId_to_rayDir(probe_id: i32) -> vec3<f32> {
-    return sphericalFibonacci(f32(probe_id), f32(RAYS_PER_PROBE));
+fn probe_id_to_ray_direction(probe_id: i32) -> vec3<f32> {
+    return spherical_fibonacci(f32(probe_id), f32(RAYS_PER_PROBE));
 }
 
-// trace_ray: Corrected sky light logic
-fn trace_ray(ray_pos_in: vec3<f32>, ray_dir_in: vec3<f32>) -> vec3<f32> { // Renamed params
+fn trace_ray(ray_position_input: vec3<f32>, ray_direction_input: vec3<f32>) -> vec3<f32> {
     var fraction: f32;
     var normal: vec3<f32>;
     var material: Material;
     var left_bounds: bool;
 
-    let hit = CastRay_fast(ray_pos_in, ray_dir_in, &fraction, &normal, &material, &left_bounds);
+    let hit = cast_ray_fast(ray_position_input, ray_direction_input, &fraction, &normal, &material, &left_bounds);
     var light = vec3<f32>(0.0);
-    let reflection_albedo = vec3<f32>(1.0); // Assuming full reflection for this simplified trace
+    let reflection_albedo = vec3<f32>(1.0);
 
     if (hit) {
-        let hit_pos = ray_pos_in + fraction * ray_dir_in;
-        let propagated_light = sample_radiance(hit_pos, normal);
-        light += reflection_albedo * propagated_light * material.color + material.color * material.emmitance;
-    } else { // Ray missed world geometry
-        let global_light_participance = -dot(ray_dir_in, current_globalLightDir); // Use normalized global light dir
+        let hit_position = ray_position_input + fraction * ray_direction_input;
+        let propagated_light = sample_radiance(hit_position, normal);
+        light += reflection_albedo * propagated_light * material.color + material.color * material.emittance;
+    } else {
+        let global_light_participance = -dot(ray_direction_input, current_global_light_direction);
         if (global_light_participance > 0.95) {
-            light += reflection_albedo * global_light_participance * (vec3<f32>(0.9, 0.9, 0.6) * 3.0); // Sun
+            light += reflection_albedo * global_light_participance * (vec3<f32>(0.9, 0.9, 0.6) * 3.0);
         }
-        // Corrected: Always add sky blue, not an else branch
-        light += reflection_albedo * (vec3<f32>(0.53, 0.81, 0.92) * 0.1); // Sky blue
+        light += reflection_albedo * (vec3<f32>(0.53, 0.81, 0.92) * 0.1); // Sky blue ambient
     }
     return light;
 }
 
-fn store_probe(probe_pos_store: vec3<i32>, accumulated_light_store: vec3<f32>) { // Renamed params
-    // textureLoad for sampler3D requires normalized coords or integer coords for texture_3d<T>
-    // GLSL texelFetch uses integer coords. For sampler3D, textureSampleLevel with LOD 0 and integer coords
-    // divided by dimensions would be one way, or use textureLoad if radianceCache2read was texture_3d<f32>.
-    // Assuming radianceCache2read is sampled (sampler3D in GLSL).
-    // For simplicity, if radianceCache2read is imageLoadable (like a texture_3d<f32> in WGSL):
-    // let old_light = textureLoad(radianceCache2read, probe_pos_store, 0).rgb;
-    // If it must be sampled:
-    let read_uvw = (vec3<f32>(probe_pos_store) + 0.5) / world_size;
-    let old_light = textureSampleLevel(radianceCache2read, linear_sampler, read_uvw, 0.0).rgb;
+fn store_probe(probe_position_store: vec3<i32>, accumulated_light_store: vec3<f32>) {
+    let read_uvw = (vec3<f32>(probe_position_store) + 0.5) / WORLD_SIZE;
+    let old_light = textureSampleLevel(radiance_cache_read, linear_sampler, read_uvw, 0.0).rgb;
 
-    let old_light_clamped = clamp(old_light, vec3<f32>(0.0), vec3<f32>(1.0)); // Clamp before mix
-    let new_light = mix(old_light_clamped, accumulated_light_store, REACTIVNESS);
-    textureStore(radianceCache2write, probe_pos_store, vec4<f32>(new_light, 1.0));
-    // textureStore(radianceCache2write, probe_pos_store, vec4<f32>(0.0));
+    let old_light_clamped = clamp(old_light, vec3<f32>(0.0), vec3<f32>(1.0));
+    let new_light = mix(old_light_clamped, accumulated_light_store, REACTIVENESS);
+    textureStore(radiance_cache_write, probe_position_store, vec4<f32>(new_light, 1.0));
 }
 
-
 @compute @workgroup_size(RAYS_PER_PROBE, 1, 1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invocation_id) local_id: vec3<u32> // local_id.x is local_invocation_index
-) {
-    // Initialize global light direction (if it's not from UBO)
-    current_globalLightDir = normalize(current_globalLightDir); // Or use ubo.global_light_dir
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invocation_id) local_id: vec3<u32>) {
+    current_global_light_direction = normalize(current_global_light_direction);
 
-    // Calculate probe_id and req_num based on global_id or local_id
-    // GLSL: probe_id = local_pos.x % RAYS_PER_PROBE; req_num = local_pos.x / RAYS_PER_PROBE;
-    // Here, local_pos.x is gl_GlobalInvocationID.x.
-    // Since workgroup_size_x is RAYS_PER_PROBE, local_id.x is effectively probe_id within its workgroup.
-    // And gl_WorkGroupID.x is effectively req_num.
-    let probe_index_in_workgroup = local_id.x; // 0 to RAYS_PER_PROBE - 1
-    let request_index = global_id.x / RAYS_PER_PROBE; // This is gl_WorkGroupID.x
+    let probe_index_in_workgroup = local_id.x;
+    let request_index = global_id.x / RAYS_PER_PROBE;
 
-    // Corrected probe_pos access
-    let request_data = reqBuffer_ssbo.updateReqests[request_index].data;
-    let probe_pos_world = request_data.xyz; // These are block coordinates
+    let request_data = request_buffer_ssbo.update_requests[request_index].data;
+    let probe_position_world = request_data.xyz;
 
-    // Initialize random seed
-    // GLSL: random_storage = uvec3(local_pos.xy+pco.timeSeed, pco.timeSeed);
-    // local_pos.xy is global_id.xy. timeSeed from ubo.
-    random_state_vector = vec3<u32>(global_id.xy + u32(ubo.timeseed), u32(ubo.timeseed));
+    random_state_vector = vec3<u32>(global_id.xy + u32(ubo.time_seed), u32(ubo.time_seed));
 
-    let block_corner_world = vec3<f32>(probe_pos_world) * 16.0;
-    let block_center_world = block_corner_world + 8.0; // Center of the 16x16x16 block
+    let block_corner_world = vec3<f32>(probe_position_world) * 16.0;
+    let block_center_world = block_corner_world + 8.0;
 
     var ray_origin = block_center_world;
-    var ray_direction = probeId_to_rayDir(i32(probe_index_in_workgroup));
+    var ray_direction = probe_id_to_ray_direction(i32(probe_index_in_workgroup));
 
-    // Ray perturbation
-    ray_direction = normalize(ray_direction + 0.1 * ((Random3D_from_state() - 0.5) * 2.0));
-    ray_origin += ray_direction * 6.0; // Offset along perturbed direction
-    ray_origin += (Random3D_from_state() - 0.5) * 2.0; // Jitter origin
+    ray_direction = normalize(ray_direction + 0.1 * ((random_3d_from_state() - 0.5) * 2.0));
+    ray_origin += ray_direction * 6.0;
+    ray_origin += (random_3d_from_state() - 0.5) * 2.0; // Jitter origin as a way to sample spatially
 
-    // Corrected ray direction flip: if even, original; if odd, flipped
     ray_direction = select(-ray_direction, ray_direction,(probe_index_in_workgroup % 2u) == 0u);
 
     let individual_ray_light = trace_ray(ray_origin, ray_direction);
 
-    // Store this invocation's light contribution into shared memory
     accumulated_light_shared[local_id.x] = individual_ray_light;
-    workgroupBarrier(); // Ensure all invocations have written their light
+    workgroupBarrier();
 
     // Parallel sum reduction
-    // After this loop, accumulated_light_shared[0] will hold the sum of all contributions.
+    // I just hope it converts to something like subgroupAdd
     var num_active_threads = RAYS_PER_PROBE;
     for (var offset = num_active_threads / 2u; offset > 0u; offset = offset / 2u) {
         if (local_id.x < offset) {
             accumulated_light_shared[local_id.x] += accumulated_light_shared[local_id.x + offset];
         }
-        workgroupBarrier(); // Synchronize after each step of the reduction
+        workgroupBarrier();
     }
 
-    // Only the first invocation in the workgroup performs the final store
     if (local_id.x == 0u) {
         let total_light_sum = accumulated_light_shared[0];
         let final_averaged_light = total_light_sum / f32(RAYS_PER_PROBE);
-        store_probe(probe_pos_world, final_averaged_light);
+        store_probe(probe_position_world, final_averaged_light);
     }
 }

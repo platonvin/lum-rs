@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build demo Vulkan
+      run: cargo +nightly biv
+    - name: Build demo WGPU
+      run: cargo +nightly biw
+    
+    # there is not much to test, its a renderer after all
+    

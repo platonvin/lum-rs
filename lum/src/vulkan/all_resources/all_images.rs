@@ -7,6 +7,7 @@ use crate::{
     },
     Settings,
 };
+use containers::array3d::Dim3;
 #[cfg(feature = "debug_validation_names")]
 use lumal::set_debug_names;
 use lumal::{vk, LumalSettings, Renderer};
@@ -18,13 +19,20 @@ fn uvec3_to_extent3d(size: uvec3) -> vk::Extent3D {
         depth: size.z,
     }
 }
+fn usvec3_to_extent3d(size: qvek::vek::Vec3<usize>) -> vk::Extent3D {
+    vk::Extent3D {
+        width: size.x as u32,
+        height: size.y as u32,
+        depth: size.z as u32,
+    }
+}
 
-impl<'a> InternalRendererVulkan<'a> {
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     /// Creates bundle of all swapchain size INdependent images
     /// You DONT need to recreate them when swapchain resizes (so they are created only once)
     pub fn create_independent_images(
         lumal: &mut Renderer,
-        lum_settings: &Settings,
+        lum_settings: &Settings<D>,
         lumal_settings: &LumalSettings,
     ) -> AllIndependentImages {
         let world = lumal.create_image_ring(
@@ -35,7 +43,7 @@ impl<'a> InternalRendererVulkan<'a> {
                 | vk::ImageUsageFlags::TRANSFER_DST
                 | vk::ImageUsageFlags::SAMPLED,
             vk::ImageAspectFlags::COLOR,
-            uvec3_to_extent3d(lum_settings.world_size),
+            usvec3_to_extent3d(lum_settings.world_size.xyz()),
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("World"),
@@ -65,7 +73,7 @@ impl<'a> InternalRendererVulkan<'a> {
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::TRANSFER_DST,
             vk::ImageAspectFlags::COLOR,
-            uvec3_to_extent3d(lum_settings.world_size),
+            usvec3_to_extent3d(lum_settings.world_size.xyz()),
             vk::SampleCountFlags::TYPE_1,
             #[cfg(feature = "debug_validation_names")]
             Some("Radiance Cache"),
@@ -112,8 +120,8 @@ impl<'a> InternalRendererVulkan<'a> {
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
             vk::ImageAspectFlags::COLOR,
             vk::Extent3D {
-                width: lum_settings.world_size.x * 2,
-                height: lum_settings.world_size.y * 2,
+                width: (lum_settings.world_size.x() * 2) as u32,
+                height: (lum_settings.world_size.y() * 2) as u32,
                 depth: 1,
             },
             vk::SampleCountFlags::TYPE_1,
@@ -127,8 +135,8 @@ impl<'a> InternalRendererVulkan<'a> {
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
             vk::ImageAspectFlags::COLOR,
             vk::Extent3D {
-                width: lum_settings.world_size.x * 2,
-                height: lum_settings.world_size.y * 2,
+                width: (lum_settings.world_size.x() * 2) as u32,
+                height: (lum_settings.world_size.y() * 2) as u32,
                 depth: 1,
             },
             vk::SampleCountFlags::TYPE_1,
@@ -142,8 +150,8 @@ impl<'a> InternalRendererVulkan<'a> {
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
             vk::ImageAspectFlags::COLOR,
             vk::Extent3D {
-                width: lum_settings.world_size.x,
-                height: lum_settings.world_size.y,
+                width: lum_settings.world_size.x() as u32,
+                height: lum_settings.world_size.y() as u32,
                 depth: 1,
             },
             vk::SampleCountFlags::TYPE_1,
@@ -184,7 +192,7 @@ impl<'a> InternalRendererVulkan<'a> {
     /// Does not creates swapchain images themselves
     pub fn create_dependent_images(
         lumal: &mut Renderer,
-        _lum_settings: &Settings,
+        _lum_settings: &Settings<D>,
         _lumal_settings: &LumalSettings,
     ) -> AllSwapchainDependentImages {
         let sextent = uvec3::new(

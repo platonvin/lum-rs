@@ -10,6 +10,7 @@ use crate::{
     },
     Settings,
 };
+use containers::array3d::Dim3;
 use containers::Ring;
 use shaders::Shader;
 use std::mem::offset_of;
@@ -112,10 +113,10 @@ pub struct PackedVoxelCircuit {
     pub pos: u8vec4,
 }
 
-impl<'window> InternalRendererWebGPU<'window> {
+impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
     pub fn create_all_pipes(
         wal: &Wal,
-        _lum_settings: &Settings,
+        _lum_settings: &Settings<D>,
         buffers: &AllBuffers,
         iimages: &AllIndependentImages,
         dimages: &AllSwapchainDependentImages,
@@ -967,7 +968,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             ],
             &[],
             shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
-            Some(shaders::Shader::get_wgsl(Shader::GrassFrag)),
+            Some(shaders::Shader::get_wgsl(Shader::GlossyFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {

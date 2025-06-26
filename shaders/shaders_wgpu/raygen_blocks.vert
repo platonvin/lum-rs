@@ -12,17 +12,13 @@ struct UboData {
     delta_time: f32,
 };
 
-struct Constants {
+struct PushConstants {
     block: i32,
     shift_x: i32,
     shift_y: i32,
     shift_z: i32,
     FUCKWEB_unorm: u32, 
 };
-
-@group(0) @binding(0) var<uniform> ubo: UboData;
-// @group(0) @binding(2) var blockPalette: texture_3d<i32>;
-@group(1) @binding(0) var<storage, read> pco_shared: array<Constants>;
 
 struct VertexInput {
     @location(0) @interpolate(flat) posIn: vec4<u32>,
@@ -33,6 +29,11 @@ struct VertexOutput {
     @location(0) @interpolate(linear) sample_point: vec3<f32>,
     @location(1) @interpolate(flat) bunorm: u32,
 };
+
+
+@group(0) @binding(0) var<uniform> ubo: UboData;
+// @group(0) @binding(2) var blockPalette: texture_3d<i32>;
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     return v + 2.0 * cross(cross(v, -q.xyz) + q.w * v, -q.xyz);
@@ -59,7 +60,7 @@ fn main(@builtin(instance_index) instance_id: u32, in: VertexInput) -> VertexOut
     let uworld_pos = upos + shift;
     let fworld_pos = vec4<f32>(vec3<f32>(uworld_pos), 1.0);
 
-    var clip_coords: vec3<f32> = (ubo.trans_w2s * fworld_pos).xyz; // move up
+    var clip_coords: vec3<f32> = (ubo.trans_w2s * fworld_pos).xyz;
     clip_coords.z = 1.0 + clip_coords.z;
 
     var out: VertexOutput;

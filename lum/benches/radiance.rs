@@ -1,12 +1,12 @@
 #![feature(portable_simd)]
-// damn am i really forcing nighly?
-// how are you supposed to use simd without nightly?
-// benches/radiance_benchmark.rs
-use containers::{Array3D, BitArray3d, Multiprocessor};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use containers::{
+    array3d::{ConstDims, Dim3},
+    Array3D, BitArray3d, Multiprocessor,
+};
+use criterion::{criterion_group, criterion_main, Criterion};
 use lum::{
     assert_assume, for_zyx,
-    /*renderer::*/ types::{i8vec4, uvec3},
+    types::{i8vec4, uvec3},
 };
 use qvek::i8vec4;
 
@@ -19,15 +19,18 @@ struct Settings {
     world_size: uvec3,
 }
 
+type WorldSize = ConstDims<48, 48, 16>;
+const WORLD_SIZE: WorldSize = WorldSize {};
+
 struct World {
-    blocks: Array3D<BlockId>,
+    blocks: Array3D<BlockId, WorldSize>,
     radiance_updates: Vec<i8vec4>,
 }
 
 impl World {
     fn new(size: uvec3) -> Self {
         World {
-            blocks: Array3D::new_filled(size.x as usize, size.y as usize, size.z as usize, 0),
+            blocks: Array3D::new_filled(WORLD_SIZE, 0),
             radiance_updates: Vec::with_capacity(
                 size.x as usize * size.y as usize * size.z as usize,
             ),
@@ -48,9 +51,10 @@ impl World {
                     // Higher Z has more air (surface-like distribution)
                     if (x + y + z) % 5 == 0 {
                         // 20% chance of block (simplified from weights)
-                        self.blocks[(x, y, z)] = (x + y * 2 + z * 4) as i16 % 10 + 1;
+                        self.blocks[(x, y, z)] =
+                            std::hint::black_box((x + y * 2 + z * 4) as i16 % 10 + 1);
                     } else {
-                        self.blocks[(x, y, z)] = 0;
+                        self.blocks[(x, y, z)] = std::hint::black_box(0);
                     }
                 }
             }
@@ -59,11 +63,9 @@ impl World {
 }
 
 // Original implementation
-fn update_radiance_original(world: &mut World, settings: &Settings) {
-    let mut set = Array3D::<bool>::new_filled(
-        settings.world_size.x as usize,
-        settings.world_size.y as usize,
-        settings.world_size.z as usize,
+unsafe fn update_radiance_original(world: &mut World, settings: &Settings) {
+    let mut set = Array3D::<bool, WorldSize>::new_filled(
+        WORLD_SIZE,
         false, // each value in set corresponds to "if the block is already updated"
     );
 
@@ -95,11 +97,11 @@ fn update_radiance_original(world: &mut World, settings: &Settings) {
         }
     }
 
-    black_box(set);
+    std::hint::black_box(set);
 }
 
 // Optimized implementation (your version)
-fn update_radiance_unrolled(world: &mut World, settings: &Settings) {
+unsafe fn update_radiance_unrolled(world: &mut World, settings: &Settings) {
     let (sx, sy, sz) = (
         settings.world_size.x as i8,
         settings.world_size.y as i8,
@@ -182,19 +184,16 @@ fn update_radiance_unrolled(world: &mut World, settings: &Settings) {
 struct FakeSyncBool(UnsafeCell<bool>);
 unsafe impl Sync for FakeSyncBool {}
 
-fn get_block_with_neighbors_parallel(
-    world: &Array3D<i16>,
-    size: uvec3,
+unsafe fn get_block_with_neighbors_parallel(
+    world: &Array3D<i16, WorldSize>,
     multiprocessor: &Multiprocessor,
 ) -> Vec<i8vec4> {
     let mut thread_count = multiprocessor.optimal_dispatch_size();
-    let chunk_size = (size.z as usize).div_ceil(thread_count);
+    let chunk_size = WORLD_SIZE.z().div_ceil(thread_count);
 
     // Wrap Array3D<bool> in UnsafeCell to allow interior mutability
-    let visited = Arc::new(Array3D::<FakeSyncBool>::new_filled_by_generator(
-        size.x as usize,
-        size.y as usize,
-        size.z as usize,
+    let visited = Arc::new(Array3D::<FakeSyncBool, WorldSize>::from_fn(
+        WORLD_SIZE,
         || FakeSyncBool(UnsafeCell::new(false)),
     ));
 
@@ -208,29 +207,33 @@ fn get_block_with_neighbors_parallel(
 
     multiprocessor.dispatch(thread_count, {
         let radiance_updates = radiance_updates.clone();
-        let visited = Arc::clone(&visited);
+        let visited: Arc<Array3D<_, WorldSize>> = Arc::clone(&visited);
 
         move |thread_id| {
             let z_start = thread_id * chunk_size;
-            let z_end = ((thread_id + 1) * chunk_size).min(size.z as usize);
+            let z_end = ((thread_id + 1) * chunk_size).min(WORLD_SIZE.z());
 
             // Each thread accumulates its own small vec
-            let mut local_updates =
-                Vec::with_capacity(chunk_size * (size.x as usize * size.y as usize) / 2);
+            let mut local_updates = Vec::with_capacity(
+                chunk_size * (WORLD_SIZE.x() as usize * WORLD_SIZE.y() as usize) / 2,
+            );
 
             for zz in z_start..z_end {
-                for yy in 0..size.y as usize {
-                    for xx in 0..size.x as usize {
+                for yy in 0..WORLD_SIZE.y() {
+                    for xx in 0..WORLD_SIZE.x() {
                         'free: for dz in -1..=1 {
                             for dy in -1..=1 {
                                 for dx in -1..=1 {
-                                    let x = (xx as isize + dx).clamp(0, size.x as isize - 1);
-                                    let y = (yy as isize + dy).clamp(0, size.y as isize - 1);
-                                    let z = (zz as isize + dz).clamp(0, size.z as isize - 1);
+                                    let x =
+                                        (xx as isize + dx).clamp(0, WORLD_SIZE.x() as isize - 1);
+                                    let y =
+                                        (yy as isize + dy).clamp(0, WORLD_SIZE.y() as isize - 1);
+                                    let z =
+                                        (zz as isize + dz).clamp(0, WORLD_SIZE.z() as isize - 1);
 
                                     if world.blocks[(x as usize, y as usize, z as usize)] != 0 {
                                         unsafe {
-                                            *visited.get_ref(xx, yy, zz).0.get() = true;
+                                            *visited.get(xx, yy, zz).0.get() = true;
                                         }
                                         break 'free;
                                     }
@@ -242,9 +245,9 @@ fn get_block_with_neighbors_parallel(
             }
 
             for zz in z_start..z_end {
-                for yy in 0..size.y as usize {
-                    for xx in 0..size.x as usize {
-                        if unsafe { *visited.get_ref(xx, yy, zz).0.get() } {
+                for yy in 0..WORLD_SIZE.y() as usize {
+                    for xx in 0..WORLD_SIZE.x() as usize {
+                        if unsafe { *visited.get(xx, yy, zz).0.get() } {
                             local_updates.push(i8vec4::new(xx as i8, yy as i8, zz as i8, 0));
                         }
                     }
@@ -262,9 +265,9 @@ fn get_block_with_neighbors_parallel(
 }
 
 // turned to be the fastest
-fn update_radiance_separated(world: &Array3D<BlockId>, size: uvec3) -> Vec<i8vec4> {
-    let (sx, sy, sz) = (size.x as usize, size.y as usize, size.z as usize);
-    let mut included = Array3D::new_filled(sx, sy, sz, false);
+unsafe fn update_radiance_separated(world: &Array3D<BlockId, WorldSize>) -> Vec<i8vec4> {
+    let mut included = Array3D::new_filled(WORLD_SIZE, false);
+    let (sx, sy, sz) = (WORLD_SIZE.x(), WORLD_SIZE.y(), WORLD_SIZE.z());
 
     let mut count = 0;
     // First pass: Mark all positions in 3x3x3 neighborhoods around non-zero blocks
@@ -274,15 +277,15 @@ fn update_radiance_separated(world: &Array3D<BlockId>, size: uvec3) -> Vec<i8vec
                 'free: for dz in -1isize..=1 {
                     for dy in -1isize..=1 {
                         for dx in -1isize..=1 {
-                            let x = (xx as isize + dx).max(0).min(size.x as isize - 1);
-                            let y = (yy as isize + dy).max(0).min(size.y as isize - 1);
-                            let z = (zz as isize + dz).max(0).min(size.z as isize - 1);
-                            let block = world.get(x as usize, y as usize, z as usize);
+                            let x = (xx as isize + dx).max(0).min(sx as isize - 1);
+                            let y = (yy as isize + dy).max(0).min(sy as isize - 1);
+                            let z = (zz as isize + dz).max(0).min(sz as isize - 1);
+                            let block = world.get_unchecked(x as usize, y as usize, z as usize);
 
-                            assert_assume!((block > 0) == (block != 0));
+                            assert_assume!((*block > 0) == (*block != 0));
 
-                            if block > 0 {
-                                included.set(xx, yy, zz, true);
+                            if *block > 0 {
+                                included.set_unchecked(xx, yy, zz, true);
                                 count += 1;
                                 //i want to
                                 break 'free;
@@ -299,7 +302,7 @@ fn update_radiance_separated(world: &Array3D<BlockId>, size: uvec3) -> Vec<i8vec
     for x in 0..sx {
         for y in 0..sy {
             for z in 0..sz {
-                if included[(x, y, z)] {
+                if *included.get_unchecked(x, y, z) {
                     result.push(i8vec4::new(x as i8, y as i8, z as i8, 0));
                 }
             }
@@ -309,9 +312,9 @@ fn update_radiance_separated(world: &Array3D<BlockId>, size: uvec3) -> Vec<i8vec
     result
 }
 
-fn update_radiance_separated_bitarray(world: &Array3D<BlockId>, size: uvec3) -> Vec<i8vec4> {
-    let (sx, sy, sz) = (size.x as usize, size.y as usize, size.z as usize);
-    let mut included = BitArray3d::<u32>::new_filled(sx, sy, sz, false);
+unsafe fn update_radiance_separated_bitarray(world: &Array3D<BlockId, WorldSize>) -> Vec<i8vec4> {
+    let (sx, sy, sz) = (WORLD_SIZE.x(), WORLD_SIZE.y(), WORLD_SIZE.z());
+    let mut included = BitArray3d::<u32, WorldSize>::new_filled(WORLD_SIZE, false);
 
     // First pass: Mark all positions in 3x3x3 neighborhoods around non-zero blocks
 
@@ -329,7 +332,7 @@ fn update_radiance_separated_bitarray(world: &Array3D<BlockId>, size: uvec3) -> 
                 for ny in start_y..=end_y {
                     for nz in start_z..=end_z {
                         // we could push to stack in here. But it leads to worse asm, and also
-                        included.set(nx, ny, nz, true);
+                        included.set_unchecked(nx, ny, nz, true);
                     }
                 }
             }
@@ -341,7 +344,7 @@ fn update_radiance_separated_bitarray(world: &Array3D<BlockId>, size: uvec3) -> 
     for x in 0..sx {
         for y in 0..sy {
             for z in 0..sz {
-                if included.get(x, y, z) {
+                if included.get_unchecked(x, y, z) {
                     result.push(i8vec4::new(x as i8, y as i8, z as i8, 0));
                 }
             }
@@ -352,7 +355,8 @@ fn update_radiance_separated_bitarray(world: &Array3D<BlockId>, size: uvec3) -> 
 }
 
 // not faster
-fn update_radiance_simd(world: &mut World, settings: &Settings) {
+#[allow(clippy::erasing_op)] // LOL
+unsafe fn update_radiance_simd(world: &mut World, settings: &Settings) {
     // Precomputed memory offsets for neighbors (relative to current position)
     // They should be precomputed at init-time
     // TODO: NOTE: use different functions for different sizes - 48x48x16 barely fits in i16
@@ -379,109 +383,307 @@ fn update_radiance_simd(world: &mut World, settings: &Settings) {
 
     let data = &world.blocks.data;
 
-    for_zyx!(
-        settings.world_size.x as usize,
-        settings.world_size.y as usize,
-        settings.world_size.z as usize,
-        |xx, yy, zz| {
-            let base_idx = world.blocks.index_internal(xx, yy, zz) as i32;
+    for_zyx!(WORLD_SIZE.xyz(), |xx, yy, zz| {
+        let base_idx = world.blocks.index_internal(xx, yy, zz) as i32;
 
-            // Load memory offsets into SIMD vector
-            let offsets = i32x32::from_array(MEM_OFFSETS);
+        // Load memory offsets into SIMD vector
+        let offsets = i32x32::from_array(MEM_OFFSETS);
 
-            // Calculate neighbor indices relative to base index
-            let neighbor_indices = offsets + i32x32::splat(base_idx);
+        // Calculate neighbor indices relative to base index
+        let neighbor_indices = offsets + i32x32::splat(base_idx);
 
-            // use this:
-            // simd_masked_load()
-
-            // Gather block value (not using SIMD. Is there "load from vector of pointers"?
-            let mut blocks = [0i32; 32];
-            for i in 0..32 {
-                let idx = neighbor_indices[i] as usize;
-                if idx < data.len() {
-                    blocks[i] = data[idx] as i32;
-                }
-            }
-
-            // Check for any non-zero neighbors
-            let block_vec = i32x32::from_array(blocks);
-            if block_vec.simd_gt(i32x32::splat(0)).any() {
-                world.radiance_updates.push(i8vec4::new(xx as i8, yy as i8, zz as i8, 0));
+        // Gather block value (not using SIMD. Is there "load from vector of pointers"?
+        let mut blocks = [0i32; 32];
+        for i in 0..32 {
+            let idx = neighbor_indices[i] as usize;
+            if idx < data.len() {
+                blocks[i] = *data.get_unchecked(idx) as i32;
             }
         }
-    );
+
+        // Check for any non-zero neighbors
+        let block_vec = i32x32::from_array(blocks);
+        if block_vec.simd_gt(i32x32::splat(0)).any() {
+            world.radiance_updates.push(i8vec4::new(xx as i8, yy as i8, zz as i8, 0));
+        }
+    });
+}
+
+unsafe fn update_radiance_smearing(world: &Array3D<BlockId, WorldSize>, result: &mut Vec<i8vec4>) {
+    let (sx, sy, sz) = (WORLD_SIZE.x(), WORLD_SIZE.y(), WORLD_SIZE.z());
+
+    // 1. Initial pass: mark all non-zero blocks.
+    let mut pass1 = BitArray3d::<u32, WorldSize>::new_filled(WORLD_SIZE, false);
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 0..sx {
+                if world[(x, y, z)] != 0 {
+                    unsafe { pass1.set_unchecked(x, y, z, true) };
+                }
+            }
+        }
+    }
+
+    let mut pass2 = BitArray3d::<u32, WorldSize>::new_filled(WORLD_SIZE, false);
+
+    // 2. X-axis smear: pass1 -> pass2
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 0..sx {
+                let smear = (x > 0 && unsafe { pass1.get_unchecked(x - 1, y, z) })
+                    || (x < sx - 1 && unsafe { pass1.get_unchecked(x + 1, y, z) });
+                if smear {
+                    unsafe { pass2.set_unchecked(x, y, z, true) };
+                }
+            }
+        }
+    }
+
+    // 3. Y-axis smear: pass2 -> pass1
+    pass1.fill(false); // Reuse pass1 as the destination
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 0..sx {
+                let smear = (y > 0 && unsafe { pass2.get_unchecked(x, y - 1, z) })
+                    || (y < sy - 1 && unsafe { pass2.get_unchecked(x, y + 1, z) });
+                if smear {
+                    unsafe { pass1.set_unchecked(x, y, z, true) };
+                }
+            }
+        }
+    }
+
+    // 4. Z-axis smear: pass1 -> pass2
+    pass2.fill(false); // Reuse pass2 as the destination
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 0..sx {
+                let smear = (z > 0 && unsafe { pass1.get_unchecked(x, y, z - 1) })
+                    || (z < sz - 1 && unsafe { pass1.get_unchecked(x, y, z + 1) });
+                if smear {
+                    unsafe { pass2.set_unchecked(x, y, z, true) };
+                }
+            }
+        }
+    }
+
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 0..sx {
+                if unsafe { pass2.get_unchecked(x, y, z) } {
+                    result.push(i8vec4::new(x as i8, y as i8, z as i8, 0));
+                }
+            }
+        }
+    }
+}
+
+unsafe fn update_radiance_smearing_bool(
+    world: &Array3D<BlockId, WorldSize>,
+    result: &mut Vec<i8vec4>,
+) {
+    let mut mask = Array3D::<bool, WorldSize>::new_filled(WORLD_SIZE, false);
+    let (sx, sy, sz) = (WORLD_SIZE.x(), WORLD_SIZE.y(), WORLD_SIZE.z());
+
+    // initial mark
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 0..sx {
+                unsafe {
+                    if *world.get_unchecked(x, y, z) != 0 {
+                        mask.set_unchecked(x, y, z, true);
+                    }
+                }
+            }
+        }
+    }
+
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 1..sx {
+                unsafe {
+                    if *mask.get_unchecked(x - 1, y, z) {
+                        mask.set_unchecked(x, y, z, true);
+                    }
+                }
+            }
+            for x in (0..sx - 1).rev() {
+                unsafe {
+                    if *mask.get_unchecked(x + 1, y, z) {
+                        mask.set_unchecked(x, y, z, true);
+                    }
+                }
+            }
+        }
+    }
+
+    for z in 0..sz {
+        for x in 0..sx {
+            for y in 1..sy {
+                unsafe {
+                    if *mask.get_unchecked(x, y - 1, z) {
+                        mask.set_unchecked(x, y, z, true);
+                    }
+                }
+            }
+            for y in (0..sy - 1).rev() {
+                unsafe {
+                    if *mask.get_unchecked(x, y + 1, z) {
+                        mask.set_unchecked(x, y, z, true);
+                    }
+                }
+            }
+        }
+    }
+
+    for y in 0..sy {
+        for x in 0..sx {
+            for z in 1..sz {
+                unsafe {
+                    if *mask.get_unchecked(x, y, z - 1) {
+                        mask.set_unchecked(x, y, z, true);
+                    }
+                }
+            }
+            for z in (0..sz - 1).rev() {
+                unsafe {
+                    if *mask.get_unchecked(x, y, z + 1) {
+                        mask.set_unchecked(x, y, z, true);
+                    }
+                }
+            }
+        }
+    }
+
+    for z in 0..sz {
+        for y in 0..sy {
+            for x in 0..sx {
+                unsafe {
+                    if *mask.get_unchecked(x, y, z) {
+                        result.push(i8vec4::new(x as i8, y as i8, z as i8, 0));
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn benchmark_radiance(c: &mut Criterion) {
     let mut group = c.benchmark_group("radiance-updates");
 
-    {
-        let (name, size) = ("small", uvec3::new(48, 48, 16));
-        // group.bench_function(&format!("SIMD-{}", name), |b| {
-        //     let mut world = World::new(size);
-        //     world.generate_realistic();
-        //     let settings = Settings { world_size: size };
+    let (name, size) = ("small", uvec3::new(48, 48, 16));
 
-        //     b.iter(|| {
-        //         world.radiance_updates.clear();
-        //         update_radiance_simd(black_box(&mut world), black_box(&settings));
-        //     })
-        // });
-        group.bench_function(format!("parallel-{}", name), |b| {
-            let mut world = World::new(size);
-            world.generate();
-            let settings = Settings { world_size: size };
-            let multiprocessor = Multiprocessor::new();
+    group.bench_function(&format!("SIMD-{}", name), |b| {
+        let mut world = World::new(size);
+        world.generate();
+        let settings = Settings { world_size: size };
 
-            b.iter(|| {
-                world.radiance_updates.clear();
-                get_block_with_neighbors_parallel(black_box(&world.blocks), size, &multiprocessor);
-            })
-        });
+        b.iter(|| {
+            world.radiance_updates.clear();
+            unsafe {
+                update_radiance_simd(
+                    std::hint::black_box(&mut world),
+                    std::hint::black_box(&settings),
+                )
+            };
+        })
+    });
 
-        group.bench_function(format!("separated-{}", name), |b| {
-            let mut world = World::new(size);
-            world.generate();
+    // group.bench_function(format!("parallel-{}", name), |b| {
+    //     let mut world = World::new(size);
+    //     world.generate();
+    //     let settings = Settings { world_size: size };
+    //     let multiprocessor = Multiprocessor::new();
 
-            b.iter(|| {
-                world.radiance_updates.clear();
-                update_radiance_separated(black_box(&world.blocks), size);
-            })
-        });
+    //     b.iter(|| {
+    //         world.radiance_updates.clear();
+    //         get_block_with_neighbors_parallel(
+    //             std::hint::black_box(&world.blocks),
+    //             size,
+    //             &multiprocessor,
+    //         );
+    //     })
+    // });
 
-        group.bench_function(format!("separated-bits-{}", name), |b| {
-            let mut world = World::new(size);
-            world.generate();
+    group.bench_function(format!("separated-{}", name), |b| {
+        let mut world = World::new(size);
+        world.generate();
 
-            b.iter(|| {
-                world.radiance_updates.clear();
-                update_radiance_separated_bitarray(black_box(&world.blocks), size);
-            })
-        });
+        b.iter(|| {
+            world.radiance_updates.clear();
+            unsafe { update_radiance_separated(std::hint::black_box(&world.blocks)) };
+        })
+    });
 
-        group.bench_function(format!("original-{}", name), |b| {
-            let mut world = World::new(size);
-            world.generate();
-            let settings = Settings { world_size: size };
+    group.bench_function(format!("separated-bits-{}", name), |b| {
+        let mut world = World::new(size);
+        world.generate();
 
-            b.iter(|| {
-                world.radiance_updates.clear();
-                update_radiance_original(black_box(&mut world), black_box(&settings));
-            })
-        });
+        b.iter(|| {
+            world.radiance_updates.clear();
+            unsafe { update_radiance_separated_bitarray(std::hint::black_box(&world.blocks)) };
+        })
+    });
 
-        group.bench_function(format!("unrolled-{}", name), |b| {
-            let mut world = World::new(size);
-            world.generate();
-            let settings = Settings { world_size: size };
+    group.bench_function(format!("original-{}", name), |b| {
+        let mut world = World::new(size);
+        world.generate();
+        let settings = Settings { world_size: size };
 
-            b.iter(|| {
-                world.radiance_updates.clear();
-                update_radiance_unrolled(black_box(&mut world), black_box(&settings));
-            })
-        });
-    }
+        b.iter(|| {
+            world.radiance_updates.clear();
+            unsafe {
+                update_radiance_original(
+                    std::hint::black_box(&mut world),
+                    std::hint::black_box(&settings),
+                )
+            };
+        })
+    });
+
+    group.bench_function(format!("unrolled-{}", name), |b| {
+        let mut world = World::new(size);
+        world.generate();
+        let settings = Settings { world_size: size };
+
+        b.iter(|| {
+            world.radiance_updates.clear();
+            unsafe {
+                update_radiance_unrolled(
+                    std::hint::black_box(&mut world),
+                    std::hint::black_box(&settings),
+                )
+            };
+        })
+    });
+
+    group.bench_function(format!("smearing-{}", name), |b| {
+        let mut world = World::new(size);
+        world.generate();
+        b.iter(|| {
+            world.radiance_updates.clear();
+            unsafe {
+                update_radiance_smearing_bool(
+                    std::hint::black_box(&world.blocks),
+                    &mut world.radiance_updates,
+                )
+            };
+        })
+    });
+
+    group.bench_function(format!("smearing-bits-{}", name), |b| {
+        let mut world = World::new(size);
+        world.generate();
+        b.iter(|| {
+            world.radiance_updates.clear();
+            unsafe {
+                update_radiance_smearing(
+                    std::hint::black_box(&world.blocks),
+                    &mut world.radiance_updates,
+                )
+            };
+        })
+    });
 
     group.finish();
 }

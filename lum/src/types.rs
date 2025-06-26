@@ -81,7 +81,7 @@ pub type MeshLiquid = usize;
 pub type MeshFoliage = usize;
 
 // I am unsure about if this should be shared between backends but it is at the moment
-/// CPU-side particle (grid-aigned but not grid-snapped cube with material and size dependent lifetime)
+/// CPU-side particle (grid-aligned but not grid-snapped cube with material and size, dependent on lifetime)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Particle {

@@ -7,6 +7,7 @@ pub mod types;
 
 use super::{Camera, Settings, SunLight};
 use crate::{types::*, vulkan::types::*, BLOCK_SIZE};
+use containers::array3d::Dim3;
 use containers::Array3D;
 use containers::Ring;
 use lumal::{vk, RasterPipe};
@@ -194,13 +195,13 @@ pub struct AllRenderPasses {
 /// Unlike wgpu, Vulkan backend is split into 2 parts
 /// This allows you to have less CPU-side overhead if you want (by submitting commands directly without queues)
 /// *wgpu backend does not have this due to skill issues*
-pub struct InternalRendererVulkan<'a> {
+pub struct InternalRendererVulkan<'a, D: Dim3> {
     /// Internal frame counter. Used as rng seed
     pub counter: isize,
     /// Vulkan abstraction that Lum uses
     pub lumal: lumal::Renderer,
     /// renderer settings. Cannot be changed after creation
-    pub settings: Settings,
+    pub settings: Settings<D>,
 
     /// All foliage descriptions (which have lifetime of renderer because they dont change after creation)
     pub foliage_descriptions: Vec<MeshFoliageDescription<'a>>,
@@ -240,10 +241,10 @@ pub struct InternalRendererVulkan<'a> {
     pub static_block_palette_size: u32,
 
     /// ground truth for block references data, without any block allocations (no models)
-    pub origin_world: Array3D<MeshBlock>,
+    pub origin_world: Array3D<MeshBlock, D>,
     /// modified origin world, with some blocks allocated for models
     /// for internal use only
-    pub current_world: Array3D<MeshBlock>,
+    pub current_world: Array3D<MeshBlock, D>,
 
     /// just particles. Very simple system to process them
     pub particles: Vec<Particle>,
@@ -273,13 +274,13 @@ pub struct InternalRendererVulkan<'a> {
 const DEPTH_FORMAT_SPARE: vk::Format = vk::Format::D24_UNORM_S8_UINT; // TODO somehow D32 faster than vk::Format::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED: vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
 
-impl<'a> InternalRendererVulkan<'a> {
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     pub fn new(
-        lum_settings: &Settings,
+        lum_settings: &Settings<D>,
         window: &Window,
         size: PhysicalSize<u32>,
         foliage_descriptions: Vec<MeshFoliageDescription<'a>>,
-    ) -> InternalRendererVulkan<'a> {
+    ) -> InternalRendererVulkan<'a, D> {
         let mut lumal_settings = lumal::LumalSettings::default();
         if cfg!(debug_assertions) {
             lumal_settings.debug = true;
@@ -330,17 +331,11 @@ impl<'a> InternalRendererVulkan<'a> {
         let camera = Camera::default();
         let light = SunLight::default();
 
-        let origin_world = Array3D::<MeshBlock>::new(
-            lum_settings.world_size.x as usize,
-            lum_settings.world_size.y as usize,
-            lum_settings.world_size.z as usize,
-        );
+        let origin_world = Array3D::<MeshBlock, D>::new_default(lum_settings.world_size);
         // same as initalization but cleaner imho
-        let current_world = Array3D {
+        let current_world = Array3D::<_, D> {
             data: origin_world.data.clone(),
-            x_size: origin_world.x_size,
-            y_size: origin_world.y_size,
-            z_size: origin_world.z_size,
+            dims: origin_world.dims,
         };
 
         let mut lum = InternalRendererVulkan {
@@ -467,9 +462,9 @@ impl<'a> InternalRendererVulkan<'a> {
     }
 }
 
-fn create_dependent(
+fn create_dependent<D: Dim3>(
     lumal: &mut lumal::Renderer,
-    lum_settings: &Settings,
+    lum_settings: &Settings<D>,
     foliage_descriptions: &[MeshFoliageDescription],
     lumal_settings: &lumal::LumalSettings,
     independent_images: &AllIndependentImages,

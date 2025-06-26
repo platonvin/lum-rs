@@ -26,11 +26,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let wind_direction = vec2<f32>(1.0, 1.0);
     let ftime = bitcast<f32>(ubo.timeseed);
-    let uv_shift = wind_direction * ftime / 300.0; // Using time from UBO
+    let uv_shift = wind_direction * ftime / 300.0;
     let noise_uv = pos + uv_shift;
 
-    // WGSL doesn't have direct equivalent of textureGrad with explicit dpdx/dpdy.
-    // We'll approximate the gradient using offsets.
     let inv_texture_size = vec2<f32>(1.0) / vec2<f32>(textureDimensions(perlin_noise, 0));
     let offset_x = vec2<f32>(inv_texture_size.x, 0.0);
     let offset_y = vec2<f32>(0.0, inv_texture_size.y);

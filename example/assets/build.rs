@@ -31,6 +31,7 @@ fn main() -> io::Result<()> {
     let block_names = process_asset_directory("blocks", &assets_dir, &out_dir, true)?;
     let model_names = process_asset_directory("models", &assets_dir, &out_dir, false)?;
 
+    // generate enum variants corresponding to file names (enum > string)
     generate_enums_file(&out_dir.join("asset_enums.rs"), &block_names, &model_names)?;
 
     println!(
@@ -222,6 +223,7 @@ impl block_mesh::MergeVoxel for InternalVoxel {
     }
 }
 
+/// Read, mesh and repack voxel data from file.
 fn process_vox_file(
     path: &Path,
     is_block: bool,
@@ -259,6 +261,7 @@ fn process_vox_file(
     (metadata, model.voxel_data.clone(), vertices, indices)
 }
 
+/// Make countour triangles from voxels. Why countour? -> see Lum internals.
 fn mesh_from_voxels(
     size: Vec3<u32>,
     voxel_data: &[u8],
@@ -353,6 +356,8 @@ fn sort_indices_by_normal(indices: &[u32], normals: &[[f32; 3]]) -> (Vec<u16>, S
     (all_indices, face_indices)
 }
 
+/// Extract palette from scene with palette.
+/// (likely "test" scene with all voxels placed to see how they interact, but can be empty - we dont care)
 fn process_palette(assets_dir: &Path, out_dir: &Path) -> io::Result<Option<PathBuf>> {
     let source_path = assets_dir.join("palette.vox");
     if !source_path.exists() {

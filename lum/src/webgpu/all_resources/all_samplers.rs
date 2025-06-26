@@ -1,9 +1,10 @@
 use crate::webgpu::{wal::Wal, AllSamplers, InternalRendererWebGPU};
+use containers::array3d::Dim3;
 use wgpu::{
     AddressMode, CompareFunction, FilterMode, Sampler, SamplerBorderColor, SamplerDescriptor,
 };
 
-impl<'window> InternalRendererWebGPU<'window> {
+impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
     pub fn create_all_samplers(wal: &Wal) -> AllSamplers {
         // Helper closure to create a sampler from a descriptor.
         let create_sampler =

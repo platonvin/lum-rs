@@ -3,13 +3,14 @@ use crate::{
     vulkan::{AllSamplers, InternalRendererVulkan},
     Settings,
 };
+use containers::array3d::Dim3;
 use lumal::vk;
 use lumal::{LumalSettings, Renderer};
 
-impl<'a> InternalRendererVulkan<'a> {
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     pub fn create_all_samplers(
         lumal: &Renderer,
-        _lum_settings: &Settings,
+        _lum_settings: &Settings<D>,
         _lumal_settings: &LumalSettings,
     ) -> AllSamplers {
         let create_sampler =
