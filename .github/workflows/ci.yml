@@ -32,6 +32,7 @@ jobs:
       with:
         toolchain: nightly
         components: rust-src
+        rustflags: ""
 
     - name: Build demo Vulkan
       run: cargo +nightly biv
