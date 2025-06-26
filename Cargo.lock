@@ -771,15 +771,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gen_conversions_macro"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "gethostname"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1724,7 +1715,6 @@ dependencies = [
 name = "qvek"
 version = "0.1.0"
 dependencies = [
- "gen_conversions_macro",
  "vek",
 ]
 
