@@ -22,7 +22,7 @@ jobs:
       run: sudo apt update
 
     - name: get APT зackages
-      uses: awalsh128/cache-apt-pkgs-action@v1.4.2
+      uses: awalsh128/cache-apt-pkgs-action@v1
       with:
         packages: glslc
         execute_install_scripts: true
