@@ -8,5 +8,6 @@ name = "containers"
 path = "src/lib.rs"
 
 [dependencies]
-# qvek = { git = "https://github.com/platonvin/qvek.git", branch = "master" }
-qvek = { version = "0.1", path = "../../qvek/qvek" }
+qvek = { version = "^0.1.0" }
+# how tf there is no flag to ignore this?
+# qvek = { path = "../../qvek/qvek" }

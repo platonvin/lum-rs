@@ -1714,6 +1714,8 @@ dependencies = [
 [[package]]
 name = "qvek"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e04db4a5c18e9b0238a7164c4a5650d0de625985398932aae78cf05c64c84f7"
 dependencies = [
  "vek",
 ]
