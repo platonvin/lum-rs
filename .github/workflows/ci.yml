@@ -18,6 +18,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Maybe useful update
+      run: sudo apt update
+
+    - name: get APT зackages
+      uses: awalsh128/cache-apt-pkgs-action@v1.4.2
+      with:
+        packages: glslc
+        execute_install_scripts: true
+
     - name: Install Rust
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
