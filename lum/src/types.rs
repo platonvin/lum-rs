@@ -43,36 +43,6 @@ pub type dquat = vek::quaternion::Quaternion<f64>;
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct VoxelForContour<V: PartialEq>(pub V);
 
-// impl<V: PartialEq + Zero> block_mesh::Voxel for VoxelForContour<V> {
-//     fn get_visibility(&self) -> VoxelVisibility {
-//         if self.0 == Zero::zero() {
-//             // TODO: ENUM
-//             VoxelVisibility::Empty
-//         } else {
-//             VoxelVisibility::Opaque
-//         } // never transluent
-//     }
-// }
-
-// impl<V: PartialEq + Zero + One + Eq> block_mesh::MergeVoxel for VoxelForContour<V> {
-//     type MergeValue = VoxelForContour<V>;
-
-//     fn merge_value(&self) -> Self::MergeValue {
-//         // we only care about contour, thus if not emtpy, merging is allowed
-//         let zero = V::zero();
-//         match &self.0 {
-//             zero => VoxelForContour(Zero::zero()),
-//             _ => VoxelForContour(One::one()),
-//         }
-//     }
-// }
-
-// // CPU side structure with actual voxel data but only gpu mesh handler
-// pub struct BlockWithMesh<BufferType, ImageType> {
-//     pub voxels: [[[Voxel; 16]; 16]; 16],
-//     pub mesh: InternalMeshModel<BufferType, ImageType>,
-// }
-
 #[repr(C)]
 #[derive(as_u8_slice_derive::AsU8Slice, Default, Clone, Copy)]
 pub struct Material {
@@ -111,7 +81,7 @@ pub type MeshLiquid = usize;
 pub type MeshFoliage = usize;
 
 // I am unsure about if this should be shared between backends but it is at the moment
-/// CPU-side particle (grid-aigned but not grid-snapped cube with material and size dependent lifetime)
+/// CPU-side particle (grid-aligned but not grid-snapped cube with material and size, dependent on lifetime)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Particle {
@@ -121,152 +91,6 @@ pub struct Particle {
     pub mat_id: MatId,
 }
 
-// #[repr(C)]
-// #[derive(Debug, Clone, Copy, Default)]
-// pub struct AoLut {
-//     pub world_shift: vec3,
-//     pub weight_normalized: f32, // ((1-r^2)/total_weight)*0.7
-//     pub screen_shift: vec2,
-//     pub padding: vec2,
-// }
-
-// #[derive(Clone, Copy, Debug, Default)]
-// pub struct VoxelVertex {
-//     pub pos: u8vec3,
-//     pub norm: i8vec3,
-//     pub mat_id: MatId,
-// }
-
-// #[derive(Clone, Copy, Debug, Default)]
-// pub struct PackedVoxelVertex {
-//     pub pos: u8vec3,
-//     pub mat_id: MatId,
-// }
-
-// #[derive(Clone, Copy, Debug, Default)]
-// pub struct PackedVoxelQuad {
-//     pub size: u8vec2,
-//     pub pos: u8vec3,
-//     pub mat_id: MatId,
-// }
-
-// #[repr(C)]
-// #[derive(Clone, Copy, Debug, Default)]
-// pub struct PackedVoxelCircuit {
-//     pub pos: u8vec3,
-// }
-
-// IndexedVertices is just another way to store where the data is in (single) allocated buffer
-// this could have been 6 buffers, but insted it is 1 buffer and 6 (offset+index_count)s
-// #[derive(Clone, Copy, Debug, Default)]
-// pub struct IndexedVertices {
-//     // TODO: u16
-//     pub offset: u32, // yes, they are all stored in same buffer and accessed with offset
-//     pub icount: u32,
-// }
-
-// #[allow(non_snake_case)]
-// #[derive(Debug, Default)]
-// pub struct FaceBuffers<BufferType, IndexedVerticesType = IndexedVertices> {
-//     // zPz means zero-Positive-zero
-//     // zzN means zero-zero-Negative
-//     pub Pzz: IndexedVerticesType,
-//     pub Nzz: IndexedVerticesType,
-//     pub zPz: IndexedVerticesType,
-//     pub zNz: IndexedVerticesType,
-//     pub zzP: IndexedVerticesType,
-//     pub zzN: IndexedVerticesType,
-//     pub vertexes: BufferType,
-//     pub indices: BufferType,
-// }
-
-// #[allow(non_snake_case)]
-// #[derive(Debug, Default, Clone, Copy)]
-// pub struct FaceBuffersShared {
-//     // zPz means zero-Positive-zero
-//     // zzN means zero-zero-Negative
-//     pub Pzz: IndexedVertices,
-//     pub Nzz: IndexedVertices,
-//     pub zPz: IndexedVertices,
-//     pub zNz: IndexedVertices,
-//     pub zzP: IndexedVertices,
-//     pub zzN: IndexedVertices,
-// }
-
-// // #[allow(non_snake_case)]
-// // #[derive(Debug, Default, Clone)]
-// // pub struct FaceBuffersData {
-// //     pub vertexes: lumal::Buffer,
-// //     pub indices: lumal::Buffer,
-// // }
-
-// // #[derive(Clone, Copy, Debug, Default)]
-// // pub struct SpriteDescription {
-// //     // offset & size of voxel data
-// //     pub offset: u8vec3,
-// //     pub size: u8vec3,
-// //     pub faces: FaceBuffersShared,
-// // }
-
-// #[derive(Debug)]
-// pub struct MetadataMapModel {
-//     pub workgroup_size: ivec3,
-// }
-
-// // handle (reference) to a mesh.
-// // You can clone it but still need to unload one time
-// #[derive(Debug, Default)]
-// pub struct InternalMeshModel<BufferType, ImageType, IndexedVerticesType = IndexedVertices> {
-//     pub triangles: FaceBuffers<BufferType, IndexedVerticesType>,
-//     // when model has multiple sprites in a spritesheet, `voxels` contains all of them, stacked along `Y`
-//     pub voxels: ImageType,
-//     // size of voxels. So if only one sprite, equal to its size, but when multiple - equal to sum of sizes
-//     // integer because in voxels
-//     pub size: uvec3,
-
-//     // this is not needed since bind groups are now per-face and include what this used to bind
-//     // pub voxels_bind_group_fragment: Option<wgpu::BindGroup>,
-//     pub compute_push_constants: Vec<u8>,
-//     // pub compute_metadata: Vec<MetadataMapModel>,
-//     // separate from faces cause thats what i came up with.
-//     pub compute_pc_buffer: Option<BufferType>,
-//     // this is still needed cause our compute workload is per-mehsh, not per-face
-//     pub voxels_bind_group_compute: Option<wgpu::BindGroup>,
-//     pub compute_pc_count: i32,
-// }
-
-// //5.76k bytes for compact 100 sprites (models)
-// //11.1k bytes for non-compact 100 sprites (models)
-
-// // handle (reference) to a block triangles.
-// // You can clone it but still need to unload one time
-// #[derive(Debug, Default)]
-// pub struct InternalMeshBlock<BufferType, IndexedVerticesType = IndexedVertices> {
-//     pub triangles: FaceBuffers<BufferType, IndexedVerticesType>,
-// }
-
-// #[derive(Debug, Clone, Default)]
-// pub struct InternalMeshFoliage {
-//     pub stored_id: u32,
-// }
-
-// #[derive(Clone, Debug, Default)]
-// pub struct InternalMeshLiquid<MatIdType> {
-//     pub main: MatIdType,
-//     pub foam: MatIdType,
-//     // pub pc_buffer: Option<wgpu::Buffer>,
-//     // pub pc_bg: Option<wgpu::BindGroup>,
-//     // pub push_constants: Vec<u8>,
-//     // pub pc_count: i32,
-// }
-
-// #[derive(Clone, Debug, Default)]
-// pub struct InternalMeshVolumetric {
-//     pub max_density: f32,
-//     pub variation: f32,
-//     pub color: u8vec3,
-// }
-
 #[derive(Debug, Default, Copy, Clone)]
 pub struct MeshTransform {
     pub rotation: quat,
@@ -274,12 +98,6 @@ pub struct MeshTransform {
 }
 
 pub type BlockVoxels = [[[Voxel; BLOCK_SIZE as usize]; BLOCK_SIZE as usize]; BLOCK_SIZE as usize];
-
-// #[derive(Debug)]
-// pub struct Block<BufferType, ImageType, VoxelType> {
-//     pub voxels: BlockVoxels<VoxelType>,
-//     pub mesh: InternalMeshModel<BufferType, ImageType>,
-// }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]

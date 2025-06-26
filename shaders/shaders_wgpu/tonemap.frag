@@ -1,16 +1,14 @@
+const COLOR_ENCODE_VALUE: f32 = 1.0;
+
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-}
-;
+};
 
 struct FragmentOutput {
     @location(0) frame_color: vec4<f32>,
-}
-;
+};
 
 @group(0) @binding(0) var rendered_frame: texture_2d<f32>;
-
-const COLOR_ENCODE_VALUE: f32 = 1.0;
 
 fn decode_color(encoded_color: vec3<f32>) -> vec3<f32> {
     return encoded_color * COLOR_ENCODE_VALUE;
@@ -26,9 +24,6 @@ fn luminance(v: vec3<f32>) -> f32 {
 
 fn change_luminance(c_in: vec3<f32>, l_out: f32) -> vec3<f32> {
     let l_in = luminance(c_in);
-    if (l_in == 0.0) {
-        return vec3<f32>(l_out); // Avoid division by zero
-    }
     return c_in * (l_out / l_in);
 }
 

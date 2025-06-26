@@ -12,17 +12,17 @@ struct UboData {
     delta_time: f32,
 };
 
-@group(0) @binding(0) var<uniform> ubo: UboData;
-
 struct PushConstants {
     originSize: vec4<f32>, 
 };
-@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) end_depth: f32, 
 };
+
+@group(0) @binding(0) var<uniform> ubo: UboData;
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
 const vertices = array(
     vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 0.0),
@@ -38,7 +38,6 @@ const vertices = array(
     vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 1.0), vec3(1.0, 1.0, 1.0),
     vec3(1.0, 1.0, 1.0), vec3(0.0, 1.0, 1.0), vec3(0.0, 0.0, 1.0)
 );
-
 
 @vertex
 fn main(@builtin(vertex_index) vertex_idx: u32, @builtin(instance_index) instance_id: u32) -> VertexOutput {
@@ -57,8 +56,6 @@ fn main(@builtin(vertex_index) vertex_idx: u32, @builtin(instance_index) instanc
     output.end_depth = 1.0 + clip_pos.z;
     clip_pos.z = 1.0 + clip_pos.z;
 
-
-    // Assign final homogeneous clip space position for rasterizer
     output.clip_position = clip_pos;
 
     return output;

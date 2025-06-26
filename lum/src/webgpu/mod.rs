@@ -9,13 +9,17 @@ use super::Settings;
 use super::{Camera, SunLight};
 use crate::webgpu::types::*;
 use crate::{types::*, BLOCK_SIZE};
+use containers::array3d::Dim3;
 use containers::Array3D;
 use containers::Ring;
 use futures::executor;
-use std::time::Instant;
 use wal::{ComputePipe, Image, RasterPipe, Wal};
 use wgpu::{Extent3d, TextureFormat};
+use winit::dpi::PhysicalSize;
 use winit::window::Window;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 
 const FRAME_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const LIGHTMAPS_FORMAT: TextureFormat = TextureFormat::Depth32Float;
@@ -110,15 +114,16 @@ pub struct AllBuffers {
     pub gpu_particles: Ring<wgpu::Buffer>,
 }
 
-pub struct InternalRendererWebGPU<'window> {
+pub struct InternalRendererWebGPU<'window, D: Dim3> {
     pub wal: Wal<'window>,
     pub current_encoder: Option<wgpu::CommandEncoder>,
     pub counter: isize,
-    pub settings: Settings,
+    pub settings: Settings<D>,
     pub lightmap_extent: Extent3d,
 
     pub pipes: AllPipes,
-    pub foliage_descriptions: Vec<MeshFoliageDesc>,
+    // foliage descriptions live as long as renderer ('window)
+    pub foliage_descriptions: Vec<MeshFoliageDesc<'window>>,
     pub dependent_images: Option<AllSwapchainDependentImages>,
     pub independent_images: AllIndependentImages,
     pub buffers: AllBuffers,
@@ -139,8 +144,8 @@ pub struct InternalRendererWebGPU<'window> {
     pub palette_counter: usize,
     pub static_block_palette_size: u32,
 
-    pub origin_world: Array3D<InternalBlockId>,
-    pub current_world: Array3D<InternalBlockId>,
+    pub origin_world: Array3D<InternalBlockId, D>,
+    pub current_world: Array3D<InternalBlockId, D>,
 
     pub particles: Vec<Particle>,
 
@@ -155,74 +160,57 @@ pub struct InternalRendererWebGPU<'window> {
     pub block_palette_meshes: Vec<InternalMeshBlock>,
 }
 
-impl<'window> InternalRendererWebGPU<'window> {
+impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
     /// Creates our InternalRendererWebGPU.
     ///
     /// The idea is similar to Vulkan version: we initialize a Wal instance,
     /// create our independent and dependent resources, and then fill our render‑state.
     pub fn new(
-        lum_settings: &Settings,
-        window: Window,
-        foliage_descriptions: Vec<MeshFoliageDesc>,
-    ) -> InternalRendererWebGPU<'window> {
-        // 1. Create our Wal context (the WGPU abstraction layer)
-        let mut wal = executor::block_on(wal::Wal::new(window.into()));
+        lum_settings: &Settings<D>,
+        window: std::sync::Arc<Window>,
+        size: PhysicalSize<u32>,
+        foliage_descriptions: Vec<MeshFoliageDesc<'window>>,
+    ) -> InternalRendererWebGPU<'window, D> {
+        // i prefer non-async code when possible for not-web we just block_on
+        let mut wal = executor::block_on(wal::Wal::new(window, size));
 
-        // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
         let lightmap_extent = Extent3d {
             width: 1024,
             height: 1024,
             depth_or_array_layers: 1,
         };
 
-        // 3. WGPU limits depth so its kinda 100% supported
         let _chosen_depth_format = DEPTH_FORMAT_PREFERED;
 
-        // 4. Create independent resources (images/textures that persist across swapchain changes)
         let independent_images =
-            InternalRendererWebGPU::create_independent_images(&wal, lum_settings);
-        // 5. Create buffers, samplers, and command buffers.
-        let buffers = InternalRendererWebGPU::create_all_buffers(&mut wal, lum_settings);
-        let samplers = InternalRendererWebGPU::create_all_samplers(&wal);
-        // let command_buffers = InternalRendererWebGPU::create_all_command_buffers(&wal);
+            InternalRendererWebGPU::<D>::create_independent_images(&wal, lum_settings);
+        let buffers = InternalRendererWebGPU::<D>::create_all_buffers(&mut wal, lum_settings);
+        let samplers = InternalRendererWebGPU::<D>::create_all_samplers(&wal);
 
-        // 6. Create dependent resources (those that depend on the swapchain)
         let (dependent_images, pipes) = create_dependent(
             &wal,
             lum_settings,
             &foliage_descriptions,
-            lum_settings, // In lieu of a separate lumal_settings object
+            lum_settings,
             &independent_images,
             &buffers,
             &samplers,
         );
 
-        // 7. Create scene-level objects: camera, light, and world data.
         let camera = Camera::default();
         let light = SunLight::default();
 
-        let origin_world = Array3D::<InternalBlockId>::new(
-            lum_settings.world_size.x as usize,
-            lum_settings.world_size.y as usize,
-            lum_settings.world_size.z as usize,
-        );
-        let current_world = Array3D::<InternalBlockId>::new(
-            origin_world.x_size,
-            origin_world.y_size,
-            origin_world.z_size,
-        );
+        let origin_world = Array3D::<InternalBlockId, D>::new_default(lum_settings.world_size);
+        let current_world = Array3D::<InternalBlockId, D>::new_default(lum_settings.world_size);
 
-        // 8. Assemble our renderer structure.
-        let mut renderer = InternalRendererWebGPU {
+        let mut renderer = InternalRendererWebGPU::<'_, D> {
             counter: 69420,
             wal,
-            settings: Settings::default(),
+            settings: Settings::<D>::default(),
             delta_time: 0.0,
             #[cfg(not(target_arch = "wasm32"))]
             last_time: Instant::now(),
 
-            // rpasses: renderpasses,
-            // cmdbufs: command_buffers,
             lightmap_extent,
             pipes,
             independent_images,
@@ -261,58 +249,42 @@ impl<'window> InternalRendererWebGPU<'window> {
     }
 
     pub async fn new_async(
-        lum_settings: &Settings,
+        lum_settings: &Settings<D>,
         window: std::sync::Arc<Window>,
-        foliage_descriptions: Vec<MeshFoliageDesc>,
-    ) -> InternalRendererWebGPU<'window> {
-        // 1. Create our Wal context (the WGPU abstraction layer)
-        let mut wal = wal::Wal::new(window).await;
+        size: PhysicalSize<u32>,
+        foliage_descriptions: Vec<MeshFoliageDesc<'window>>,
+    ) -> InternalRendererWebGPU<'window, D> {
+        let mut wal = wal::Wal::new(window, size).await;
 
-        // 2. Define our lightmap extent. Here we create an Extent3d with 1024×1024 dimensions.
         let lightmap_extent = Extent3d {
             width: 1024,
             height: 1024,
             depth_or_array_layers: 1,
         };
 
-        // 3. WGPU limits depth so its kinda 100% supported
         let _chosen_depth_format = DEPTH_FORMAT_PREFERED;
 
-        // 4. Create independent resources (images/textures that persist across swapchain changes)
         let independent_images =
-            InternalRendererWebGPU::create_independent_images(&wal, lum_settings);
-        // 5. Create buffers, samplers, and command buffers.
-        let buffers = InternalRendererWebGPU::create_all_buffers(&mut wal, lum_settings);
-        let samplers = InternalRendererWebGPU::create_all_samplers(&wal);
-        // let command_buffers = InternalRendererWebGPU::create_all_command_buffers(&wal);
+            InternalRendererWebGPU::<D>::create_independent_images(&wal, lum_settings);
+        let buffers = InternalRendererWebGPU::<D>::create_all_buffers(&mut wal, lum_settings);
+        let samplers = InternalRendererWebGPU::<D>::create_all_samplers(&wal);
 
-        // 6. Create dependent resources (those that depend on the swapchain)
         let (dependent_images, pipes) = create_dependent(
             &wal,
             lum_settings,
             &foliage_descriptions,
-            lum_settings, // In lieu of a separate lumal_settings object
+            lum_settings,
             &independent_images,
             &buffers,
             &samplers,
         );
 
-        // 7. Create scene-level objects: camera, light, and world data.
         let camera = Camera::default();
         let light = SunLight::default();
 
-        let origin_world = Array3D::<InternalBlockId>::new(
-            lum_settings.world_size.x as usize,
-            lum_settings.world_size.y as usize,
-            lum_settings.world_size.z as usize,
-        );
-        let current_world = Array3D::<InternalBlockId>::new(
-            origin_world.x_size,
-            origin_world.y_size,
-            origin_world.z_size,
-        );
+        let origin_world = Array3D::<InternalBlockId, D>::new_default(lum_settings.world_size);
+        let current_world = Array3D::<InternalBlockId, D>::new_default(lum_settings.world_size);
 
-        // 8. Assemble our renderer structure.
         let mut renderer = InternalRendererWebGPU {
             counter: 69420,
             wal,
@@ -321,8 +293,6 @@ impl<'window> InternalRendererWebGPU<'window> {
             #[cfg(not(target_arch = "wasm32"))]
             last_time: Instant::now(),
 
-            // rpasses: renderpasses,
-            // cmdbufs: command_buffers,
             lightmap_extent,
             pipes,
             independent_images,
@@ -389,11 +359,11 @@ impl<'window> InternalRendererWebGPU<'window> {
 }
 
 /// Create dependent resources (swapchain‐dependent images, pipelines, render passes)
-fn create_dependent(
+fn create_dependent<D: Dim3>(
     wal: &wal::Wal,
-    settings: &Settings,
+    settings: &Settings<D>,
     foliage_descriptions: &[MeshFoliageDesc],
-    _lumal_settings: &Settings,
+    _lumal_settings: &Settings<D>,
     independent_images: &AllIndependentImages,
     buffers: &AllBuffers,
     samplers: &AllSamplers,

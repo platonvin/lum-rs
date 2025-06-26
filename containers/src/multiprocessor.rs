@@ -26,8 +26,8 @@ impl Default for Multiprocessor {
 
 impl Multiprocessor {
     pub fn new() -> Self {
-        // let num_threads = std::thread::available_parallelism().unwrap().get() - 1;
-        let num_threads = std::thread::available_parallelism().map(|n| n.get() - 1).unwrap_or(1); // Ensure at least one thread
+        // at least 1 thread, but also leave one for the OS
+        let num_threads = std::thread::available_parallelism().map(|n| n.get() - 1).unwrap_or(1);
         let threads_active = Arc::new(AtomicI32::new(0));
         let should_stop = Arc::new(AtomicBool::new(false));
         let current_task: Arc<Mutex<Option<Box<dyn Fn(usize) + Send>>>> =
@@ -51,7 +51,7 @@ impl Multiprocessor {
                 while !should_stop.load(Ordering::Relaxed) {
                     // if corresponding flag is set to do some work
                     if thread_flag.swap(false, Ordering::Relaxed) {
-                        // then do the work and set the flag back to false
+                        // then do the work and set the flag back to false (work done)
                         if let Some(task) = current_task.lock().unwrap().as_ref() {
                             task(i);
                         }
@@ -73,9 +73,9 @@ impl Multiprocessor {
         }
     }
 
-    // Dispatches a task to the thread pool
-    // NOTE: func F HAS to identify itself using the thread id
-    // which means that work division is on your side
+    /// Dispatches a task to the thread pool
+    /// NOTE: `func: F` must identify itself using the thread id
+    /// (which means that work division is on your side)
     pub fn dispatch<F>(&self, dispatch_size: usize, func: F)
     where
         F: Fn(usize) + Send + Sync + 'static,
@@ -110,11 +110,12 @@ impl Multiprocessor {
         }
     }
 
-    // Returns the number of threads in the pool
+    /// Returns the number of threads in the pool
     pub fn used_thread_count(&self) -> usize {
         self.num_threads
     }
 
+    /// Returns the dispatch size you should use for optimal perfomance
     pub fn optimal_dispatch_size(&self) -> usize {
         self.num_threads - 1 // one for sync
     }

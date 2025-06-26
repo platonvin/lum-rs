@@ -1,10 +1,12 @@
-use crate::Renderer; // Import the LumalRenderer struct
+/// Simple wrapper crate for managing Image's - bundles of vk::Image, vk::ImageView and some metadata
+use crate::Renderer;
 use crate::{set_debug_names, Image};
 use ash::vk;
 use containers::Ring;
 use gpu_allocator::vulkan as vma;
 
 impl Renderer {
+    /// Creates vk::Image and "default" vk::ImageView to it
     pub fn create_image(
         &mut self,
         image_type: vk::ImageType,
@@ -18,7 +20,6 @@ impl Renderer {
         let image_aspect = aspect;
         let image_format = format;
         let image_extent = extent;
-        // let image_mip_levels = mipmaps;
 
         let image_info = vk::ImageCreateInfo {
             image_type,
@@ -85,28 +86,13 @@ impl Renderer {
 
         let image_view = unsafe { self.device.create_image_view(&view_info, None).unwrap() };
 
-        // let mut image_mip_views = vec![];
-        // if mipmaps > 1 {
-        //     image_mip_views = (0..mipmaps)
-        //         .map(|mip| {
-        //             view_info.subresource_range.base_mip_level = mip;
-        //             view_info.subresource_range.level_count = 1;
-        //             let view = unsafe { self.device.create_image_view(&view_info, None).unwrap() };
-        //             set_debug_names!(self, Some("Stencil View for DS"), (&view, "Image View"));
-        //             view
-        //         })
-        //         .collect::<Vec<_>>();
-        // }
-
         let image = Image {
             image: vk_image,
             allocation,
             view: image_view,
-            // mip_views: image_mip_views,
             format: image_format,
             aspect: image_aspect,
             extent: image_extent,
-            // mip_levels: image_mip_levels,
         };
 
         self.transition_image_layout_single_time(
@@ -126,48 +112,35 @@ impl Renderer {
         image
     }
 
+    /// Creates Ring of vk::Image's and "default" vk::ImageView's to them
     pub fn create_image_ring(
         &mut self,
         size: usize,
         image_type: vk::ImageType,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
-        // vma_usage: vma::MemoryUsage,
-        // vma_flags: vma::AllocationCreateFlags,
         aspect: vk::ImageAspectFlags,
         extent: vk::Extent3D,
-        // mipmaps: u32,
         sample_count: vk::SampleCountFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) -> Ring<Image> {
-        // Create a vector to hold the images.
-        let mut images = Vec::with_capacity(size);
-
-        // Initialize each image and push to the vector.
-        for _ in 0..size {
-            let image = self.create_image(
-                image_type,
-                format,
-                usage,
-                // vma_usage,
-                // vma_flags,
-                aspect,
-                extent,
-                // mipmaps,
-                sample_count,
-                #[cfg(feature = "debug_validation_names")]
-                debug_name,
-            );
-            images.push(image);
-        }
-
-        // Return the Ring initialized with the images.
-        Ring {
-            data: images.into_boxed_slice(),
-            index: 0,
-        }
+        (0..size)
+            .map(|_| {
+                self.create_image(
+                    image_type,
+                    format,
+                    usage,
+                    aspect,
+                    extent,
+                    sample_count,
+                    #[cfg(feature = "debug_validation_names")]
+                    debug_name,
+                )
+            })
+            .collect::<Ring<_>>()
     }
 
+    /// Destroy vk::Image and its vk::ImageView
     pub fn destroy_image(&mut self, img: Image) {
         unsafe {
             self.device.destroy_image_view(img.view, None);
@@ -176,6 +149,7 @@ impl Renderer {
         };
     }
 
+    /// Destroy Ring of vk::Image's and their vk::ImageView's
     pub fn destroy_image_ring(&mut self, images: Ring<Image>) {
         for img in images.data {
             self.destroy_image(img);

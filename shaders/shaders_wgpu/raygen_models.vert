@@ -12,29 +12,28 @@ struct UboData {
     delta_time: f32,
 };
 
-struct Constants {
+struct PushConstants {
     rot: vec4<f32>,
     shift: vec4<f32>,
-    fnormal: vec4<f32>, // not encoded
+    fnormal: vec4<f32>,
 };
 
-@group(0) @binding(0) var<uniform> ubo: UboData;
-@group(1) @binding(0) var<storage, read> pco_shared: array<Constants>;
-// @group(1) @binding(1) var modelVoxels: texture_3d<i32>; 
-
 struct VertexInput {
-    @location(0) posIn: vec3<u32>,
+    @location(0) @interpolate(flat) posIn: vec3<u32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) sample_point: vec3<f32>,
-    @location(1) normal_encoded_packed: u32,
+    @location(1) @interpolate(flat) normal_encoded_packed: u32,
 };
+
+@group(0) @binding(0) var<uniform> ubo: UboData;
+@group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
+// @group(1) @binding(1) var modelVoxels: texture_3d<i32>; 
 
 fn qtransform(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     return v + 2.0 * cross(cross(v, -q.xyz) + q.w * v, -q.xyz);
-    // return (q * vec4<f32>(v, 0.0)).xyz;
 }
 
 @vertex
@@ -45,17 +44,16 @@ fn main(@builtin(instance_index) instance_id: u32, in: VertexInput) -> VertexOut
     let fnorm_ms = normalize(pco.fnormal.xyz);
 
     let local_pos = qtransform(pco.rot, fpos);
-    // let local_pos = fpos;
 
     let world_pos = vec4<f32>(local_pos + pco.shift.xyz, 1.0);
 
-    var clip_coords: vec3<f32> = (ubo.trans_w2s * world_pos).xyz; // move up
+    var clip_coords: vec3<f32> = (ubo.trans_w2s * world_pos).xyz; 
     clip_coords.z = 1.0 + clip_coords.z;
 
     var out: VertexOutput;
     out.position = vec4<f32>(clip_coords, 1.0);
 
-    let fnorm_ws = qtransform(pco.rot, fnorm_ms); // move up
+    let fnorm_ws = qtransform(pco.rot, fnorm_ms); 
     out.normal_encoded_packed = pack4x8unorm(vec4<f32>((fnorm_ws + 1.0) / 2.0, 0.0));
     out.sample_point = fpos - fnorm_ms * 0.5; // for better rounding lol
 

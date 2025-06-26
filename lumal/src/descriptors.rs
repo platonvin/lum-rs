@@ -1,3 +1,5 @@
+//! Module for managing Descriptors - sets, layouts, pools
+
 use crate::Renderer;
 use crate::{Buffer, Image, LumalSettings, RasterPipe, DEFAULT_FRAMES_IN_FLIGHT};
 use ash::vk::DescriptorType;
@@ -6,32 +8,68 @@ use containers::Ring;
 use std::ops::Index;
 
 #[derive(PartialEq, Eq, Clone)]
+/// Describes how new pixel color is combined with an existing (old) pixel color during rendering.
+///
+/// Each variant configures the blending operations and factors for color and alpha channels.
 pub enum BlendAttachment {
+    /// No blending is performed.
+    /// The new pixel color entirely replaces the old pixel color.
+    ///
+    /// $FinalColor = NewColor$
+    /// $FinalAlpha = NewAlpha$
     NoBlend,
+    /// Common blending mode that mixes old and new colors
+    /// based on the new alpha value. Typically used for transparency.
+    ///
+    /// $FinalColor = (NewColor \times NewAlpha) + (OldColor \times (1 - NewAlpha))$
+    /// $FinalAlpha = NewAlpha + OldAlpha$
     BlendMix,
+    /// Performs a subtraction blending operation.
+    ///
+    /// $FinalColor = NewColor - OldColor$
+    /// $FinalAlpha = NewAlpha + OldAlpha$
     BlendSub,
+    /// Replaces the old color with the new color if the new color
+    /// component value is greater than the old. Basically takes the max() of each channel.
+    ///
+    /// $FinalColor = max(NewColor, OldColor)$
+    /// $FinalAlpha = NewAlpha + OldAlpha$
     BlendReplaceIfGreater, // Basically max
-    BlendReplaceIfLess,    // Basically min
+    /// Replaces the old color with the new color if the new color
+    /// component value is les than the old. Basically takes the min() of each channel.
+    ///
+    /// $FinalColor = min(NewColor, OldColor)$
+    /// $FinalAlpha = NewAlpha + OldAlpha$
+    BlendReplaceIfLess,
 }
 
 #[allow(non_camel_case_types)]
 #[derive(PartialEq, Clone, Copy)]
+/// Describes how is depth testing performed during rendering
+///
+/// Each variant configures the depth read & write operations;
 pub enum DepthTesting {
-    DT_None,
-    DT_Read,
-    DT_Write,
-    DT_ReadWrite,
+    /// Do not perform depth testing (new values always written)
+    None,
+    /// Perform depth testing, but do not write depth value (when depth test passed)
+    Read,
+    /// Do nit perform depth testing, but write new depth values
+    Write,
+    /// "Normal" mode - perform depth testing (read), and write new depth values when test succeeded
+    ReadWrite,
 }
 
-pub enum Discard {
-    NoDiscard,
-    DoDiscard,
-}
-
+/// Describes what happens with Renderpass Attachaments when starting / ending the Renderpass
+///
+/// Each variant configures StoreOp / LoadOp
 pub enum LoadStoreOp {
+    /// Does not specify anything, allowing driver to pick fastest option
     DontCare,
+    /// Clear attachment to the specified ClearColor when starting Renderpass
     Clear,
+    /// Store the attachment when ending Renderpass
     Store,
+    /// Store the attachment when starting Renderpass
     Load,
 }
 impl LoadStoreOp {
@@ -65,11 +103,17 @@ impl PartialEq for LoadStoreOp {
     }
 }
 
+/// Hold either Ring of resources, or a single resource.
 pub enum MaybeRing<'a, T> {
+    /// Ring (multiple) of resources.
+    /// This is used for CPU-GPU resources and temporal computations.
     Ring(&'a Ring<T>),
+    /// Single resource
+    /// This is used for purely GPU resources.
     Single(&'a T),
 }
 impl<'a, T> MaybeRing<'a, T> {
+    /// Returns either first resource in a Ring, or element if it is Single element
     pub fn get_first(&self) -> &T {
         match self {
             MaybeRing::Ring(ring) => &ring[0],
@@ -141,13 +185,6 @@ pub struct SubpassAttachmentRefs {
     // using Option is unconvenient because we need to point'er it afterwards. But still
     /// All the Depth attachments, used by corresponding subpass
     pub a_depth: Option<vk::AttachmentReference>,
-}
-
-/// Simple shader stage wrapper
-#[derive(Clone, Debug)]
-pub struct ShaderStage<'a> {
-    pub stage: vk::ShaderStageFlags,
-    pub spirv_code: &'a [u8],
 }
 
 /// Description of a Vertex Attributes for given Pipe
@@ -226,7 +263,9 @@ impl<'a> DescriptorInfo<'a> {
 
 /// Subset of description info used for creating dset layouts and allocating pool
 pub struct ShortDescriptorInfo {
+    /// Vulkan Descriptor Type
     pub descriptor_type: vk::DescriptorType,
+    /// Shader stages, which this descriptor is visible to
     pub stages: vk::ShaderStageFlags,
 }
 
@@ -289,27 +328,8 @@ impl Renderer {
         unsafe { self.device.create_descriptor_pool(&pool_info, None).unwrap() }
     }
 
-    // pub fn allocate_descriptor(
-    //     device: Device,
-    //     layout: vk::DescriptorSetLayout,
-    //     pool: vk::DescriptorPool,
-    //     count: usize,
-    // ) -> Ring<vk::DescriptorSet> {
-    //     let layouts = vec![layout; count];
-    //     let alloc_info = vk::DescriptorSetAllocateInfo {
-    //         descriptor_pool: pool,
-    //         descriptor_set_count: layouts.len() as u32,
-    //         p_set_layouts: layouts.as_ptr(),
-    //         ..Default::default()
-    //     };
-
-    //     let vec = unsafe { device.allocate_descriptor_sets(&alloc_info).unwrap() };
-    //     Ring::from_vec(vec)
-    // }
-
-    // Tell the LumalRenderer that such descriptor will be setup
-    // basically counts needed resources to then allocate them
-
+    /// Tells Lumal that such descriptor will be setup.
+    /// Used to count needed resources to then allocate them (to avoid runtime re-allocations).
     pub fn anounce_descriptor_setup(
         &mut self,
         dset_layout: &mut vk::DescriptorSetLayout,
@@ -347,8 +367,7 @@ impl Renderer {
     }
 
     // anounce is just a request, this is an actual logic
-
-    pub unsafe fn actually_setup_descriptor_impl(
+    pub(crate) unsafe fn actually_setup_descriptor_impl(
         descriptor_pool: &vk::DescriptorPool,
         settings: &LumalSettings,
         device: &Device,
@@ -464,13 +483,16 @@ impl Renderer {
         }
     }
 
+    /// Allocates enough space previously counted (anounced) resources.
+    /// (actually) Creates Vulkan descriptor pool.
     pub fn flush_descriptor_setup(&mut self) {
-        // (actually) create Vulkan descriptor pool
         if self.descriptor_pool == vk::DescriptorPool::null() {
             self.descriptor_pool = self.create_descriptor_pool();
         }
     }
 
+    /// Allocated descriptor itself from a pool
+    /// This must only be called after flush() happened and pool allocated
     pub fn acutally_setup_descriptor(
         &mut self,
         dset_layout: &mut vk::DescriptorSetLayout,

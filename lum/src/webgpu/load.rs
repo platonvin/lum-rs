@@ -10,7 +10,10 @@ use crate::{
     BLOCK_SIZE,
 };
 use crate::{types::*, webgpu::types::*};
-use containers::Array3D;
+use containers::{
+    array3d::{ConstDims, Dim3},
+    Array3D,
+};
 use qvek::uvec3;
 use wgpu::BufferUsages;
 use wgpu::{
@@ -26,7 +29,13 @@ pub struct PackedVoxelCircuit {
     pub pos: u8vec4,
 }
 
-impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
+type BlockPaletteImageSize = ConstDims<
+    { (BLOCK_SIZE * BLOCK_PALETTE_SIZE_X) as usize },
+    { (BLOCK_SIZE * BLOCK_PALETTE_SIZE_Y) as usize },
+    { BLOCK_SIZE as usize },
+>;
+
+impl<'window, D: Dim3> LoadInterface for InternalRendererWebGPU<'window, D> {
     type Buffer = Option<wgpu::Buffer>;
     type Image = Option<wal::Image>;
     type BlockId = MeshBlock;
@@ -43,17 +52,17 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
     // Palette on CPU side is (should) be represented as a POD array
     // Palette on GPU side is stored differently (in 2d array of 3d blocks). This is
     // due to perfomance win + hw limitations E.g. just doing BLOCK_SIZE*len x BLOCK_SIZE x BLOCK_SIZE
-    // will not work cause BLOCK_SIZE x len will be too big size for some gpus
+    // will not work cause BLOCK_SIZE x len will be too big size for some gpus (different dimensions have different limits)
 
     fn update_block_palette_to_gpu(&mut self) {
         assert!(self.block_palette_voxels.len() == self.static_block_palette_size as usize);
         // create 3d array to be copied to gpu-side image after it is filled
-        let mut block_palette_prepared = Array3D::<InternalVoxel>::new_filled(
-            (BLOCK_SIZE * BLOCK_PALETTE_SIZE_X) as usize,
-            (BLOCK_SIZE * BLOCK_PALETTE_SIZE_Y) as usize,
-            BLOCK_SIZE as usize,
-            0 as InternalVoxel,
-        );
+
+        let mut block_palette_prepared =
+            Array3D::<InternalVoxel, BlockPaletteImageSize>::new_filled(
+                BlockPaletteImageSize {}, // reminds me of C++ constructors LOL
+                0 as InternalVoxel,
+            );
 
         for (i, block) in self.block_palette_voxels.iter().enumerate() {
             let block_xy = self.index_block_xy(i);
@@ -263,8 +272,8 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
                 )),
                 pc_bg: None,
             },
-            vertexes: vertexes,
-            indices: indices,
+            vertexes,
+            indices,
         };
 
         let create_face_bind_group = |face: &mut IndexedVerticesQueue| {
@@ -389,10 +398,15 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
 
     fn load_block(&mut self, block_id: MeshBlock, block_data: BlockData) {
         let block = &mut self.block_palette_voxels[block_id as usize];
-        for_zyx!(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, |x, y, z| {
-            block[x as usize][y as usize][z as usize] =
-                block_data.voxels[x + y * sBLOCK_SIZE + z * sBLOCK_SIZE * sBLOCK_SIZE];
-        });
+        for_zyx!(
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            |x: usize, y: usize, z: usize| {
+                block[x][y][z] =
+                    block_data.voxels[x + y * sBLOCK_SIZE + z * sBLOCK_SIZE * sBLOCK_SIZE];
+            }
+        );
 
         let circ_verts: Vec<_> = block_data
             .vertices
@@ -525,7 +539,7 @@ impl<'window> LoadInterface for InternalRendererWebGPU<'window> {
     }
 }
 
-impl InternalRendererWebGPU<'_> {
+impl<D: Dim3> InternalRendererWebGPU<'_, D> {
     fn create_and_upload_contour_buffers(
         &mut self,
         verts: &[PackedVoxelCircuit],

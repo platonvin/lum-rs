@@ -1,7 +1,10 @@
+//! bytemuck alternative for casting struct as slice of bytes
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
+/// bytemuck alternative for casting struct as slice of bytes
 #[proc_macro_derive(AsU8Slice)]
 pub fn as_u8_slice_derive(input: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree

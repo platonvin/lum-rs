@@ -7,6 +7,7 @@ use crate::{
     load_interface::LoadInterface,
     vulkan::{types::*, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y},
 };
+use containers::array3d::{ConstDims, Dim3};
 use containers::*;
 use lumal::vk::{self};
 use lumal::{vk::MappedMemoryRange, BufferDeletion, ImageDeletion};
@@ -20,7 +21,13 @@ fn uvec3_to_extent3d(size: uvec3) -> vk::Extent3D {
     }
 }
 
-impl LoadInterface for InternalRendererVulkan {
+type BlockPaletteImageSize = ConstDims<
+    { (BLOCK_SIZE * BLOCK_PALETTE_SIZE_X) as usize },
+    { (BLOCK_SIZE * BLOCK_PALETTE_SIZE_Y) as usize },
+    { BLOCK_SIZE as usize },
+>;
+
+impl<'a, D: Dim3> LoadInterface for InternalRendererVulkan<'a, D> {
     type Buffer = lumal::Buffer;
     type Image = lumal::Image;
     type BlockId = MeshBlock;
@@ -41,12 +48,11 @@ impl LoadInterface for InternalRendererVulkan {
     fn update_block_palette_to_gpu(&mut self) {
         assert!(self.block_palette_voxels.len() == self.static_block_palette_size as usize);
         // create CPU-side 3d array to be copied to GPU-side image after it is filled
-        let mut block_palette_prepared = Array3D::<InternalVoxel>::new_filled(
-            (BLOCK_SIZE * BLOCK_PALETTE_SIZE_X) as usize,
-            (BLOCK_SIZE * BLOCK_PALETTE_SIZE_Y) as usize,
-            BLOCK_SIZE as usize,
-            0 as InternalVoxel,
-        );
+        let mut block_palette_prepared =
+            Array3D::<InternalVoxel, BlockPaletteImageSize>::new_filled(
+                BlockPaletteImageSize {},
+                0 as InternalVoxel,
+            );
 
         for (i, block) in self.block_palette_voxels.iter().enumerate() {
             let block_xy = self.index_block_xy(i);
@@ -421,10 +427,15 @@ impl LoadInterface for InternalRendererVulkan {
         // self.block_palette_voxels[block_id as usize] = * /*some cast to BlockVoxels*/ block_data.voxels;
         let block = &mut self.block_palette_voxels[block_id as usize];
         //TODO: get rid of this repacking?
-        for_zyx!(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, |x, y, z| {
-            block[x as usize][y as usize][z as usize] =
-                block_data.voxels[x + sBLOCK_SIZE * y + sBLOCK_SIZE * sBLOCK_SIZE * z];
-        });
+        for_zyx!(
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+            |x: usize, y: usize, z: usize| {
+                block[x][y][z] =
+                    block_data.voxels[x + sBLOCK_SIZE * y + sBLOCK_SIZE * sBLOCK_SIZE * z];
+            }
+        );
 
         let triangles = FaceBuffers {
             Pzz: IndexedVertices {

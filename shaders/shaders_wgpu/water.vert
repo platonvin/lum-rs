@@ -1,46 +1,37 @@
-// --- UBO Structure ---
 struct UboData {
-    trans_w2s: mat4x4<f32>, // World to screen transformation matrix.
-    campos: vec4<f32>, // Camera position in world space.
-    camdir: vec4<f32>, // Camera direction vector.
-    horizline_scaled: vec4<f32>, // Horizon line data.
-    vertiline_scaled: vec4<f32>, // Vertical line data.
-    global_light_dir: vec4<f32>, // Global light direction.
-    lightmap_proj: mat4x4<f32>, // Lightmap projection matrix.
-    frame_size: vec2<f32>, // Size of the frame/viewport.
-    wind_direction: vec2<f32>, // Global wind direction.
-    timeseed: i32, // Time-based seed for procedural generation.
-    delta_time: f32, // Time elapsed since the last frame.
-}
+    trans_w2s: mat4x4<f32>,
+    campos: vec4<f32>,
+    camdir: vec4<f32>,
+    horizline_scaled: vec4<f32>,
+    vertiline_scaled: vec4<f32>,
+    global_light_dir: vec4<f32>,
+    lightmap_proj: mat4x4<f32>,
+    frame_size: vec2<f32>,
+    wind_direction: vec2<f32>,
+    timeseed: i32,
+    delta_time: f32,
+};
 
-// --- Push Constants Structure ---
-// Matches GLSL push constants block
 struct PushConstants {
-    shift: vec4<f32>, // Positional offset for the current batch, also contains world Z for water level.
+    shift: vec4<f32>,
     time_size: vec4<i32>,
 }
 
-// --- Vertex Output Structure ---
 struct VertexOutput {
-    @builtin(position) position: vec4<f32>, // Clip space position.
-    @location(0) orig: vec3<f32>, // Original world position (for fragment shader).
+    @builtin(position) position: vec4<f32>,
+    @location(0) orig: vec3<f32>,
 }
 
-// --- Bindings ---
 @group(0) @binding(0) var<uniform> ubo: UboData;
-@group(0) @binding(1) var state: texture_2d<f32>; // Texture with wave data (e.g., Gerstner wave displacements or height components).
-@group(0) @binding(2) var linear_samp_tiled: sampler; // Sampler for the state texture.
+@group(0) @binding(1) var state: texture_2d<f32>; 
+@group(0) @binding(2) var linear_samp_tiled: sampler;
 
 @group(1) @binding(0) var<storage, read> pco_shared: array<PushConstants>;
 
-// Simple pseudo-random number generator.
 fn rand(co: vec2<f32>) -> f32 {
     return fract(sin(dot(co, vec2<f32>(12.9898, 78.233))) * 43758.5453);
 }
 
-// Samples height from the state texture by combining different scaled UV lookups.
-// globalpos: position in world space to sample height for.
-// time: current animation time (not directly used in this version, but often is for procedural waves).
 fn get_height(globalpos: vec2<f32>, time: f32) -> f32 {
     var total_height = 0.0;
 
@@ -49,31 +40,24 @@ fn get_height(globalpos: vec2<f32>, time: f32) -> f32 {
     let uv3 = globalpos / 35.0;
     let uv4 = globalpos / 42.0;
 
-    // Sample different channels (or the same channel if it's a heightmap) and weight them.
-    // Assumes the 'state' texture might store different wave components in its channels.
     total_height += textureSampleLevel(state, linear_samp_tiled, uv1, 0.0).x * (13.0 / 55.0);
     total_height += textureSampleLevel(state, linear_samp_tiled, uv2, 0.0).y * (31.0 / 55.0);
     total_height += textureSampleLevel(state, linear_samp_tiled, uv3, 0.0).z * (35.0 / 55.0);
     total_height += textureSampleLevel(state, linear_samp_tiled, uv4, 0.0).w * (42.0 / 55.0);
 
-    // return 1.0;
-    return total_height; // GLSL version divides by 1.0, which is a no-op.
+    return total_height;
 }
 
-// Helper function to sample the summed height at a global position with an integer pixel offset.
-// This mimics GLSL's textureOffset behavior by converting pixel offset to UV offset.
 fn make_offset(globalpos: vec2<f32>, offset_pixels: vec2<i32>) -> f32 {
     var s = 0.0;
-    let texture_dim_f = vec2<f32>(textureDimensions(state, 0u)); // Get dimensions of LOD 0.
-    let offset_uv = vec2<f32>(offset_pixels) / texture_dim_f; // Convert pixel offset to UV offset.
+    let texture_dim_f = vec2<f32>(textureDimensions(state, 0u));
+    let offset_uv = vec2<f32>(offset_pixels) / texture_dim_f;
 
-    // Calculate base UVs
     let base_uv1 = globalpos / 13.0;
     let base_uv2 = globalpos / 31.0;
     let base_uv3 = globalpos / 35.0;
     let base_uv4 = globalpos / 42.0;
 
-    // Sample with offset applied in UV space
     s += textureSampleLevel(state, linear_samp_tiled, base_uv1 + offset_uv, 0.0).x * (13.0 / 55.0);
     s += textureSampleLevel(state, linear_samp_tiled, base_uv2 + offset_uv, 0.0).y * (31.0 / 55.0);
     s += textureSampleLevel(state, linear_samp_tiled, base_uv3 + offset_uv, 0.0).z * (35.0 / 55.0);
@@ -83,25 +67,21 @@ fn make_offset(globalpos: vec2<f32>, offset_pixels: vec2<i32>) -> f32 {
 }
 
 fn get_normal(globalpos: vec2<f32>, time: f32) -> vec3<f32> {
-    // The step size for finite differencing (distance between samples in world units,
-    // assuming 1.0 in offset corresponds to 1 pixel).
-    let sample_step_dist = 2.0; // Corresponds to GLSL's `size.x` or `size.y` in vec3 components.
+    let sample_step_dist = 2.0;
 
-    // Define 1-pixel offsets for sampling around the current point.
-    let offset_xm = vec2<i32>(-1, 0); // x-1
-    let offset_xp = vec2<i32>(1, 0); // x+1
-    let offset_ym = vec2<i32>(0, -1); // y-1
-    let offset_yp = vec2<i32>(0, 1); // y+1
+    let offset_xm = vec2<i32>(-1, 0);
+    let offset_xp = vec2<i32>(1, 0);
+    let offset_ym = vec2<i32>(0, -1);
+    let offset_yp = vec2<i32>(0, 1);
 
-    // Sample heights at neighboring points.
-    let height_xm = make_offset(globalpos, offset_xm); // Height at (x-1, y)
-    let height_xp = make_offset(globalpos, offset_xp); // Height at (x+1, y)
-    let height_ym = make_offset(globalpos, offset_ym); // Height at (x, y-1)
-    let height_yp = make_offset(globalpos, offset_yp); // Height at (x, y+1)
+    let height_xm = make_offset(globalpos, offset_xm); // (x-1, y)
+    let height_xp = make_offset(globalpos, offset_xp); // (x+1, y)
+    let height_ym = make_offset(globalpos, offset_ym); // (x, y-1)
+    let height_yp = make_offset(globalpos, offset_yp); // (x, y+1)
 
-    // va: tangent along X-axis. Change in height (height_xp - height_xm) over distance sample_step_dist.
+    // tangent along X-axis
     let va = normalize(vec3<f32>(sample_step_dist, 0.0, height_xp - height_xm));
-    // vb: tangent along Y-axis. Change in height (height_yp - height_ym) over distance sample_step_dist.
+    // tangent along Y-axis
     let vb = normalize(vec3<f32>(0.0, sample_step_dist, height_yp - height_ym));
 
     let norm = cross(va, vb);
@@ -134,7 +114,6 @@ fn get_water_vert(vert_index: i32, instance_index: i32, shift: vec2<f32>, pco: P
     return vertex;
 }
 
-// Main vertex shader function.
 @vertex
 fn main(@builtin(vertex_index) vert_id: u32, @builtin(instance_index) instance_id: u32) -> VertexOutput {
     let batch_index = instance_id / (32);
@@ -154,7 +133,6 @@ fn main(@builtin(vertex_index) vert_id: u32, @builtin(instance_index) instance_i
     clip_pos.z = 1.0 + clip_pos.z;
     out.position = vec4<f32>(clip_pos, 1.0);
 
-    // we use it for derivative so constant can be ignored
     out.orig = world_pos_vec3;
 
     return out;

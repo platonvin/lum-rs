@@ -1,3 +1,5 @@
+use containers::array3d::Dim3;
+
 use crate::{
     webgpu::{
         wal::Wal, AllIndependentImages, AllSwapchainDependentImages, InternalRendererWebGPU,
@@ -7,8 +9,11 @@ use crate::{
     Settings, BLOCK_SIZE,
 };
 
-impl<'window> InternalRendererWebGPU<'window> {
-    pub fn create_independent_images(wal: &Wal, lum_settings: &Settings) -> AllIndependentImages {
+impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
+    pub fn create_independent_images(
+        wal: &Wal,
+        lum_settings: &Settings<D>,
+    ) -> AllIndependentImages {
         let fif = wal.config.desired_maximum_frame_latency as usize;
 
         let world = wal.create_images(
@@ -18,9 +23,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             // wgpu::TextureUsages::STORAGE_BINDING // we dont need storage binding since we dont really write to it on gpu
             wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
             wgpu::Extent3d {
-                width: lum_settings.world_size.x,
-                height: lum_settings.world_size.y,
-                depth_or_array_layers: lum_settings.world_size.z,
+                width: lum_settings.world_size.x() as u32,
+                height: lum_settings.world_size.y() as u32,
+                depth_or_array_layers: lum_settings.world_size.z() as u32,
             },
             Some("World"),
         );
@@ -46,9 +51,9 @@ impl<'window> InternalRendererWebGPU<'window> {
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::COPY_DST,
             wgpu::Extent3d {
-                width: lum_settings.world_size.x,
-                height: lum_settings.world_size.y,
-                depth_or_array_layers: lum_settings.world_size.z,
+                width: lum_settings.world_size.x() as u32,
+                height: lum_settings.world_size.y() as u32,
+                depth_or_array_layers: lum_settings.world_size.z() as u32,
             },
             Some("Radiance Cache"),
         );
@@ -86,8 +91,8 @@ impl<'window> InternalRendererWebGPU<'window> {
             wgpu::TextureFormat::Rg32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             wgpu::Extent3d {
-                width: lum_settings.world_size.x * 2,
-                height: lum_settings.world_size.y * 2,
+                width: (lum_settings.world_size.x() * 2) as u32,
+                height: (lum_settings.world_size.y() * 2) as u32,
                 depth_or_array_layers: 1,
             },
             Some("Grass State"),
@@ -98,8 +103,8 @@ impl<'window> InternalRendererWebGPU<'window> {
             wgpu::TextureFormat::Rgba32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             wgpu::Extent3d {
-                width: lum_settings.world_size.x * 2,
-                height: lum_settings.world_size.y * 2,
+                width: (lum_settings.world_size.x() * 2) as u32,
+                height: (lum_settings.world_size.y() * 2) as u32,
                 depth_or_array_layers: 1,
             },
             Some("Water State"),
@@ -110,8 +115,8 @@ impl<'window> InternalRendererWebGPU<'window> {
             wgpu::TextureFormat::Rg32Float,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             wgpu::Extent3d {
-                width: lum_settings.world_size.x,
-                height: lum_settings.world_size.y,
+                width: lum_settings.world_size.x() as u32,
+                height: lum_settings.world_size.y() as u32,
                 depth_or_array_layers: 1,
             },
             Some("Perlin Noise 2D"),
@@ -145,7 +150,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     // dependent = swapchain dependent
     pub fn create_dependent_images(
         wal: &Wal,
-        _lum_settings: &Settings,
+        _lum_settings: &Settings<D>,
     ) -> AllSwapchainDependentImages {
         let sextent = wgpu::Extent3d {
             width: wal.config.width,

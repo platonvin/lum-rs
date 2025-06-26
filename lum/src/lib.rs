@@ -10,8 +10,9 @@
 #![allow(clippy::too_many_arguments)] // LOL
 #![allow(clippy::option_map_unit_fn)]
 
-use qvek::vec3;
+use containers::array3d::{ConstDims, Dim3, RuntimeDims};
 use qvek::vek::FrustumPlanes;
+use qvek::{uvec2, vec3};
 use types::{mat4, uvec2, uvec3, vec2, vec3};
 
 pub const BLOCK_SIZE: u32 = 16;
@@ -30,15 +31,22 @@ pub mod vulkan;
 #[cfg(feature = "wgpu_backend")]
 pub mod webgpu;
 
-#[derive(Clone, Copy, Default)]
-pub struct Settings {
-    pub world_size: uvec3 = uvec3::new(48, 48, 16),
-    pub static_block_palette_size: u32 = 15,
-    pub max_particle_count: u32 = 8128,
-    pub lightmap_extent: uvec2 = uvec2 {
-        x: 1024,
-        y: 1024,
-    },
+#[derive(Clone, Copy)]
+pub struct Settings<D: Dim3 = ConstDims<48, 48, 16>> {
+    pub world_size: D,
+    pub static_block_palette_size: u32,
+    pub max_particle_count: u32,
+    pub lightmap_extent: uvec2,
+}
+impl<D: Dim3> Default for Settings<D> {
+    fn default() -> Self {
+        Self {
+            world_size: Default::default(),
+            static_block_palette_size: 15,
+            max_particle_count: 8128,
+            lightmap_extent: uvec2 { x: 1024, y: 1024 },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -117,12 +125,12 @@ impl Camera {
 }
 
 impl SunLight {
-    fn update_light_transform(&mut self, world_size: uvec3, y_flip: bool) {
+    fn update_light_transform<D: Dim3>(&mut self, world_size: D, y_flip: bool) {
         // TODO: remove magic
         // :wizard_sad:
         let up = vec3!(0, 0, 1).normalized();
-        let light_pos =
-            vec3!(world_size.xy() * BLOCK_SIZE, 0) / 2.0 - (1.0 * fBLOCK_SIZE * self.light_dir);
+        let light_pos = vec3!(uvec2!(world_size.x(), world_size.y()) * BLOCK_SIZE, 0) / 2.0
+            - (1.0 * fBLOCK_SIZE * self.light_dir);
 
         let view = mat4::look_at_rh(light_pos, light_pos + self.light_dir, up);
         let voxel_in_pixels = 5.0;
@@ -165,7 +173,7 @@ macro_rules! assert_unreachable {
             // In debug mode, verify that the code never executes
             panic!();
         } else {
-            unreachable!();
+            unreachable_unchecked!();
         }
     };
 }

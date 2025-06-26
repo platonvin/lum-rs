@@ -3,10 +3,13 @@ use ash::prelude::VkResult;
 use std::result::Result::Ok;
 
 impl Renderer {
+    /// Moves renderer into mode where executing/recording commands is valid
     pub fn start_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
         unsafe {
-            self.device.wait_for_fences(&[*self.in_flight_fences.current()], true, u64::MAX);
-            self.device.reset_fences(&[*self.in_flight_fences.current()]);
+            self.device
+                .wait_for_fences(&[*self.in_flight_fences.current()], true, u64::MAX)
+                .unwrap();
+            self.device.reset_fences(&[*self.in_flight_fences.current()]).unwrap();
         };
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -37,7 +40,8 @@ impl Renderer {
         self.process_error_code(index_code);
     }
 
-    pub fn present_frame(&mut self, window: &Window) {
+    /// Presents frame on screen. Called in end_frame
+    pub fn present_frame(&mut self) {
         let wait_semaphores = [*self.render_finished_semaphores.current()];
         let swapchains = [self.swapchain];
         let image_indices = [self.image_index];
@@ -53,10 +57,11 @@ impl Renderer {
         let error_code =
             unsafe { self.swapchain_loader.queue_present(self.graphics_queue, &present_info) };
 
-        self.process_success_code(error_code, window);
+        self.process_success_code(error_code);
     }
 
-    pub fn end_frame(&mut self, command_buffers: &[vk::CommandBuffer], window: &Window) {
+    /// Finishes stage of recording commands and submits work to GPU
+    pub fn end_frame(&mut self, command_buffers: &[vk::CommandBuffer]) {
         for command_buffer in command_buffers {
             unsafe {
                 self.device.end_command_buffer(*command_buffer).unwrap();
@@ -77,7 +82,7 @@ impl Renderer {
         };
 
         unsafe {
-            // ask a queue to exectue the commands in command buffer
+            // ask a queue to execute the commands in command buffer
             self.device
                 .queue_submit(
                     self.graphics_queue,
@@ -87,7 +92,7 @@ impl Renderer {
                 .unwrap();
         }
 
-        self.present_frame(window);
+        self.present_frame();
 
         self.image_available_semaphores.move_next();
         self.render_finished_semaphores.move_next();
@@ -95,9 +100,6 @@ impl Renderer {
         // counter for internal purposes
         self.frame += 1;
     }
-
-    // figure out if entire thing has to be recreated or not. Does not reacreate, only "flags" it
-    // does someone know how to make this cleaner?
 
     fn process_error_code(&mut self, index_code: VkResult<(u32, bool)>) {
         // man why did you corrode vulkan. Should i make my own fn wrapper?
@@ -123,8 +125,7 @@ impl Renderer {
     }
 
     // does someone know how to make this cleaner?
-
-    fn process_success_code(&mut self, index_code: VkResult<bool>, window: &Window) {
+    fn process_success_code(&mut self, index_code: VkResult<bool>) {
         match index_code {
             Ok(suboptimal) => {
                 if suboptimal {

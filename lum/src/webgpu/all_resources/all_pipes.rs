@@ -10,7 +10,9 @@ use crate::{
     },
     Settings,
 };
+use containers::array3d::Dim3;
 use containers::Ring;
+use shaders::Shader;
 use std::mem::offset_of;
 use wgpu::*;
 
@@ -111,10 +113,10 @@ pub struct PackedVoxelCircuit {
     pub pos: u8vec4,
 }
 
-impl<'window> InternalRendererWebGPU<'window> {
+impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
     pub fn create_all_pipes(
         wal: &Wal,
-        _lum_settings: &Settings,
+        _lum_settings: &Settings<D>,
         buffers: &AllBuffers,
         iimages: &AllIndependentImages,
         dimages: &AllSwapchainDependentImages,
@@ -143,7 +145,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("lightmap_blocks.vert"),
+            shaders::Shader::get_wgsl(Shader::LightmapBlocksVert),
             None,
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
@@ -164,7 +166,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("lightmap blocks pipe"),
+            Some("lightmap blocks"),
         );
         let lightmap_models_pipe = Wal::create_raster_pipe(
             wal,
@@ -198,7 +200,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                     },
                 },
             ],
-            shaders::get_wgsl("lightmap_models.vert"),
+            shaders::Shader::get_wgsl(Shader::LightmapModelsVert),
             None,
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
@@ -219,7 +221,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Lightmap Models Pipe"),
+            Some("Lightmap Models"),
         );
 
         let raygen_blocks_pipe = Wal::create_raster_pipe(
@@ -256,8 +258,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("raygen_blocks.vert"),
-            Some(shaders::get_wgsl("raygen_blocks.frag")),
+            shaders::Shader::get_wgsl(Shader::RaygenBlocksVert),
+            Some(shaders::Shader::get_wgsl(Shader::RaygenBlocksFrag)),
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -281,7 +283,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Blocks Pipe"),
+            Some("Raygen Blocks"),
         );
 
         let raygen_models_pipe = Wal::create_raster_pipe(
@@ -316,8 +318,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     }, // aka push descriptor sets in vk
                 },
             ],
-            shaders::get_wgsl("raygen_models.vert"),
-            Some(shaders::get_wgsl("raygen_models.frag")),
+            shaders::Shader::get_wgsl(Shader::RaygenModelsVert),
+            Some(shaders::Shader::get_wgsl(Shader::RaygenModelsFrag)),
             &[VertexBufferLayout {
                 array_stride: size_of::<PackedVoxelCircuit>() as u64,
                 step_mode: VertexStepMode::Vertex,
@@ -341,7 +343,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Models Pipe"),
+            Some("Raygen Models"),
         );
 
         let raygen_particles_pipe = Wal::create_raster_pipe(
@@ -357,8 +359,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 resources: buffers_to_binding_resources(&buffers.uniform),
             }],
             &[],
-            shaders::get_wgsl("raygen_particles.vert"),
-            Some(shaders::get_wgsl("raygen_particles.frag")),
+            shaders::Shader::get_wgsl(Shader::RaygenParticlesVert),
+            Some(shaders::Shader::get_wgsl(Shader::RaygenParticlesFrag)),
             &[VertexBufferLayout {
                 array_stride: size_of::<Particle>() as u64,
                 step_mode: VertexStepMode::Instance,
@@ -399,7 +401,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Particles Pipe"),
+            Some("Raygen Particles"),
         );
 
         let raygen_water_pipe = Wal::create_raster_pipe(
@@ -445,8 +447,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("water.vert"),
-            Some(shaders::get_wgsl("water.frag")),
+            shaders::Shader::get_wgsl(Shader::WaterVert),
+            Some(shaders::Shader::get_wgsl(Shader::WaterFrag)),
             &[],
             PrimitiveTopology::TriangleStrip,
             vec![Some(ColorTargetState {
@@ -462,7 +464,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Raygen Water Pipe"),
+            Some("Raygen Water"),
         );
 
         let raygen_water_pipe = {
@@ -580,8 +582,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("diffuse.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::DiffuseFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -591,7 +593,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             })],
             None,
             None,
-            Some("Diffuse Pipe"),
+            Some("Diffuse"),
         );
 
         // darkens certain areas on the frame image depending on screen-space normal variation of pixels
@@ -651,8 +653,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("hbao.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::HbaoFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -662,7 +664,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             })],
             None,
             None,
-            Some("Ambient Occlusion Pipe"),
+            Some("Ambient Occlusion"),
         );
         let fill_stencil_glossy_pipe = Wal::create_raster_pipe(
             wal,
@@ -693,8 +695,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("fill_stencil_glossy.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::FillStencilGlossyFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![],
@@ -721,7 +723,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Fill Stencil for Glossy Pipe"),
+            Some("Fill Stencil for Glossy"),
         );
 
         let fill_stencil_smoke_pipe = Wal::create_raster_pipe(
@@ -745,8 +747,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                     min_binding_size: None,
                 },
             }],
-            shaders::get_wgsl("fill_stencil_smoke.vert"),
-            Some(shaders::get_wgsl("fill_stencil_smoke.frag")),
+            shaders::Shader::get_wgsl(Shader::FillStencilSmokeVert),
+            Some(shaders::Shader::get_wgsl(Shader::FillStencilSmokeFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             // these are emulating depth in a single pass
@@ -809,7 +811,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Fill Stencil for Smoke Pipe"),
+            Some("Fill Stencil for Smoke"),
         );
 
         let fill_stencil_smoke_pipe = {
@@ -965,8 +967,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("glossy.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::GlossyFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -992,7 +994,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Glossy Pipe"),
+            Some("Glossy"),
         );
 
         // Like AO, Volumetrics are just blending into frame with their color.
@@ -1063,8 +1065,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 },
             ],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("smoke.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::SmokeFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -1090,7 +1092,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                 bias: wgpu::DepthBiasState::default(),
             }),
             None,
-            Some("Smoke Pipe"),
+            Some("Smoke"),
         );
 
         // Tonemap Pipe is also responsible for putting frame image into swapchain. It does some... well, tonemapping as well as any simple other color filters. TODO: LUT?
@@ -1108,8 +1110,8 @@ impl<'window> InternalRendererWebGPU<'window> {
                 resources: Ring::from_vec(vec![BindingResource::TextureView(&dimages.frame.view)]),
             }],
             &[],
-            shaders::get_wgsl("fullscreen_triag.vert"),
-            Some(shaders::get_wgsl("tonemap.frag")),
+            shaders::Shader::get_wgsl(Shader::FullscreenTriagVert),
+            Some(shaders::Shader::get_wgsl(Shader::TonemapFrag)),
             &[],
             PrimitiveTopology::TriangleList,
             vec![Some(ColorTargetState {
@@ -1119,7 +1121,7 @@ impl<'window> InternalRendererWebGPU<'window> {
             })],
             None,
             None,
-            Some("Tonemap Pipe"),
+            Some("Tonemap"),
         );
 
         let radiance_pipe = Wal::create_compute_pipe(
@@ -1210,9 +1212,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("radiance.comp"),
+                code: shaders::Shader::get_wgsl(Shader::RadianceComp),
             },
-            Some("Radiance Pipe"),
+            Some("Radiance"),
         );
 
         let update_grass_pipe = Wal::create_compute_pipe(
@@ -1263,9 +1265,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("update_grass.comp"),
+                code: shaders::Shader::get_wgsl(Shader::UpdateGrassComp),
             },
-            Some("Update Grass Pipe"),
+            Some("Update Grass"),
         );
 
         let update_water_pipe = Wal::create_compute_pipe(
@@ -1298,9 +1300,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("update_water.comp"),
+                code: shaders::Shader::get_wgsl(Shader::UpdateWaterComp),
             },
-            Some("Water Updates Pipe"),
+            Some("Water Updates"),
         );
         let gen_perlin2d_pipe = Wal::create_compute_pipe(
             wal,
@@ -1319,9 +1321,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("perlin2.comp"),
+                code: shaders::Shader::get_wgsl(Shader::Perlin2Comp),
             },
-            Some("Gen Perlin 2D Pipe"),
+            Some("Gen Perlin 2D"),
         );
         let gen_perlin3d_pipe = Wal::create_compute_pipe(
             wal,
@@ -1340,9 +1342,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             &[],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("perlin3.comp"),
+                code: shaders::Shader::get_wgsl(Shader::Perlin3Comp),
             },
-            Some("Gen Perlin 3D Pipe"),
+            Some("Gen Perlin 3D"),
         );
         let map_pipe = Wal::create_compute_pipe(
             wal,
@@ -1393,9 +1395,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             ],
             &ShaderStageSource {
                 stage: ShaderStages::COMPUTE,
-                code: shaders::get_wgsl("map.comp"),
+                code: shaders::Shader::get_wgsl(Shader::MapComp),
             },
-            Some("Mapping Models Voxels Pipe"),
+            Some("Mapping Models Voxels"),
         );
 
         // let pc_buffer_bind_group_layout =
@@ -1461,7 +1463,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         },
                     }],
                     foliage_description.code,
-                    Some(shaders::get_wgsl("grass.frag")),
+                    Some(shaders::Shader::get_wgsl(Shader::GrassFrag)),
                     &[], // no vertex buffers
                     PrimitiveTopology::TriangleList,
                     vec![Some(ColorTargetState {
@@ -1477,7 +1479,7 @@ impl<'window> InternalRendererWebGPU<'window> {
                         bias: wgpu::DepthBiasState::default(),
                     }),
                     None,
-                    Some("foliage pipe"),
+                    Some("foliage"),
                 );
 
                 let pc_buffer = wal.create_buffer(

@@ -7,10 +7,12 @@ pub mod types;
 
 use super::{Camera, Settings, SunLight};
 use crate::{types::*, vulkan::types::*, BLOCK_SIZE};
+use containers::array3d::Dim3;
 use containers::Array3D;
 use containers::Ring;
 use lumal::{vk, RasterPipe};
 use render::MeshFoliageDescription;
+use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 // TODO: choose dynamically?
@@ -23,7 +25,6 @@ static mut CHOSEN_DEPTH_FORMAT: vk::Format = vk::Format::UNDEFINED;
 
 const BLOCK_PALETTE_SIZE_X: u32 = 64;
 const BLOCK_PALETTE_SIZE_Y: u32 = 64;
-const FRAMES_IN_FLIGHT: usize = 2;
 const AO_LUT_SIZE: usize = 8;
 
 /// Bundle of all Pipes (abstraction on top of Vulkan Pipelines)
@@ -194,16 +195,16 @@ pub struct AllRenderPasses {
 /// Unlike wgpu, Vulkan backend is split into 2 parts
 /// This allows you to have less CPU-side overhead if you want (by submitting commands directly without queues)
 /// *wgpu backend does not have this due to skill issues*
-pub struct InternalRendererVulkan {
+pub struct InternalRendererVulkan<'a, D: Dim3> {
     /// Internal frame counter. Used as rng seed
     pub counter: isize,
     /// Vulkan abstraction that Lum uses
     pub lumal: lumal::Renderer,
     /// renderer settings. Cannot be changed after creation
-    pub settings: Settings,
+    pub settings: Settings<D>,
 
-    ///
-    pub foliage_descriptions: Vec<MeshFoliageDescription>,
+    /// All foliage descriptions (which have lifetime of renderer because they dont change after creation)
+    pub foliage_descriptions: Vec<MeshFoliageDescription<'a>>,
 
     // fields called LumThings are just grouped Vulkan objects needed by renderer
     pub pipes: AllPipes,
@@ -240,10 +241,10 @@ pub struct InternalRendererVulkan {
     pub static_block_palette_size: u32,
 
     /// ground truth for block references data, without any block allocations (no models)
-    pub origin_world: Array3D<MeshBlock>,
+    pub origin_world: Array3D<MeshBlock, D>,
     /// modified origin world, with some blocks allocated for models
     /// for internal use only
-    pub current_world: Array3D<MeshBlock>,
+    pub current_world: Array3D<MeshBlock, D>,
 
     /// just particles. Very simple system to process them
     pub particles: Vec<Particle>,
@@ -273,17 +274,18 @@ pub struct InternalRendererVulkan {
 const DEPTH_FORMAT_SPARE: vk::Format = vk::Format::D24_UNORM_S8_UINT; // TODO somehow D32 faster than vk::Format::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED: vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
 
-impl InternalRendererVulkan {
-    pub fn create(
-        lum_settings: &Settings,
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
+    pub fn new(
+        lum_settings: &Settings<D>,
         window: &Window,
-        foliage_descriptions: Vec<MeshFoliageDescription>,
-    ) -> InternalRendererVulkan {
+        size: PhysicalSize<u32>,
+        foliage_descriptions: Vec<MeshFoliageDescription<'a>>,
+    ) -> InternalRendererVulkan<'a, D> {
         let mut lumal_settings = lumal::LumalSettings::default();
         if cfg!(debug_assertions) {
             lumal_settings.debug = true;
         }
-        let mut lumal = lumal::Renderer::create(&lumal_settings, window);
+        let mut lumal = lumal::Renderer::new(&lumal_settings, window, size);
 
         unsafe {
             CHOSEN_DEPTH_FORMAT = lumal
@@ -329,17 +331,11 @@ impl InternalRendererVulkan {
         let camera = Camera::default();
         let light = SunLight::default();
 
-        let origin_world = Array3D::<MeshBlock>::new(
-            lum_settings.world_size.x as usize,
-            lum_settings.world_size.y as usize,
-            lum_settings.world_size.z as usize,
-        );
+        let origin_world = Array3D::<MeshBlock, D>::new_default(lum_settings.world_size);
         // same as initalization but cleaner imho
-        let current_world = Array3D {
+        let current_world = Array3D::<_, D> {
             data: origin_world.data.clone(),
-            x_size: origin_world.x_size,
-            y_size: origin_world.y_size,
-            z_size: origin_world.z_size,
+            dims: origin_world.dims,
         };
 
         let mut lum = InternalRendererVulkan {
@@ -395,7 +391,7 @@ impl InternalRendererVulkan {
     }
 
     /// Disassemblse the renderer, recreates swapchain dependent resources, and reassembles it back
-    pub fn recreate_window(&mut self, window: &Window) {
+    pub fn recreate_window(&mut self, size: PhysicalSize<u32>) {
         // wait for GPU to complete all work so deleting resources wont break anything
         unsafe { self.lumal.device.device_wait_idle().unwrap() };
 
@@ -403,15 +399,13 @@ impl InternalRendererVulkan {
         // this is due to mix of styles: functional (move self return Self) vs &mut self modifying fields
         // to solve this i implement unsafe default() with uninit (i really dont want Option<>)
         // TODO: converge on specific style
-        unsafe {
-            Self::destroy_dependent(
-                &mut self.lumal,
-                std::mem::take(&mut self.dependent_images),
-                std::mem::take(&mut self.pipes),
-                std::mem::take(&mut self.rpasses),
-            )
-        };
-        self.lumal.recreate_swapchain(window);
+        Self::destroy_dependent(
+            &mut self.lumal,
+            std::mem::take(&mut self.dependent_images),
+            std::mem::take(&mut self.pipes),
+            std::mem::take(&mut self.rpasses),
+        );
+        self.lumal.recreate_swapchain(size);
 
         // in Vulkan, you can drop the entire pool or descriptors individually (you need special settings tho)
         // most of them are invalid after resizing anyways, so dropping pool is faster and easier
@@ -438,11 +432,11 @@ impl InternalRendererVulkan {
     }
 
     /// Destroys the renderer
-    pub unsafe fn destroy(mut self) {
+    pub fn destroy(self) {
         let mut lumal = self.lumal;
 
         // TODO: there is something im missing in winit that should make this unnecessary. How did i do it in C++?
-        lumal.device.device_wait_idle().unwrap();
+        unsafe { lumal.device.device_wait_idle().unwrap() };
         Self::destroy_independent_images(&mut lumal, self.independent_images);
         Self::destroy_all_buffers(&mut lumal, self.buffers);
 
@@ -450,10 +444,10 @@ impl InternalRendererVulkan {
 
         Self::destroy_dependent(&mut lumal, self.dependent_images, self.pipes, self.rpasses);
 
-        Self::destroy_all_samplers(&mut lumal, &mut self.samplers);
-        Self::destroy_all_command_buffers(&mut lumal, &self.cmdbufs);
+        Self::destroy_all_samplers(&mut lumal, self.samplers);
+        Self::destroy_all_command_buffers(&lumal, &self.cmdbufs);
 
-        lumal.destroy();
+        unsafe { lumal.destroy() };
     }
 
     fn destroy_dependent(
@@ -468,10 +462,10 @@ impl InternalRendererVulkan {
     }
 }
 
-fn create_dependent(
+fn create_dependent<D: Dim3>(
     lumal: &mut lumal::Renderer,
-    lum_settings: &Settings,
-    foliage_descriptions: &Vec<MeshFoliageDescription>,
+    lum_settings: &Settings<D>,
+    foliage_descriptions: &[MeshFoliageDescription],
     lumal_settings: &lumal::LumalSettings,
     independent_images: &AllIndependentImages,
     buffers: &AllBuffers,
@@ -493,18 +487,16 @@ fn create_dependent(
         &mut pipes,
     );
 
-    unsafe {
-        InternalRendererVulkan::create_all_pipes(
-            lumal,
-            lum_settings,
-            lumal_settings,
-            buffers,
-            independent_images,
-            &dependent_images,
-            samplers,
-            &mut pipes,
-            foliage_descriptions,
-        )
-    };
+    InternalRendererVulkan::create_all_pipes(
+        lumal,
+        lum_settings,
+        lumal_settings,
+        buffers,
+        independent_images,
+        &dependent_images,
+        samplers,
+        &mut pipes,
+        foliage_descriptions,
+    );
     (dependent_images, pipes, renderpasses)
 }

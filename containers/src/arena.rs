@@ -2,13 +2,14 @@ use std::collections::VecDeque;
 
 #[derive(Default)]
 pub struct Arena<T> {
-    storage: Vec<Option<T>>, // Stores elements, with `None` representing free slots
-    // sorted deque of indices
+    // Actual elements, with `None` representing free slots.
+    storage: Vec<Option<T>>,
+    /// Sorted deque of indices.
     free_indices: VecDeque<usize>, // Keeps track of available slots
 }
 
 impl<T> Arena<T> {
-    /// Creates a new arena with a given initial size.
+    /// Creates an arena with a given initial size.
     pub fn new(initial_size: usize) -> Self {
         let free_indices = (0..initial_size).collect();
         let storage = (0..initial_size).map(|_| None).collect();
@@ -18,7 +19,7 @@ impl<T> Arena<T> {
         }
     }
 
-    /// Allocates a new object in the arena, returning a handle
+    /// Allocates a new object in the arena, returning a handle.
     pub fn allocate(&mut self, value: T) -> Option<usize> {
         if let Some(index) = self.free_indices.pop_front() {
             self.storage[index] = Some(value);

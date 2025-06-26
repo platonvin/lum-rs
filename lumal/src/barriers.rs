@@ -1,12 +1,11 @@
+//! Just a simplification-wrapper for barriers that suits Lum.
+//! It is missing a lot but it does not matter anyways - drivers dont give a fuck about precise barriers.
+
 use crate::{Buffer, Image, Renderer};
 use ash::vk;
 
-// just a wrapper for barriers that suits my needs
-// it is missing a lot but it does not matter anyways - drivers dont give a fuck about precise barriers
-
 impl Renderer {
-    /// Vulkan pipeline barrier wrapper
-
+    /// Places Vulkan pipeline barrier for an image.
     pub fn image_memory_barrier(
         &self,
         cmdbuf: &vk::CommandBuffer,
@@ -49,8 +48,7 @@ impl Renderer {
         };
     }
 
-    /// Vulkan pipeline barrier wrapper
-
+    /// Places Vulkan pipeline barrier for a buffer.
     pub fn buffer_memory_barrier(
         &self,
         cmdbuf: &vk::CommandBuffer,

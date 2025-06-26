@@ -4,6 +4,7 @@
 
 use containers::Ring;
 use std::borrow::Cow;
+use wgpu::DepthStencilState;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, ColorTargetState, ComputePipelineDescriptor, Features, FragmentState,
@@ -11,7 +12,7 @@ use wgpu::{
     PrimitiveTopology, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource,
     VertexBufferLayout, VertexState,
 };
-use wgpu::{DepthStencilState, Limits};
+use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 /// Manages the core wgpu state and resources required for rendering.
@@ -138,9 +139,7 @@ pub struct Image {
 }
 
 impl<'window> Wal<'window> {
-    pub async fn new(window: std::sync::Arc<Window>) -> Self {
-        let window_size = window.inner_size();
-
+    pub async fn new(window: std::sync::Arc<Window>, size: PhysicalSize<u32>) -> Self {
         // if you dont understand what is happening here i recommend looking into WGPU guide
         // essntially we are just setting up a few of GPU/Driver state objects in a way we need to proceed
 
@@ -176,8 +175,8 @@ impl<'window> Wal<'window> {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: *swapchain_format,
-            width: window_size.width,
-            height: window_size.height,
+            width: size.width,
+            height: size.height,
             #[cfg(not(target_arch = "wasm32"))]
             present_mode: wgpu::PresentMode::Mailbox,
             #[cfg(target_arch = "wasm32")]
@@ -556,6 +555,7 @@ impl<'window> Wal<'window> {
         let mut bind_index = 0;
         if let Some(static_bind_groups) = static_bind_groups {
             render_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
     }
@@ -565,11 +565,12 @@ impl<'window> Wal<'window> {
         compute_pass: &mut wgpu::ComputePass<'a>,
         pipe: &ComputePipe,
     ) {
-        compute_pass.set_pipeline(&pipe.line.as_ref().unwrap());
+        compute_pass.set_pipeline(pipe.line.as_ref().unwrap());
 
         let mut bind_index = 0;
         if let Some(ref static_bind_groups) = pipe.static_bind_groups {
             compute_pass.set_bind_group(bind_index, static_bind_groups.current(), &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
     }
@@ -591,6 +592,7 @@ impl<'window> Wal<'window> {
 
         if let Some(bind_group) = dynamic_bind_group {
             render_pass.set_bind_group(bind_index, bind_group, &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
 
@@ -614,6 +616,7 @@ impl<'window> Wal<'window> {
 
         if let Some(bind_group) = dynamic_bind_group {
             render_pass.set_bind_group(bind_index, bind_group, &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
 
@@ -637,6 +640,7 @@ impl<'window> Wal<'window> {
 
         if let Some(bind_group) = dynamic_bind_group {
             compute_pass.set_bind_group(bind_index, bind_group, &[]);
+            #[allow(unused)]
             bind_index += 1;
         }
 

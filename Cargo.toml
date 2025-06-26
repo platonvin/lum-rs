@@ -22,9 +22,6 @@ overflow-checks = true
 incremental = true
 debug = true
 
-# Settings for your own packages (lum, lumal, examples)
-# These explicitly override the general dev settings to ensure
-# low optimization, debug info, and no inlining.
 [profile.dev.package.lum]
 opt-level = 0
 debug = true
@@ -33,19 +30,14 @@ inline = "never"
 opt-level = 0
 debug = true
 inline = "never"
-# [profile.dev.package.demo]
-# opt-level = 0
-# debug = true
-# inline = "never"
 [profile.dev.package.wgpu]
-opt-level = 1
+opt-level = 3
 debug = true
-inline = "never"
 
-# This wildcard applies to all packages *not* explicitly listed above.
+# applies to all packages not listed above
 [profile.dev.package."*"]
-opt-level = 3 # Optimize dependencies highly
-debug = false # No debug info
+opt-level = 3
+debug = false
 
 [profile.release]
 opt-level = 3          # "s" is 5 times slower lol. TODO: investigate
@@ -54,10 +46,9 @@ codegen-units = 16
 lto = false
 overflow-checks = true # TODO: unchecked math (UB on overflow)
 
-# Highest possible optimizations
-# these profile settings are not a good example to use. They are somewhat internal to see how small can the binary be
-# dont forget to build std lib with the project to see good size
-[profile.native]
+# TODO: multiverse cfg?
+# highest possible optimizations
+[profile.distribution]
 inherits = "release"
 opt-level = "s"
 codegen-units = 1
@@ -67,40 +58,14 @@ panic = "abort"
 overflow-checks = false
 strip = true
 debug-assertions = false
-# [profile.native.package."*"]
-# opt-level = "s"
 
-[profile.bench]
-inherits = "release"
-opt-level = 3
-codegen-units = 1
-lto = "thin"
-debug = false
-overflow-checks = false
-strip = false
+[profile.native]
+inherits = "distribution"
 
-# dont forget to build std lib with the project
-# "z" is very slow, but too get the smallest binary...
+# dont forget to build std with the project
+# "z" is very slow, but to get the smallest binary...
 [profile.natsize]
-inherits = "release"
+inherits = "distribution"
 opt-level = "z"
-lto = "fat"
-codegen-units = 1
-debug = false
-panic = "abort"
-overflow-checks = false
-strip = true
-[profile.natsize.package."*"]
-opt-level = "z"
-
-
-# TODO: profile package?
-# TODO: multiverse cfg?
-[profile.distribution]
-inherits = "release"
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-debug = false
-panic = "unwind"
-overflow-checks = true
+# [profile.natsize.package."*"]
+# opt-level = "z"

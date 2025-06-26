@@ -2,13 +2,14 @@ use crate::{
     vulkan::{AllCommandBuffers, InternalRendererVulkan},
     Settings,
 };
+use containers::array3d::Dim3;
 use lumal::{LumalSettings, Renderer};
 
-impl InternalRendererVulkan {
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     /// Creates all command buffer.
     pub fn create_all_command_buffers(
         lumal: &Renderer,
-        _lum_settings: &Settings,
+        _lum_settings: &Settings<D>,
         _lumal_settings: &LumalSettings,
     ) -> AllCommandBuffers {
         let compute_command_buffers = lumal.create_command_buffer();

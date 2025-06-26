@@ -3,6 +3,7 @@
 /*
 this is basically ray tracing shader
 */
+
 precision highp int;
 precision highp float;
 
@@ -27,9 +28,8 @@ layout(location = 0) out vec4 frame_color;
 layout(constant_id = 0) const int BLOCK_PALETTE_SIZE_X = 64;
 
 const float PI = 3.1415926535;
-// const ivec3 world_size = ivec3(48,48,16);
 
- ivec2 size;
+ivec2 size;
 ivec2 pix;
 
 struct Material{
@@ -442,7 +442,6 @@ vec3 encode_color(vec3 color){
 
 // layout(local_size_x = 8, local_size_y = 8) in;
 void main(void){
-    //lowres resolution. out_frame cause in_frame is sampler
     size = textureSize(matNorm, 0);
 
     pix = ivec2(gl_FragCoord.xy);
@@ -489,6 +488,4 @@ void main(void){
     vec3 traced_color = trace_glossy_ray(origin, direction, accumulated_light, accumulated_reflection);
     
     frame_color = vec4(encode_color(traced_color), 1.0-mat.roughness);
-    // frame_color = vec4(encode_color(traced_color), 0.0);
-    // frame_color = vec4(vec3(.1, .2, .3), 0.0);
 }

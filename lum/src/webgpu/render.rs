@@ -16,26 +16,23 @@ use crate::{
 };
 use as_u8_slice_derive::AsU8Slice;
 use containers::{
-    array3d::{Array3DView, Array3DViewMut},
-    Arena, Array3D, BitArray3d,
+    array3d::{Array3DView, Array3DViewMut, Dim3},
+    Arena, BitArray3d,
 };
 use qvek::{
     i16vec3, ivec3, ivec4, uvec2, uvec3, vec2, vec3, vec4,
     vek::{Clamp, Vec3},
 };
-use std::{
-    mem::{size_of, transmute},
-    time::Instant,
-};
+use std::mem::{size_of, transmute};
 use wgpu::{
     BufferSize, Color, ComputePassDescriptor, Extent3d, Origin3d, TexelCopyBufferInfo,
     TexelCopyTextureInfo, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 // i am clearly trash with managing division into files
 // if someone has a good idea on how to do it, message me (or just make a PR)
-impl<'window> InternalRendererWebGPU<'window> {
+impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
     pub fn update_camera(&mut self) {
         self.camera.update_camera(true); // wgpu has worst possible y orientation
                                          // like, why would we have Y flipped for UV coords relative to clip space?
@@ -51,6 +48,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         self.palette_counter = self.static_block_palette_size as usize;
 
         // reset the current world to the origin
+        // basically clears allocated blocks (keeps static blocks)
         self.current_world.copy_data_from(&self.origin_world);
     }
 
@@ -61,23 +59,20 @@ impl<'window> InternalRendererWebGPU<'window> {
         uvec2!(x, y)
     }
 
-    // i love the fact that none of these does anything
-
     /// CPU-only function that determines which blocks need light to be updated and adds them to queue (of which blocks to update)
     /// Note: this is the last function that can be called before Vulkan interraction
     /// which means that you HAVE to wait at most after it
     pub fn find_radiance_to_update(&mut self) {
         // somehow caching allocated is slower... TODO:
-        // explanation: i used to avoid new allocation by reusing memory but somehow thats slower than freeing and allocating new Vec every frame
+        // explanation: i used to avoid new allocation by reusing memory
+        // but somehow thats slower than freeing and allocating new memory every frame
 
         // TODO: optimize with "spreading" / "blurring" apporach where we do 3 (X,Y,Z) passes with 1x1x3 kernel
 
         // like a hash_set, but optimized (no hashing, no collisions)
         // its literally 3d array of bools, each corresponding to "if set"
-        let mut visited = BitArray3d::<usize>::new_filled(
-            self.settings.world_size.x as usize,
-            self.settings.world_size.y as usize,
-            self.settings.world_size.z as usize,
+        let mut visited = BitArray3d::<usize, D>::new_filled(
+            self.settings.world_size,
             false, // each value in set corresponds to "if the block is already updated"
         );
 
@@ -90,10 +85,10 @@ impl<'window> InternalRendererWebGPU<'window> {
 
         let mut pushed_radiance_count = 0;
         // push block into queue of update requests if the block has neighbours
-        for xx in (0 as TheType)..(self.settings.world_size.x as TheType) {
-            for yy in (0 as TheType)..(self.settings.world_size.y as TheType) {
+        for xx in (0 as TheType)..(self.settings.world_size.x() as TheType) {
+            for yy in (0 as TheType)..(self.settings.world_size.y() as TheType) {
                 // skip some blocks to reduce the number of requests
-                for zz in ((current_offset as TheType)..(self.settings.world_size.z as TheType))
+                for zz in ((current_offset as TheType)..(self.settings.world_size.z() as TheType))
                     .step_by(magic_number as usize)
                 {
                     // simple version that is also ~2/570 slower (so not much)
@@ -103,19 +98,19 @@ impl<'window> InternalRendererWebGPU<'window> {
                                 // clamp has an assert inside LOL
                                 let x = (xx as TheType + dx)
                                     .max(0)
-                                    .min(self.settings.world_size.x as TheType - 1);
+                                    .min(self.settings.world_size.x() as TheType - 1);
                                 let y = (yy as TheType + dy)
                                     .max(0)
-                                    .min(self.settings.world_size.y as TheType - 1);
+                                    .min(self.settings.world_size.y() as TheType - 1);
                                 let z = (zz as TheType + dz)
                                     .max(0)
-                                    .min(self.settings.world_size.z as TheType - 1);
+                                    .min(self.settings.world_size.z() as TheType - 1);
                                 let block =
                                     self.current_world.get(x as usize, y as usize, z as usize);
 
-                                assert_assume!((block > 0) == (block != 0));
+                                assert_assume!((*block > 0) == (*block != 0));
 
-                                if block > 0 {
+                                if *block > 0 {
                                     visited.set(xx as usize, yy as usize, zz as usize, true);
                                     pushed_radiance_count += 1;
                                     //i want to
@@ -131,9 +126,9 @@ impl<'window> InternalRendererWebGPU<'window> {
         self.radiance_updates.resize(pushed_radiance_count as usize, ivec4::zero());
 
         let mut i = 0;
-        for zz in 0..self.settings.world_size.z {
-            for yy in 0..self.settings.world_size.y {
-                for xx in 0..self.settings.world_size.x {
+        for zz in 0..self.settings.world_size.z() {
+            for yy in 0..self.settings.world_size.y() {
+                for xx in 0..self.settings.world_size.x() {
                     if visited.get(xx as usize, yy as usize, zz as usize) {
                         assert_assume!(i < self.radiance_updates.len());
                         self.radiance_updates[i] = ivec4!(xx, yy, zz, 0);
@@ -158,7 +153,7 @@ impl<'window> InternalRendererWebGPU<'window> {
     pub fn start_frame(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let now = Instant::now();
+            let now = std::time::Instant::now();
             let delta = now - self.last_time;
             self.delta_time = (delta.subsec_nanos() as f64 / 1e9_f64) as f32;
             self.last_time = now;
@@ -240,27 +235,27 @@ impl<'window> InternalRendererWebGPU<'window> {
         let cam_shift = radiance_shift;
 
         // If the shift in any axis is greater than or equal to world size, nothing is done.
-        if cam_shift.x.abs() >= self.settings.world_size.x as i32
-            || cam_shift.y.abs() >= self.settings.world_size.y as i32
-            || cam_shift.z.abs() >= self.settings.world_size.z as i32
+        if cam_shift.x.abs() >= self.settings.world_size.x() as i32
+            || cam_shift.y.abs() >= self.settings.world_size.y() as i32
+            || cam_shift.z.abs() >= self.settings.world_size.z() as i32
         {
             return;
         }
 
         // Compute source and destination offsets along each axis.
         let self_src_offset = ivec3!(
-            process_axis(cam_shift.x, self.settings.world_size.x as i32).x,
-            process_axis(cam_shift.y, self.settings.world_size.y as i32).x,
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).x
+            process_axis(cam_shift.x, self.settings.world_size.x() as i32).x,
+            process_axis(cam_shift.y, self.settings.world_size.y() as i32).x,
+            process_axis(cam_shift.z, self.settings.world_size.z() as i32).x
         );
         let self_dst_offset = ivec3!(
-            process_axis(cam_shift.x, self.settings.world_size.x as i32).y,
-            process_axis(cam_shift.y, self.settings.world_size.y as i32).y,
-            process_axis(cam_shift.z, self.settings.world_size.z as i32).y
+            process_axis(cam_shift.x, self.settings.world_size.x() as i32).y,
+            process_axis(cam_shift.y, self.settings.world_size.y() as i32).y,
+            process_axis(cam_shift.z, self.settings.world_size.z() as i32).y
         );
 
         // Compute the intersection size of new "sliding window" position and old one
-        let intersection_size = self.settings.world_size
+        let intersection_size: uvec3 = uvec3!(self.settings.world_size.xyz())
             - uvec3!(
                 cam_shift.x.unsigned_abs(),
                 cam_shift.y.unsigned_abs(),
@@ -369,7 +364,8 @@ impl<'window> InternalRendererWebGPU<'window> {
         }
 
         // Finally, copy the world buffer to the world texture.
-        let bytes_per_row = self.settings.world_size.x * std::mem::size_of::<MeshBlock>() as u32;
+        let bytes_per_row =
+            (self.settings.world_size.x() * std::mem::size_of::<MeshBlock>()) as u32;
 
         //TODO: idk pad this
         let padded_bytes_per_row = bytes_per_row.next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT);
@@ -377,7 +373,7 @@ impl<'window> InternalRendererWebGPU<'window> {
         let layout = wgpu::TexelCopyBufferLayout {
             offset: 0,
             bytes_per_row: Some(padded_bytes_per_row),
-            rows_per_image: Some(self.settings.world_size.y),
+            rows_per_image: Some(self.settings.world_size.y() as u32),
             // rows_per_image: None, // not required?
         };
         let buffer_copy = TexelCopyBufferInfo {
@@ -391,9 +387,9 @@ impl<'window> InternalRendererWebGPU<'window> {
             aspect: wgpu::TextureAspect::All,
         };
         let extent = Extent3d {
-            width: self.settings.world_size.x,
-            height: self.settings.world_size.y,
-            depth_or_array_layers: self.settings.world_size.z,
+            width: self.settings.world_size.x() as u32,
+            height: self.settings.world_size.y() as u32,
+            depth_or_array_layers: self.settings.world_size.z() as u32,
         };
 
         self.current_encoder
@@ -418,8 +414,8 @@ impl<'window> InternalRendererWebGPU<'window> {
             &mut compute_pass,
             &mut self.pipes.gen_perlin2d_pipe,
             None,
-            self.origin_world.x_size.div_ceil(8) as u32,
-            self.origin_world.y_size.div_ceil(8) as u32,
+            self.origin_world.dims.x().div_ceil(8) as u32,
+            self.origin_world.dims.y().div_ceil(8) as u32,
             1,
         );
 
@@ -490,8 +486,8 @@ pub struct RendererStorage {
 }
 
 // initialized fully working Renderer that can be used to draw voxels on screen
-pub struct RendererWgpu<'window> {
-    pub renderer: InternalRendererWebGPU<'window>,
+pub struct RendererWgpu<'window, D: Dim3> {
+    pub renderer: InternalRendererWebGPU<'window, D>,
     pub block_que: Vec<BlockRenderRequest>,
     pub model_que: Vec<ModelRenderRequest>,
     pub liquid_que: Vec<LiquidRenderRequest>,
@@ -504,7 +500,7 @@ pub struct RendererWgpu<'window> {
     pub radiance_shift: ivec3,
 }
 
-impl<'window> RendererWgpu<'window> {
+impl<'window, D: Dim3> RendererWgpu<'window, D> {
     pub fn destroy(self) {
         // unsafe { self.renderer.destroy() };
     }
@@ -597,10 +593,7 @@ impl<'window> RendererWgpu<'window> {
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
+                    depth_ops: None,
                     stencil_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0),
                         store: wgpu::StoreOp::Store,
@@ -628,7 +621,6 @@ impl<'window> RendererWgpu<'window> {
     }
 
     fn raygen_smoke(&mut self) {
-        // Begin the smoke raygen render pass
         let mut rpass = self.renderer.current_encoder.as_mut().unwrap().begin_render_pass(
             &wgpu::RenderPassDescriptor {
                 label: Some("Smoke Raygen Render Pass"),
@@ -638,10 +630,11 @@ impl<'window> RendererWgpu<'window> {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(Color {
-                                r: 1000.0,
-                                g: 1000.0,
-                                b: 1000.0,
-                                a: 1000.0,
+                                // just high enough numbers
+                                r: 10000.0,
+                                g: 10000.0,
+                                b: 10000.0,
+                                a: 10000.0,
                             }),
                             store: wgpu::StoreOp::Store,
                         },
@@ -651,10 +644,11 @@ impl<'window> RendererWgpu<'window> {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(Color {
-                                r: -1000.0,
-                                g: -1000.0,
-                                b: -1000.0,
-                                a: -1000.0,
+                                // just negative-high enough numbers
+                                r: -10000.0,
+                                g: -10000.0,
+                                b: -10000.0,
+                                a: -10000.0,
                             }),
                             store: wgpu::StoreOp::Store,
                         },
@@ -737,10 +731,7 @@ impl<'window> RendererWgpu<'window> {
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.renderer.dependent_images.as_ref().unwrap().stencil.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
+                    depth_ops: None,
                     stencil_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -1036,12 +1027,12 @@ impl<'window> RendererWgpu<'window> {
                 border.min = ivec3::clamped(
                     border.min,
                     ivec3::zero(),
-                    ivec3!(this.settings.world_size - 1),
+                    ivec3!(this.settings.world_size.xyz() - 1),
                 );
                 border.max = ivec3::clamped(
                     border.max,
                     ivec3::zero(),
-                    ivec3!(this.settings.world_size - 1),
+                    ivec3!(this.settings.world_size.xyz() - 1),
                 );
 
                 for zz in border.min.z..=border.max.z {
@@ -1052,8 +1043,8 @@ impl<'window> RendererWgpu<'window> {
                             if (current_block as u32) < this.static_block_palette_size {
                                 // static
                                 //add to copy queue
-                                let src_block = this.index_block_xy(current_block as usize);
-                                let dst_block = this.index_block_xy(this.palette_counter);
+                                let _src_block = this.index_block_xy(current_block as usize);
+                                let _dst_block = this.index_block_xy(this.palette_counter);
 
                                 // do image copy on for non-zero-src blocks. Other things still done for every allocated block
                                 // because zeroing is fast
@@ -1178,8 +1169,8 @@ impl<'window> RendererWgpu<'window> {
 
         // Dispatch workgroups
         compute_pass.dispatch_workgroups(
-            (self.renderer.settings.world_size.x * 2).div_ceil(8),
-            (self.renderer.settings.world_size.y * 2).div_ceil(8),
+            (self.renderer.settings.world_size.x() * 2).div_ceil(8) as u32,
+            (self.renderer.settings.world_size.y() * 2).div_ceil(8) as u32,
             1,
         );
 
@@ -1203,8 +1194,8 @@ impl<'window> RendererWgpu<'window> {
             &mut compute_pass,
             &mut self.renderer.pipes.update_water_pipe,
             None,
-            (self.renderer.settings.world_size.x * 2).div_ceil(8),
-            (self.renderer.settings.world_size.y * 2).div_ceil(8),
+            (self.renderer.settings.world_size.x() * 2).div_ceil(8) as u32,
+            (self.renderer.settings.world_size.y() * 2).div_ceil(8) as u32,
             1,
         );
     }
@@ -2182,23 +2173,23 @@ impl<'window> RendererWgpu<'window> {
     }
 }
 
-pub struct SimpleFoliageDescriptionBuilder {
-    foliage_descriptions: Vec<MeshFoliageDesc>,
+pub struct SimpleFoliageDescriptionBuilder<'a> {
+    foliage_descriptions: Vec<MeshFoliageDesc<'a>>,
 }
 
 // impl very exact thing
-impl FoliageDescriptionBuilder<MeshFoliageDesc> for SimpleFoliageDescriptionBuilder {
+impl<'a> FoliageDescriptionBuilder<MeshFoliageDesc<'a>> for SimpleFoliageDescriptionBuilder<'a> {
     fn new() -> Self {
         Self {
             foliage_descriptions: vec![],
         }
     }
-    fn load_foliage(&mut self, foliage: MeshFoliageDesc) -> MeshFoliage {
+    fn load_foliage(&mut self, foliage: MeshFoliageDesc<'a>) -> MeshFoliage {
         let index = self.foliage_descriptions.len() as u32;
         self.foliage_descriptions.push(foliage);
         index as MeshFoliage
     }
-    fn build(self) -> Vec<MeshFoliageDesc> {
+    fn build(self) -> Vec<MeshFoliageDesc<'a>> {
         self.foliage_descriptions
     }
 }
@@ -2212,14 +2203,19 @@ impl FoliageDescriptionBuilder<MeshFoliageDesc> for SimpleFoliageDescriptionBuil
 // * done this way for simplicity (aka pre-counting size)
 // **: Lum is not trying to be general-purpose engine at all. Some very basic parts that are expected from game engine
 // are and will forever be missing. You cant make fast abstraction on top of everything.
-impl<'window> RendererInterface for RendererWgpu<'window> {
-    type FoliageDescription = MeshFoliageDesc;
-    type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder;
+impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D> {
+    type FoliageDescription = MeshFoliageDesc<'window>;
+    type FoliageDescriptionBuilder = SimpleFoliageDescriptionBuilder<'window>;
     type InternalBlockId = InternalBlockId;
 
-    fn new(settings: &Settings, window: Window, foliages: &[MeshFoliageDesc]) -> Self {
+    fn new(
+        settings: &Settings<D>,
+        window: std::sync::Arc<Window>,
+        size: PhysicalSize<u32>,
+        foliages: &[MeshFoliageDesc<'window>],
+    ) -> Self {
         Self {
-            renderer: InternalRendererWebGPU::new(settings, window, foliages.to_vec()),
+            renderer: InternalRendererWebGPU::new(settings, window, size, foliages.to_vec()),
             block_que: vec![],
             // mesh_que: vec![],
             foliage_ques: vec![vec![]; foliages.len()],
@@ -2232,12 +2228,14 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     }
 
     async fn new_async(
-        settings: &Settings,
+        settings: &Settings<D>,
         window: std::sync::Arc<Window>,
-        foliages: &[MeshFoliageDesc],
+        size: PhysicalSize<u32>,
+        foliages: &[MeshFoliageDesc<'window>],
     ) -> Self {
         Self {
-            renderer: InternalRendererWebGPU::new_async(settings, window, foliages.to_vec()).await,
+            renderer: InternalRendererWebGPU::new_async(settings, window, size, foliages.to_vec())
+                .await,
             block_que: vec![],
             // mesh_que: vec![],
             foliage_ques: vec![vec![]; foliages.len()],
@@ -2402,9 +2400,9 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
     // TODO: calculate distance here vs separate
     // TODO: check visibility here vs separate
     fn draw_world(&mut self) {
-        for zz in 0..self.renderer.settings.world_size.z {
-            for yy in 0..self.renderer.settings.world_size.y {
-                for xx in 0..self.renderer.settings.world_size.x {
+        for zz in 0..self.renderer.settings.world_size.z() {
+            for yy in 0..self.renderer.settings.world_size.y() {
+                for xx in 0..self.renderer.settings.world_size.x() {
                     let block = self.renderer.origin_world[(xx as usize, yy as usize, zz as usize)];
                     if block == 0 {
                         continue;
@@ -2557,11 +2555,11 @@ impl<'window> RendererInterface for RendererWgpu<'window> {
         self.renderer.recreate_window(new_size);
     }
 
-    fn get_world_blocks(&self) -> Array3DView<InternalBlockId, MeshBlock> {
+    fn get_world_blocks(&self) -> Array3DView<InternalBlockId, MeshBlock, D> {
         self.renderer.origin_world.as_view()
     }
 
-    fn get_world_blocks_mut(&mut self) -> Array3DViewMut<InternalBlockId, MeshBlock> {
+    fn get_world_blocks_mut(&mut self) -> Array3DViewMut<InternalBlockId, MeshBlock, D> {
         self.renderer.origin_world.as_view_mut()
     }
 

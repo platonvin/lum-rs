@@ -1,34 +1,21 @@
-// fillStencilSmoke.frag (WGSL)
-
-// Define structure for multiple render targets and fragment depth output
 struct FragmentOutput {
-    // Match the locations from GLSL 'out' variables
-    @location(0) far_depth_out: f32,
-    @location(1) near_depth_out: f32,
-    // Built-in for writing fragment depth
-    @builtin(frag_depth) frag_depth: f32,
+    // These are just depth textures
+    // But to utilize min/max hw, we use color with (min/max) blending
+    @location(0) far_depth_output: f32,
+    @location(1) near_depth_output: f32,
 };
 
-// --- Fragment Entry Point ---
 @fragment
 fn main(
-    @location(0) end_depth_in: f32, // Input from vertex shader
-    @builtin(front_facing) is_front: bool // Built-in for front-facing check
+    @location(0) end_depth_input: f32,
+    @builtin(front_facing) is_front_facing: bool
 ) -> FragmentOutput {
     var output: FragmentOutput;
 
-    // Set fragment depth based on front-facing property
-    if (!is_front) {
-        output.frag_depth = end_depth_in - 0.01;
-    } else {
-        output.frag_depth = end_depth_in;
-    }
+    output.far_depth_output = end_depth_input;
+    output.near_depth_output = end_depth_input;
 
-    // Write the input depth to both color attachments
-    // The min/max blending happens in the pipeline state
-    output.far_depth_out = end_depth_in;
-    output.near_depth_out = end_depth_in;
-
-    // Stencil value is written by the pipeline state, not explicitly here.
+    // If not discarded, stencil value is written.
+    // We use it as cheap "culling" of expensive shader (GPUs have really fast hw stencil tests).
     return output;
 }

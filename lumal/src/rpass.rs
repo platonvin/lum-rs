@@ -1,3 +1,5 @@
+//! Module for managing RenderPasses
+
 use crate::{
     descriptors::{
         AttachmentDescription, LoadStoreOp, MaybeRing, SubpassAttachmentRefs, SubpassDescription,
@@ -9,6 +11,7 @@ use containers::Ring;
 use std::{collections::HashMap, ptr::null};
 
 impl Renderer {
+    /// Destroys RenderPass. Does not destroy resources, refered to by RenderPass (like attachment's images)
     pub fn destroy_renderpass(&mut self, rpass: RenderPass) {
         assert!(rpass.render_pass != vk::RenderPass::null());
         assert!(!rpass.framebuffers.is_empty());
@@ -24,9 +27,9 @@ impl Renderer {
         }
     }
 
-    /// Creates RenderPass object from given description
-    /// attachments describe specific (maybe rings of) images and what happens with them in renderpass
-    /// each subpass description specifies which pipes operate on which (maybe rings of) images
+    /// Creates RenderPass object from given description.
+    /// Attachments describe specific (maybe rings of) images and what happens with them in renderpass.
+    /// Each subpass description specifies which pipes operate on which (maybe rings of) images.
     // Vulkan actually wants array of attachments and indices,
     // so we convert (maybe rings of) image reference(s) from subpass descriptions to indices in array of attachments (by hashmap or smth)
     pub fn create_renderpass(
@@ -157,7 +160,7 @@ impl Renderer {
         // Pipes (which are abstractions of Vulkan pipelines) need to know the render pass
         for subpass in subpass_descriptions {
             for pipe in &mut *subpass.pipes {
-                pipe.render_pass = render_pass;
+                pipe.renderpass = render_pass;
             }
         }
 
@@ -277,6 +280,8 @@ impl Renderer {
         framebuffers
     }
 
+    /// Submits command(s) to begin RenderPass.
+    /// Wrapper around cmd_begin_render_pass + cmd_set_viewport
     pub fn cmd_begin_renderpass(
         &self,
         command_buffer: &vk::CommandBuffer,
@@ -305,6 +310,7 @@ impl Renderer {
         }
     }
 
+    /// Ends renderpass and moves its next framebuffer
     pub fn cmd_end_renderpass(
         &self,
         command_buffer: &vk::CommandBuffer,

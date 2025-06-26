@@ -12,22 +12,16 @@ struct UboData {
     delta_time: f32,
 };
 
-// struct Constants {
-//     rot: vec4<f32>,
-//     shift: vec4<f32>,
-//     fnormal: vec4<f32>, // not encoded
-// };
-
-@group(0) @binding(0) var<uniform> ubo: UboData;
-// @group(1) @binding(0) var<uniform> pco: Constants;
-
 struct VertexOutput {
-    @location(0) mat_norm: vec4<u32>,
+    @location(0) @interpolate(flat) mat_norm: vec4<u32>,
 };
 
 struct FragmentOutput {
-    @location(0) outMatNorm: vec4<u32>,
+    @location(0) @interpolate(flat) outMatNorm: vec4<u32>,
 };
+
+@group(0) @binding(0) var<uniform> ubo: UboData;
+// @group(1) @binding(0) var<uniform> pco: Constants;
 
 @fragment
 fn main(in: VertexOutput) -> FragmentOutput {

@@ -1,10 +1,10 @@
-use containers::Array3D;
+use containers::{array3d::RuntimeDims, Array3D};
 use criterion::{criterion_group, criterion_main, Criterion};
 use zarray::z3d::ZArray3D;
 
-fn blur_array3d(src: &Array3D<u8>, radius: usize) -> Array3D<u16> {
+fn blur_array3d(src: &Array3D<u8, RuntimeDims>, radius: usize) -> Array3D<u16, RuntimeDims> {
     let (x_size, y_size, z_size) = src.dimensions();
-    let mut result = Array3D::new(x_size, y_size, z_size);
+    let mut result = Array3D::new_default(src.dims);
 
     for z in 0..z_size {
         for y in 0..y_size {
@@ -98,7 +98,13 @@ fn benchmark_blur(c: &mut Criterion) {
     let z_size = 16;
     let radius = 1;
 
-    let mut array3d = Array3D::new(x_size, y_size, z_size);
+    let dims = RuntimeDims {
+        x: x_size,
+        y: y_size,
+        z: z_size,
+    };
+
+    let mut array3d = Array3D::new_default(dims);
     let mut zarray = ZArray3D::new_with_default(x_size, y_size, z_size);
 
     // Populate both arrays with sample data

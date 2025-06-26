@@ -5,6 +5,7 @@ use crate::{
     },
     Settings,
 };
+use containers::array3d::Dim3;
 // use internal_/*renderer::*/{InternalRendererVulkan, *};
 use lumal::{
     descriptors::{MaybeRing, *},
@@ -12,10 +13,10 @@ use lumal::{
 };
 use lumal::{LumalSettings, Renderer};
 
-impl InternalRendererVulkan {
+impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     pub fn create_all_rpasses(
         lumal: &mut Renderer,
-        _lum_settings: &Settings,
+        _lum_settings: &Settings<D>,
         _lumal_settings: &LumalSettings,
         iimages: &AllIndependentImages,
         dimages: &mut AllSwapchainDependentImages,
@@ -112,7 +113,7 @@ impl InternalRendererVulkan {
             ],
         );
         assert!(gbuffer_rpass.render_pass != vk::RenderPass::null());
-        assert!(pipes.raygen_models_pipe.render_pass != vk::RenderPass::null());
+        assert!(pipes.raygen_models_pipe.renderpass != vk::RenderPass::null());
 
         let shade_rpass = lumal.create_renderpass(
             &[

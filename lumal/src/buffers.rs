@@ -1,12 +1,13 @@
-use crate::{Buffer, Renderer}; // Import the LumalRenderer struct
+//! Module for managing buffers
+
+use crate::{Buffer, Renderer};
 use ash::vk::{self, BufferUsageFlags};
 use containers::Ring;
 use gpu_allocator::vulkan::{self as vma};
 use std::ptr::copy_nonoverlapping;
 
 impl Renderer {
-    /// Wrapper for creating a GPU buffer. Optionally maps it
-    
+    /// Creates Buffer. Optionally maps it.
     pub fn create_buffer(
         &mut self,
         usage: vk::BufferUsageFlags,
@@ -41,7 +42,7 @@ impl Renderer {
 
         let allocation = self.allocator.allocate(&alloc_info).unwrap();
 
-        // Bind memory to the buffer
+        // bind memory to the buffer
         unsafe {
             self.device
                 .bind_buffer_memory(vk_buffer, allocation.memory(), allocation.offset())
@@ -56,7 +57,7 @@ impl Renderer {
         }
     }
 
-    // Creates Ring of Buffers
+    /// Creates Ring of Buffers. Optionally maps them.
     pub fn create_buffer_rings(
         &mut self,
         ring_size: usize,
@@ -67,6 +68,7 @@ impl Renderer {
         (0..ring_size).map(|_| self.create_buffer(usage, biffer_size, host)).collect()
     }
 
+    /// Destroys Buffer.
     pub fn destroy_buffer(&mut self, buf: Buffer) {
         unsafe {
             // unmap if mapped
@@ -79,16 +81,16 @@ impl Renderer {
         };
     }
 
+    /// Destroys Ring of Buffers.
     pub fn destroy_buffer_ring(&mut self, buffers: Ring<Buffer>) {
         for buf in buffers.data {
             self.destroy_buffer(buf);
         }
     }
 
-    // creates a GPU buffer and copies elements into it
-    // does buffer_usage |= TRANSFER_DST automatically
-
-    
+    /// creates a Buffer and copies given elements into it
+    /// does buffer_usage |= TRANSFER_DST automatically
+    // TODO: only u8, why the fuck did i make a template?
     pub fn create_and_upload_buffer<T>(
         &mut self,
         elements: &[T],

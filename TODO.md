@@ -1,3 +1,5 @@
+IMPORTANT: Lum uses a RIGHT-HANDED coordinate system everywhere.
+
 todoy:
   docs
   code cleanup
@@ -14,9 +16,10 @@ todoy:
   single index / vertex buffer?
   merge models & blocks since they both are some sort of slot arenas
   block palette in image layout with array views
+  is ConstDims / RuntimeDims worth keeping?
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
-wgpui better pcnherit TODO from lum++
+inherit TODO from lum++
 try_into<Type>().unwrap() -> as Type 
 
 profile query
@@ -181,28 +184,6 @@ ideas to fix bottleneck:
 
 less error checking:
   assert validity in important places in debug / release (not native/distribution)
-
-
-people say that rust compile errors are better. Where?
-error[E0053]: method `make_contour_vertices` has an incompatible type for trait
-   --> lum\src\renderer\webgpu\load.rs:348:10
-    |
-348 |     ) -> FaceBuffers<Self::BufferType, IndexedVerticesQueue<1>> {
-    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `/*renderer::*/types::IndexedVertices`, found `webgpu::types::IndexedVerticesQueue<1>`
-    |
-note: type in trait
-   --> lum\src\renderer\load_interface.rs:159:10
-    |
-159 |     ) -> FaceBuffers<Self::BufferType>;
-    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    = note: expected signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> /*renderer::*/types::FaceBuffers<_, /*renderer::*/types::IndexedVertices>`
-               found signature `fn(&mut InternalRendererWebGPU<'_>, qvek::vek::Vec3<_>, array3d::Array3D<_>) -> /*renderer::*/types::FaceBuffers<_, webgpu::types::IndexedVerticesQueue<1>>`
-help: change the output type to match the trait
-    |
-348 -     ) -> FaceBuffers<Self::BufferType, IndexedVerticesQueue<1>> {
-348 +     ) -> /*renderer::*/types::FaceBuffers<std::option::Option<wgpu::Buffer>> {
-    |
-
 
 again:
   push constants as repr c struct defs

@@ -1,4 +1,5 @@
 use super::all_types::UboData;
+use crate::Dim3;
 use crate::{
     types::{i8vec4, mat4, AoLut, Particle},
     webgpu::{types::InternalBlockId, wal::Wal, AllBuffers, InternalRendererWebGPU},
@@ -7,8 +8,8 @@ use crate::{
 use std::mem;
 use wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
 
-impl<'window> InternalRendererWebGPU<'window> {
-    pub fn create_all_buffers(wal: &mut Wal, lum_settings: &Settings) -> AllBuffers {
+impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
+    pub fn create_all_buffers(wal: &mut Wal, lum_settings: &Settings<D>) -> AllBuffers {
         let gpu_particles = wal.create_buffers(
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
@@ -38,18 +39,18 @@ impl<'window> InternalRendererWebGPU<'window> {
             wal.config.desired_maximum_frame_latency as usize,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mem::size_of::<i8vec4>()
-                * (lum_settings.world_size.x as usize)
-                * (lum_settings.world_size.y as usize)
-                * (lum_settings.world_size.z as usize),
+                * (lum_settings.world_size.x() as usize)
+                * (lum_settings.world_size.y() as usize)
+                * (lum_settings.world_size.z() as usize),
             Some("Radiance Updates"),
         ); // TODO test extra mem
 
-        let padded_x_size = lum_settings.world_size.x.next_multiple_of(
-            COPY_BYTES_PER_ROW_ALIGNMENT / std::mem::size_of::<InternalBlockId>() as u32,
-        ) as usize;
+        let padded_x_size = lum_settings.world_size.x().next_multiple_of(
+            COPY_BYTES_PER_ROW_ALIGNMENT as usize / std::mem::size_of::<InternalBlockId>(),
+        );
         let padded_staging_world_size = padded_x_size
-            * lum_settings.world_size.y as usize
-            * lum_settings.world_size.z as usize
+            * lum_settings.world_size.y() as usize
+            * lum_settings.world_size.z() as usize
             * std::mem::size_of::<InternalBlockId>();
 
         let staging_world = wal.create_buffers(

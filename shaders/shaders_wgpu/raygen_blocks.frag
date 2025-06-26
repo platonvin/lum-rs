@@ -1,3 +1,5 @@
+const BLOCK_PALETTE_SIZE_X: i32 = 64;
+
 struct UboData {
     trans_w2s: mat4x4<f32>,
     campos: vec4<f32>,
@@ -12,11 +14,6 @@ struct UboData {
     delta_time: f32,
 };
 
-
-@group(0) @binding(0) var<uniform> uniforms: UboData;
-@group(0) @binding(2) var blockPalette: texture_3d<i32>;
-// @group(1) @binding(0) var<storage, read> pco_shared: array<PushConstant>;
-
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) @interpolate(linear) sample_point: vec3<f32>,
@@ -24,10 +21,12 @@ struct VertexOutput {
 };
 
 struct FragmentOutput {
-    @location(0) outMatNorm: vec4<u32>,
+    @location(0) @interpolate(flat) outMatNorm: vec4<u32>,
 };
 
-const BLOCK_PALETTE_SIZE_X: i32 = 64;
+@group(0) @binding(0) var<uniform> uniforms: UboData;
+@group(0) @binding(2) var blockPalette: texture_3d<i32>;
+// @group(1) @binding(0) var<storage, read> pco_shared: array<PushConstant>;
 
 fn voxel_in_palette(relative_voxel_pos: vec3<i32>, block_id: i32) -> vec3<i32> {
     let block_x = block_id % BLOCK_PALETTE_SIZE_X;
@@ -60,7 +59,6 @@ fn main(in: VertexOutput) -> FragmentOutput {
     var out: FragmentOutput;
     let voxel = GetVoxel(i32(sample_block), ipos);
 
-    // all values are in range of u8, custom encoded
     out.outMatNorm = vec4<u32>(voxel, normal_encoded_out);
 
     return out;

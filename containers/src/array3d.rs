@@ -1,214 +1,263 @@
-use qvek::vek::{Vec3, Vec4};
+use qvek::vek::{Vec2, Vec3, Vec4};
 use std::{
     fmt::{self, Debug},
-    iter::IntoIterator,
+    marker::PhantomData,
     ops::{Index, IndexMut},
     slice::{Iter, IterMut},
 };
 
-// You should index into it in this order
-//  for z in 0..z_size {
-//  for y in 0..y_size {
-//  for x in 0..x_size {
-// Currently, Rust cannot optimize the order automatically. TODO: MIR-OPT coherence transform
+/// Trait abstracting compile-time and runtime dimensions (proven to be useless perfomance-wise, TODO: remove?).
+pub trait Dim3: Copy + Clone + Default {
+    /// Size along X axis.
+    fn x(&self) -> usize;
+    /// Size along Y axis.
+    fn y(&self) -> usize;
+    /// Size along Z axis.
+    fn z(&self) -> usize;
 
-pub struct Array3D<T> {
-    pub data: Vec<T>,
-    pub x_size: usize,
-    pub y_size: usize,
-    pub z_size: usize,
+    // vec2 (x() y())
+    fn xy(&self) -> Vec2<usize> {
+        Vec2 {
+            x: self.x(),
+            y: self.y(),
+        }
+    }
+    // vec3 (x() y() y())
+    fn xyz(&self) -> Vec3<usize> {
+        Vec3 {
+            x: self.x(),
+            y: self.y(),
+            z: self.z(),
+        }
+    }
+    // vec2 (y() z())
+    fn yz(&self) -> Vec2<usize> {
+        Vec2 {
+            x: self.y(),
+            y: self.z(),
+        }
+    }
+
+    /// Total number of elements (x * y * z).
+    fn total_len(&self) -> usize {
+        self.x() * self.y() * self.z()
+    }
 }
 
-impl<T> Array3D<T> {
-    /// Returns the index in the flat data array for given (x, y, z) coordinates.
+/// Runtime dimensions for non-const sizes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RuntimeDims {
+    pub x: usize,
+    pub y: usize,
+    pub z: usize,
+}
+
+impl Dim3 for RuntimeDims {
+    fn x(&self) -> usize {
+        self.x
+    }
+    fn y(&self) -> usize {
+        self.y
+    }
+    fn z(&self) -> usize {
+        self.z
+    }
+}
+
+/// Compile-time dimensions using const generics.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ConstDims<const X: usize, const Y: usize, const Z: usize>;
+
+impl<const X: usize, const Y: usize, const Z: usize> Dim3 for ConstDims<X, Y, Z> {
+    fn x(&self) -> usize {
+        X
+    }
+    fn y(&self) -> usize {
+        Y
+    }
+    fn z(&self) -> usize {
+        Z
+    }
+}
+
+/// Generic 3D array, parameterized by a Dim3, which allows runtime flexibility or template perfomance.
+pub struct Array3D<T, D: Dim3> {
+    pub data: Box<[T]>,
+    pub dims: D,
+}
+
+impl<T, D: Dim3> Array3D<T, D> {
+    /// Creates a new uninitialized array from a dimension provider and data.
+    fn from_boxed(dims: D, data: Box<[T]>) -> Self {
+        assert_eq!(dims.total_len(), data.len());
+        Self { dims, data }
+    }
+
+    /// Computes flat index for (x, y, z).
+    // TODO: look into different indexing and move it into generic
     pub fn index_internal(&self, x: usize, y: usize, z: usize) -> usize {
-        if core::cfg!(debug_assertions) && !(x < self.x_size && y < self.y_size && z < self.z_size)
-        {
-            panic!("Index out of bounds x: {} y: {} z: {}\n", x, y, z);
-        };
-        // optimal for
-        // for x in 0..x_size {
-        //     for y in 0..y_size {
-        //         for z in 0..z_size {
-        // indexing
-        // x * self.y_size * self.z_size + y * self.z_size + z
-
-        // optimal for
-        // for z in 0..x_size {
-        //     for y in 0..y_size {
-        //         for x in 0..z_size {
-        // indexing
-        x + (y * self.x_size) + (z * self.x_size * self.y_size)
+        debug_assert!(x < self.dims.x() && y < self.dims.y() && z < self.dims.z());
+        x + y * self.dims.x() + z * self.dims.x() * self.dims.y()
     }
 
-    /// Returns the dimensions of the array.
+    /// Returns the dimensions as a tuple.
     pub fn dimensions(&self) -> (usize, usize, usize) {
-        (self.x_size, self.y_size, self.z_size)
+        (self.dims.x(), self.dims.y(), self.dims.z())
     }
 
-    /// Returns an iterator over the array.
-    pub fn iter(&self) -> Iter<'_, T> {
-        self.data.iter()
-    }
-
-    /// Returns a mutable iterator over the array.
-    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
-        self.data.iter_mut()
-    }
-
-    pub fn get_ref(&self, x: usize, y: usize, z: usize) -> &T {
+    /// Shared reference at (x, y, z).
+    pub fn get(&self, x: usize, y: usize, z: usize) -> &T {
         &self.data[self.index_internal(x, y, z)]
     }
+
+    /// Mutable reference at (x, y, z).
+    pub fn get_mut(&mut self, x: usize, y: usize, z: usize) -> &mut T {
+        &mut self.data[self.index_internal(x, y, z)]
+    }
+
+    /// Sets value at (x, y, z).
     pub fn set(&mut self, x: usize, y: usize, z: usize, value: T) {
         let idx = self.index_internal(x, y, z);
         self.data[idx] = value;
     }
-}
 
-impl<T: Default> Array3D<T> {
-    pub fn new_filled_by_generator(
-        x_size: usize,
-        y_size: usize,
-        z_size: usize,
-        generator: impl Fn() -> T,
-    ) -> Self {
-        assert!(
-            x_size > 0 && y_size > 0 && z_size > 0,
-            "Dimensions must be greater than zero"
-        );
-        let data = (0..x_size * y_size * z_size).map(|_| generator()).collect();
-        Self {
-            data,
-            x_size,
-            y_size,
-            z_size,
-        }
+    /// Immutable iterator over all elements.
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.data.iter()
+    }
+
+    /// Mutable iterator over all elements.
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+        self.data.iter_mut()
+    }
+
+    /// Unchecked shared reference (no bounds checks).
+    /// # Safety
+    /// slice OOB (out-of-bounds) when array OOB (so UB)
+    pub unsafe fn get_unchecked(&self, x: usize, y: usize, z: usize) -> &T {
+        self.data.get_unchecked(self.index_internal(x, y, z))
+    }
+
+    /// Unchecked mutable reference (no bounds checks)
+    /// # Safety
+    /// slice OOB (out-of-bounds) when array OOB (so UB)
+    pub unsafe fn get_unchecked_mut(&mut self, x: usize, y: usize, z: usize) -> &mut T {
+        self.data.get_unchecked_mut(self.index_internal(x, y, z))
+    }
+
+    /// Unchecked setter without bounds checks
+    /// # Safety
+    /// slice OOB (out-of-bounds) when array OOB (so UB)
+    pub unsafe fn set_unchecked(&mut self, x: usize, y: usize, z: usize, value: T) {
+        *self.get_unchecked_mut(x, y, z) = value;
     }
 }
 
-impl<T: Default + Clone> Array3D<T> {
-    /// Creates a new 3D array with given dimensions, initialized with `Default` values.
-    pub fn new(x_size: usize, y_size: usize, z_size: usize) -> Self {
-        Self::new_filled(x_size, y_size, z_size, T::default())
-    }
-}
-
-impl<T: Clone> Array3D<T> {
-    pub fn new_filled(x_size: usize, y_size: usize, z_size: usize, value: T) -> Self {
-        assert!(
-            x_size > 0 && y_size > 0 && z_size > 0,
-            "Dimensions must be greater than zero"
-        );
-        let data = vec![value; x_size * y_size * z_size];
-        Self {
-            data,
-            x_size,
-            y_size,
-            z_size,
-        }
+impl<T: Clone, D: Dim3> Array3D<T, D> {
+    /// Creates a new array with all elements cloned from `value`.
+    pub fn new_filled(dims: D, value: T) -> Self {
+        let len = dims.total_len();
+        let data = vec![value; len].into_boxed_slice();
+        Self::from_boxed(dims, data)
     }
 
+    /// Fills every element with `value`.
     pub fn fill(&mut self, value: T) {
         self.data.fill(value);
     }
 
-    pub fn copy_data_from(&mut self, other: &Array3D<T>) {
-        self.data = other.data.clone();
+    /// Copies data from another array of same dims.
+    pub fn copy_data_from(&mut self, other: &Self) {
+        debug_assert_eq!(self.dimensions(), other.dimensions());
+        self.data.clone_from_slice(&other.data);
     }
 
-    pub fn get(&self, x: usize, y: usize, z: usize) -> T {
-        self.data[self.index_internal(x, y, z)].clone()
+    /// Returns a cloned copy of the element at (x, y, z).
+    pub fn get_cloned(&self, x: usize, y: usize, z: usize) -> T {
+        self.get(x, y, z).clone()
     }
 }
 
-impl<T: Default + Clone> Index<(usize, usize, usize)> for Array3D<T> {
+impl<T: Clone + Default, D: Dim3> Array3D<T, D> {
+    /// Creates array filled with `T::default()`.
+    pub fn new_default(dims: D) -> Self {
+        Self::new_filled(dims, T::default())
+    }
+}
+
+impl<T, D: Dim3> Array3D<T, D> {
+    /// Creates array via a generator function.
+    pub fn from_fn<F: Fn() -> T>(dims: D, generator: F) -> Self {
+        let len = dims.total_len();
+        let data = (0..len).map(|_| generator()).collect::<Vec<_>>().into_boxed_slice();
+        Self::from_boxed(dims, data)
+    }
+}
+
+/// Trait converting an indexable type into (usize, usize, usize).
+pub trait ToUsize3 {
+    fn to_usize3(&self) -> (usize, usize, usize);
+}
+
+// Blanket impls for tuples
+macro_rules! impl_tousize3 {
+    ($($t:ty),*) => {
+        $(impl ToUsize3 for $t {
+            fn to_usize3(&self) -> (usize, usize, usize) { (self.0 as usize, self.1 as usize, self.2 as usize) }
+        })*
+    };
+}
+impl_tousize3!(
+    (usize, usize, usize),
+    (i8, i8, i8),
+    (i32, i32, i32),
+    (isize, isize, isize)
+);
+impl ToUsize3 for Vec3<i8> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+impl ToUsize3 for Vec3<i32> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+impl ToUsize3 for Vec4<i8> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+impl ToUsize3 for Vec4<i32> {
+    fn to_usize3(&self) -> (usize, usize, usize) {
+        (self.x as usize, self.y as usize, self.z as usize)
+    }
+}
+
+impl<T, D: Dim3, I: ToUsize3> Index<I> for Array3D<T, D> {
     type Output = T;
-
-    fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
-        let (x, y, z) = index; // unpack the tuple
-        let index_internal = self.index_internal(x, y, z);
-        &self.data[index_internal]
+    fn index(&self, index: I) -> &Self::Output {
+        let (x, y, z) = index.to_usize3();
+        self.get(x, y, z)
     }
 }
 
-impl<T: Default + Clone> Index<(i8, i8, i8)> for Array3D<T> {
-    type Output = T;
-
-    fn index(&self, index: (i8, i8, i8)) -> &Self::Output {
-        let (x, y, z) = index; // unpack the tuple
-        let index_internal = self.index_internal(x as usize, y as usize, z as usize);
-        &self.data[index_internal]
+impl<T, D: Dim3, I: ToUsize3> IndexMut<I> for Array3D<T, D> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        let (x, y, z) = index.to_usize3();
+        self.get_mut(x, y, z)
     }
 }
 
-impl<T: Default + Clone> Index<(i32, i32, i32)> for Array3D<T> {
-    type Output = T;
-
-    fn index(&self, index: (i32, i32, i32)) -> &Self::Output {
-        let (x, y, z) = index; // unpack the tuple
-        let index_internal = self.index_internal(x as usize, y as usize, z as usize);
-        &self.data[index_internal]
-    }
-}
-
-impl<T: Default + Clone> Index<Vec3<i32>> for Array3D<T> {
-    type Output = T;
-
-    fn index(&self, index: Vec3<i32>) -> &Self::Output {
-        let index_internal =
-            self.index_internal(index.x as usize, index.y as usize, index.z as usize);
-        &self.data[index_internal]
-    }
-}
-impl<T: Default + Clone> Index<Vec4<i32>> for Array3D<T> {
-    type Output = T;
-
-    fn index(&self, index: Vec4<i32>) -> &Self::Output {
-        let index_internal =
-            self.index_internal(index.x as usize, index.y as usize, index.z as usize);
-        &self.data[index_internal]
-    }
-}
-
-impl<T: Default + Clone> Index<Vec3<i8>> for Array3D<T> {
-    type Output = T;
-
-    fn index(&self, index: Vec3<i8>) -> &Self::Output {
-        let index_internal =
-            self.index_internal(index.x as usize, index.y as usize, index.z as usize);
-        &self.data[index_internal]
-    }
-}
-impl<T: Default + Clone> Index<Vec4<i8>> for Array3D<T> {
-    type Output = T;
-
-    fn index(&self, index: Vec4<i8>) -> &Self::Output {
-        let index_internal =
-            self.index_internal(index.x as usize, index.y as usize, index.z as usize);
-        &self.data[index_internal]
-    }
-}
-
-impl<T: Default + Clone> IndexMut<(usize, usize, usize)> for Array3D<T> {
-    fn index_mut(&mut self, index: (usize, usize, usize)) -> &mut Self::Output {
-        let (x, y, z) = index; // unpack the tuple
-        let index_internal = self.index_internal(x, y, z);
-        &mut self.data[index_internal]
-    }
-}
-
-impl<T: Default + Clone> Debug for Array3D<T>
-where
-    T: Debug,
-{
+impl<T: Debug, D: Dim3> Debug for Array3D<T, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (x_size, y_size, z_size) = self.dimensions();
-        writeln!(f, "Array3D [{} x {} x {}]:", x_size, y_size, z_size)?;
-        for x in 0..x_size {
-            for y in 0..y_size {
+        let (x, y, z) = self.dimensions();
+        writeln!(f, "Array3D [{x} x {y} x {z}]:")?;
+        for z_ in 0..z {
+            for y_ in 0..y {
                 write!(f, "[ ")?;
-                for z in 0..z_size {
-                    write!(f, "{:?} ", self[(x, y, z)])?;
+                for x_ in 0..x {
+                    write!(f, "{:?} ", self[(x_, y_, z_)])?;
                 }
                 writeln!(f, "]")?;
             }
@@ -217,141 +266,33 @@ where
     }
 }
 
-impl<T: Default + Clone> IntoIterator for Array3D<T> {
-    type IntoIter = std::vec::IntoIter<T>;
-    type Item = T;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.data.into_iter()
-    }
+/// Read-only view converting element type via `Into<U>`.
+pub struct Array3DView<'a, T, U, D: Dim3> {
+    array: &'a Array3D<T, D>,
+    _phantom: PhantomData<U>,
 }
 
-impl<'a, T: Default + Clone> IntoIterator for &'a Array3D<T> {
-    type IntoIter = Iter<'a, T>;
-    type Item = &'a T;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
-
-impl<'a, T: Default + Clone> IntoIterator for &'a mut Array3D<T> {
-    type IntoIter = IterMut<'a, T>;
-    type Item = &'a mut T;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter_mut()
-    }
-}
-
-pub struct Array3DView<'a, T, U> {
-    array: &'a Array3D<T>,
-    // to actually have U as type param
-    _phantom: std::marker::PhantomData<U>,
-}
-
-pub struct Array3DViewMut<'a, T, U> {
-    // TODO: why is there no generic over order / presentance / mut of fields?
-    array: &'a mut Array3D<T>,
-    // to actually have U as type param
-    _phantom: std::marker::PhantomData<U>,
-}
-
-impl<T> Array3D<T> {
-    pub fn as_view<U>(&self) -> Array3DView<'_, T, U> {
-        Array3DView {
-            array: self,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-
-    pub fn as_view_mut<U>(&mut self) -> Array3DViewMut<'_, T, U> {
-        Array3DViewMut {
-            array: self,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-//
-pub trait ToUsize3 {
-    fn to_usize3(&self) -> (usize, usize, usize);
-}
-impl ToUsize3 for (usize, usize, usize) {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        *self
-    }
-}
-
-impl ToUsize3 for (isize, isize, isize) {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        (self.0 as usize, self.1 as usize, self.2 as usize)
-    }
-}
-
-impl ToUsize3 for (i32, i32, i32) {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        (self.0 as usize, self.1 as usize, self.2 as usize)
-    }
-}
-
-impl ToUsize3 for (i8, i8, i8) {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        (self.0 as usize, self.1 as usize, self.2 as usize)
-    }
-}
-
-impl ToUsize3 for qvek::vek::Vec3<i32> {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        (self.x as usize, self.y as usize, self.z as usize)
-    }
-}
-
-impl ToUsize3 for qvek::vek::Vec3<i8> {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        (self.x as usize, self.y as usize, self.z as usize)
-    }
-}
-
-impl ToUsize3 for qvek::vek::Vec4<i32> {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        (self.x as usize, self.y as usize, self.z as usize)
-    }
-}
-
-impl ToUsize3 for qvek::vek::Vec4<i8> {
-    fn to_usize3(&self) -> (usize, usize, usize) {
-        (self.x as usize, self.y as usize, self.z as usize)
-    }
-}
-
-impl<'a, T, U, I> Index<I> for Array3DView<'a, T, U>
+impl<'a, T, U, D: Dim3> Array3DView<'a, T, U, D>
 where
-    I: ToUsize3,
-    T: Clone + Into<U>,
-{
-    type Output = U;
-
-    fn index(&self, index: I) -> &Self::Output {
-        panic!("By-value conversion required — use get() instead.")
-    }
-}
-
-impl<'a, T, U> Array3DView<'a, T, U>
-where
-    T: From<U> + Into<U> + Clone,
+    T: Into<U> + Clone,
 {
     pub fn get(&self, index: impl ToUsize3) -> U {
         let (x, y, z) = index.to_usize3();
-        self.array.get(x, y, z).into()
+        self.array.get(x, y, z).clone().into()
     }
 }
 
-impl<'a, T, U> Array3DViewMut<'a, T, U>
-where
-    T: From<U>,
-{
-    pub fn set(&mut self, index: impl ToUsize3, value: U) {
+/// Mutable view converting element type via `From<U>`.
+pub struct Array3DViewMut<'a, T, U, D: Dim3> {
+    array: &'a mut Array3D<T, D>,
+    _phantom: PhantomData<U>,
+}
+
+impl<'a, T, U, D: Dim3> Array3DViewMut<'a, T, U, D> {
+    pub fn set(&mut self, index: impl ToUsize3, value: U)
+    where
+        T: From<U>,
+    {
         let (x, y, z) = index.to_usize3();
         self.array.set(x, y, z, T::from(value));
     }
@@ -361,7 +302,25 @@ where
         T: Into<U> + Clone,
     {
         let (x, y, z) = index.to_usize3();
-        self.array.get(x, y, z).into()
+        self.array.get(x, y, z).clone().into()
+    }
+}
+
+impl<T, D: Dim3> Array3D<T, D> {
+    /// Creates a read-only converting view.
+    pub fn as_view<U>(&self) -> Array3DView<'_, T, U, D> {
+        Array3DView {
+            array: self,
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Creates a mutable converting view.
+    pub fn as_view_mut<U>(&mut self) -> Array3DViewMut<'_, T, U, D> {
+        Array3DViewMut {
+            array: self,
+            _phantom: PhantomData,
+        }
     }
 }
 
@@ -370,27 +329,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_creation_and_access() {
-        let mut array = Array3D::new(2, 3, 4);
-        assert_eq!(array.dimensions(), (2, 3, 4));
+    fn test_runtime_and_static() {
+        let mut r = Array3D::new_filled(RuntimeDims { x: 2, y: 2, z: 2 }, 1u8);
+        r.set(1, 1, 1, 5);
+        assert_eq!(*r.get(1, 1, 1), 5);
 
-        array[(0, 0, 0)] = 42;
-        array[(1, 2, 3)] = 99;
-
-        assert_eq!(array[(0, 0, 0)], 42);
-        assert_eq!(array[(1, 2, 3)], 99);
-    }
-
-    #[test]
-    fn test_iteration() {
-        let array: Array3D<i32> = Array3D::new(2, 2, 2);
-        assert_eq!(array.iter().count(), 8);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_out_of_bounds() {
-        let array = Array3D::new(2, 2, 2);
-        let _: i32 = array[(2, 2, 2)]; // Should panic in debug mode
+        let mut s = Array3D::new_filled(ConstDims::<2, 2, 2>, 2u8);
+        s[(1, 1, 1)] = 8;
+        assert_eq!(s[(1, 1, 1)], 8);
     }
 }

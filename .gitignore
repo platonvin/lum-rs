@@ -37,3 +37,8 @@ e.bash
 rust-analyzer-check
 example/demo/dist
 example/demo/pkg
+shaders/shaders/unused
+pkg/*.js
+pkg/*.ts
+pkg/*.wasm
+questions.md
