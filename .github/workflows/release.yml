@@ -111,10 +111,24 @@ jobs:
           components: rust-src
           rustflags: ""
 
-      - name: Install dep winget packages
-        # we dont need wasm-opt
-        run: winget install -e --id KhronosGroup.VulkanSDK --accept-source-agreements --accept-package-agreements
+      - name: Install glslc
         shell: pwsh
+        run: |
+          $url = 'https://storage.googleapis.com/shaderc/badges/build_link_windows_vs2019_release.html'
+          $tempHtml = Join-Path $env:RUNNER_TEMP 'glslc.html'
+          Invoke-WebRequest -Uri $url -OutFile $tempHtml
+          $zipUrl = (Select-String -Path $tempHtml -Pattern 'href="([^"]+\.zip)"' | 
+                     ForEach-Object { $_.Matches[0].Groups[1].Value })
+          Write-Host "Downloading Shaderc ZIP from $zipUrl"
+          $zipPath = Join-Path $env:RUNNER_TEMP 'shaderc.zip'
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+          $installDir = Join-Path $env:RUNNER_TEMP 'shaderc'
+          Expand-Archive -Path $zipPath -DestinationPath $installDir
+          $bin = Join-Path $installDir 'install\bin'
+          Write-Host "Adding glslc bin folder to PATH: $bin"
+          $env:PATH = "$bin;$env:PATH"
+          Write-Host "glslc version check:"
+          glslc --version
 
       - name: Build Windows Vulkan bin
         run: cargo +nightly biv
