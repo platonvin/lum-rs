@@ -144,11 +144,17 @@ jobs:
           rustflags: ""
 
       - name: Build Windows Vulkan bin
-        run: cargo +nightly biv
+        run: |
+          $binPath = Join-Path $env:RUNNER_TEMP 'shaderc\install\bin'
+          $env:PATH = "$binPath;$env:PATH"
+          cargo +nightly biv
         shell: pwsh
 
       - name: Build Windows WGPU bin
-        run: cargo +nightly biw
+        run: |
+          $binPath = Join-Path $env:RUNNER_TEMP 'shaderc\install\bin'
+          $env:PATH = "$binPath;$env:PATH"
+          cargo +nightly biw
         shell: pwsh
 
       - name: Determine upload URL
