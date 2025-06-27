@@ -43,21 +43,11 @@ jobs:
 
       - name: Build Linux Vulkan bin
         run: |
-          cargo +nightly build \
-            -Zbuild-std=std,panic_abort \
-            --profile distribution \
-            --package demo \
-            --bin demo_vk \
-            --features vk_backend
+          cargo +nightly biv
 
       - name: Build Linux WGPU bin
         run: |
-          cargo +nightly build \
-            -Zbuild-std=std,panic_abort \
-            --profile distribution \
-            --package demo \
-            --bin demo_wgpu \
-            --features wgpu_backend
+          cargo +nightly biw
 
       - name: Determine upload URL
         id: get_upload_url
@@ -128,21 +118,11 @@ jobs:
 
       - name: Build Windows Vulkan bin
         run: |
-          cargo +nightly build \
-            -Zbuild-std=std,panic_abort \
-            --profile distribution \
-            --package demo \
-            --bin demo_vk \
-            --features vk_backend
+          cargo +nightly biv
 
       - name: Build Windows WGPU bin
         run: |
-          cargo +nightly build \
-            -Zbuild-std=std,panic_abort \
-            --profile distribution \
-            --package demo \
-            --bin demo_wgpu \
-            --features wgpu_backend
+          cargo +nightly biw
 
       - name: Determine upload URL
         id: get_upload_url
