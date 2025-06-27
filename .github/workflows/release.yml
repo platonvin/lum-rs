@@ -1,21 +1,20 @@
 name: Build & Release
 
-permissions:
-  contents: write
 on:
   release:
     types: [published]
   # do we need it?
-  # workflow_dispatch:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build_and_release:
+    permissions: write-all
     runs-on: ubuntu-latest
-    # only run on manual releases
-    if: github.event_name == 'release'
+    # run when trigger is either a release event or manual dispatch
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +96,24 @@ jobs:
 
       - name: Determine upload URL
         id: get_upload_url
-        run: echo "::set-output name=url::${{ github.event.release.upload_url }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "url=${{ github.event.release.upload_url }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Fetching upload URL for the latest release..."
+            UPLOAD_URL=$(gh release view --json uploadUrl --jq .uploadUrl --repo ${{ github.repository }} latest)
+            if [ -z "$UPLOAD_URL" ]; then
+              echo "Error: Could not find the latest release or its upload URL."
+              exit 1
+            fi
+            echo "Found upload URL: $UPLOAD_URL"
+            echo "url=$UPLOAD_URL" >> $GITHUB_OUTPUT
+          else
+            echo "Unsupported event: ${{ github.event_name }}"
+            exit 1
+          fi
 
       - name: Upload Linux Vulkan binary
         uses: actions/upload-release-asset@v1
