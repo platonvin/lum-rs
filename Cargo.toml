@@ -13,6 +13,12 @@ members = [
     "voxc",
 ]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+readme = "README.md"
+publish = false
+
 [profile.dev]
 opt-level = 0
 codegen-units = 12

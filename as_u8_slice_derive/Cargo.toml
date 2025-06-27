@@ -1,7 +1,8 @@
 [package]
 name = "as_u8_slice_derive"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+edition = { workspace = true }
+readme = { workspace = true }
 
 [lib]
 proc-macro = true

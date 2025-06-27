@@ -1,3 +1,5 @@
+[![CI](https://github.com/platonvin/lum-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/platonvin/lum-rs/actions/workflows/ci.yml)
+
 ### Lum
 Fast voxel renderer for web and native.
 
