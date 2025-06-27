@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_and_release:
+  build_and_release_linux:
     permissions: write-all
     runs-on: ubuntu-latest
     # run when trigger is either a release event or manual dispatch
@@ -27,7 +27,7 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           # gcc for Windows cross-compile, glslc for shaders
-          packages: mingw-w64 glslc
+          packages: mingw-w64 glslc binaryen
           execute_install_scripts: true
 
       - name: Setup Rust
@@ -39,10 +39,7 @@ jobs:
 
       - name: Add Rust targets
         run: |
-          rustup target add \
-            x86_64-unknown-linux-gnu \
-            x86_64-pc-windows-gnu \
-            wasm32-unknown-unknown
+          rustup target add wasm32-unknown-unknown
 
       - name: Build Linux Vulkan bin
         run: |
@@ -51,18 +48,7 @@ jobs:
             --profile distribution \
             --package demo \
             --bin demo_vk \
-            --features vk_backend \
-            --target x86_64-unknown-linux-gnu
-
-      - name: Build Windows Vulkan bin
-        run: |
-          cargo +nightly build \
-            -Zbuild-std=std,panic_abort \
-            --profile distribution \
-            --package demo \
-            --bin demo_vk \
-            --features vk_backend \
-            --target x86_64-pc-windows-gnu
+            --features vk_backend
 
       - name: Build Linux WGPU bin
         run: |
@@ -71,18 +57,7 @@ jobs:
             --profile distribution \
             --package demo \
             --bin demo_wgpu \
-            --features wgpu_backend \
-            --target x86_64-unknown-linux-gnu
-
-      - name: Build Windows WGPU bin
-        run: |
-          cargo +nightly build \
-            -Zbuild-std=std,panic_abort \
-            --profile distribution \
-            --package demo \
-            --bin demo_wgpu \
-            --features wgpu_backend \
-            --target x86_64-pc-windows-gnu
+            --features wgpu_backend
 
       - name: Build WASM lib
         run: |
@@ -90,9 +65,14 @@ jobs:
             -Zbuild-std=std,panic_abort \
             --profile distribution \
             --package demo \
-            --bin demo_wgpu \
+            --lib \
             --features wgpu_backend \
             --target wasm32-unknown-unknown
+
+      - name: Optimize WASM lib
+        # TODO: is it safe to change output bin/lib?z
+        run: |
+          wasm-opt target/wasm32-unknown-unknown/distribution/demo_lib.wasm -O4 -o target/wasm32-unknown-unknown/distribution/demo_lib.wasm
 
       - name: Determine upload URL
         id: get_upload_url
@@ -125,19 +105,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.get_upload_url.outputs.url }}
-          asset_path: target/x86_64-unknown-linux-gnu/distribution/demo_vk
+          asset_path: target/distribution/demo_vk
           asset_name: demo_vk-linux
           asset_content_type: application/octet-stream
-
-      - name: Upload Windows Vulkan binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_upload_url.outputs.url }}
-          asset_path: target/x86_64-pc-windows-gnu/distribution/demo_vk.exe
-          asset_name: demo_vk-windows.exe
-          asset_content_type: application/vnd.microsoft.portable-executable
 
       - name: Upload Linux WGPU binary
         uses: actions/upload-release-asset@v1
@@ -145,19 +115,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.get_upload_url.outputs.url }}
-          asset_path: target/x86_64-unknown-linux-gnu/distribution/demo_wgpu
+          asset_path: target/distribution/demo_wgpu
           asset_name: demo_wgpu-linux
           asset_content_type: application/octet-stream
-
-      - name: Upload Windows WGPU binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_upload_url.outputs.url }}
-          asset_path: target/x86_64-pc-windows-gnu/distribution/demo_wgpu.exe
-          asset_name: demo_wgpu-windows.exe
-          asset_content_type: application/vnd.microsoft.portable-executable
 
       - name: Upload WASM blob
         uses: actions/upload-release-asset@v1
@@ -165,6 +125,90 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.get_upload_url.outputs.url }}
-          asset_path: target/wasm32-unknown-unknown/distribution/demo_wgpu.wasm
-          asset_name: demo_wgpu.wasm
+          asset_path: target/wasm32-unknown-unknown/distribution/demo_lib.wasm
+          asset_name: demo_lib.wasm
           asset_content_type: application/wasm
+
+  build_and_release_windows:
+    permissions: write-all
+    runs-on: windows-latest
+    # run when trigger is either a release event or manual dispatch
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: rust-src
+          rustflags: ""
+
+      - name: Install dep winget packages
+        # we dont need wasm-opt
+        run: winget install -e --id KhronosGroup.VulkanSDK
+
+      - name: Build Windows Vulkan bin
+        run: |
+          cargo +nightly build \
+            -Zbuild-std=std,panic_abort \
+            --profile distribution \
+            --package demo \
+            --bin demo_vk \
+            --features vk_backend
+
+      - name: Build Windows WGPU bin
+        run: |
+          cargo +nightly build \
+            -Zbuild-std=std,panic_abort \
+            --profile distribution \
+            --package demo \
+            --bin demo_wgpu \
+            --features wgpu_backend
+
+      - name: Determine upload URL
+        id: get_upload_url
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "url=${{ github.event.release.upload_url }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Fetching upload URL for the latest release..."
+            UPLOAD_URL=$(
+              gh release view --repo "${{ github.repository }}" \
+                              --json uploadUrl \
+                              --jq .uploadUrl
+            )
+            if [[ -z "$UPLOAD_URL" || "$UPLOAD_URL" == "null" ]]; then
+              echo "Error: Could not find the latest release or its upload URL."
+              exit 1
+            fi
+            echo "Found upload URL: $UPLOAD_URL"
+            echo "url=$UPLOAD_URL" >> $GITHUB_OUTPUT
+          else
+            echo "Unsupported event: ${{ github.event_name }}"
+            exit 1
+          fi
+
+      - name: Upload Windows Vulkan binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_upload_url.outputs.url }}
+          asset_path: target/distribution/demo_vk.exe
+          asset_name: demo_vk-windows.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
+
+      - name: Upload Windows WGPU binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_upload_url.outputs.url }}
+          asset_path: target/distribution/demo_wgpu.exe
+          asset_name: demo_wgpu-windows.exe
+          asset_content_type: application/vnd.microsoft.portable-executable

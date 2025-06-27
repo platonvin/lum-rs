@@ -190,10 +190,10 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
 
     let step_size = diff / f32(MAX_STEPS);
 
-    //https://en.wikipedia.org/wiki/Beer%E2%80%93Lambert_law
-    //I = I0 * exp(-K * L)
-    //dI = -K*dL * I0 * exp(-K * L)
-    //In+1 = (1-denisty_n*ΔL) * In
+    // Lambert law
+    // I = I0 * exp(-K * L)
+    // dI = -K*dL * I0 * exp(-K * L)
+    // In+1 = (1-denisty_n*ΔL) * In
 
     var I = 1.0;
     var position: vec3<f32>;
