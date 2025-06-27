@@ -27,7 +27,7 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           # gcc for Windows cross-compile, glslc for shaders
-          packages: mingw-w64 glslc binaryen
+          packages: glslc
           execute_install_scripts: true
 
       - name: Setup Rust
@@ -58,21 +58,6 @@ jobs:
             --package demo \
             --bin demo_wgpu \
             --features wgpu_backend
-
-      - name: Build WASM lib
-        run: |
-          cargo +nightly build \
-            -Zbuild-std=std,panic_abort \
-            --profile distribution \
-            --package demo \
-            --lib \
-            --features wgpu_backend \
-            --target wasm32-unknown-unknown
-
-      - name: Optimize WASM lib
-        # TODO: is it safe to change output bin/lib?z
-        run: |
-          wasm-opt target/wasm32-unknown-unknown/distribution/demo_lib.wasm -O4 -o target/wasm32-unknown-unknown/distribution/demo_lib.wasm
 
       - name: Determine upload URL
         id: get_upload_url
@@ -119,19 +104,9 @@ jobs:
           asset_name: demo_wgpu-linux
           asset_content_type: application/octet-stream
 
-      - name: Upload WASM blob
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_upload_url.outputs.url }}
-          asset_path: target/wasm32-unknown-unknown/distribution/demo_lib.wasm
-          asset_name: demo_lib.wasm
-          asset_content_type: application/wasm
-
   build_and_release_windows:
     permissions: write-all
-    runs-on: windows-latest
+    runs-on: windows-2025
     # run when trigger is either a release event or manual dispatch
     if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
 
@@ -149,6 +124,7 @@ jobs:
       - name: Install dep winget packages
         # we dont need wasm-opt
         run: winget install -e --id KhronosGroup.VulkanSDK
+        shell: pwsh
 
       - name: Build Windows Vulkan bin
         run: |
