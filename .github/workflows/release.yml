@@ -117,12 +117,12 @@ jobs:
         shell: pwsh
 
       - name: Build Windows Vulkan bin
-        run: |
-          cargo +nightly biv
+        run: cargo +nightly biv
+        shell: pwsh
 
       - name: Build Windows WGPU bin
-        run: |
-          cargo +nightly biw
+        run: cargo +nightly biw
+        shell: pwsh
 
       - name: Determine upload URL
         id: get_upload_url
@@ -148,6 +148,7 @@ jobs:
             echo "Unsupported event: ${{ github.event_name }}"
             exit 1
           fi
+        shell: pwsh
 
       - name: Upload Windows Vulkan binary
         uses: actions/upload-release-asset@v1
