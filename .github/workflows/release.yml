@@ -123,7 +123,7 @@ jobs:
 
       - name: Install dep winget packages
         # we dont need wasm-opt
-        run: winget install -e --id KhronosGroup.VulkanSDK
+        run: winget install -e --id KhronosGroup.VulkanSDK --accept-source-agreements --accept-package-agreements
         shell: pwsh
 
       - name: Build Windows Vulkan bin
