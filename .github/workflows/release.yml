@@ -103,8 +103,12 @@ jobs:
             echo "url=${{ github.event.release.upload_url }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "Fetching upload URL for the latest release..."
-            UPLOAD_URL=$(gh release view --json uploadUrl --jq .uploadUrl --repo ${{ github.repository }} latest)
-            if [ -z "$UPLOAD_URL" ]; then
+            UPLOAD_URL=$(
+              gh release view --repo "${{ github.repository }}" \
+                              --json uploadUrl \
+                              --jq .uploadUrl
+            )
+            if [[ -z "$UPLOAD_URL" || "$UPLOAD_URL" == "null" ]]; then
               echo "Error: Could not find the latest release or its upload URL."
               exit 1
             fi
