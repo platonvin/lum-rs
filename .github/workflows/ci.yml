@@ -20,7 +20,7 @@ jobs:
       - name: Maybe useful update
         run: sudo apt update
 
-      - name: get APT зackages
+      - name: get APT packages
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: glslc
