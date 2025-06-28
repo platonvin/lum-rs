@@ -181,7 +181,6 @@ jobs:
             echo "Unsupported event: ${{ github.event_name }}"
             exit 1
           fi
-        shell: pwsh
 
       - name: Upload Windows Vulkan binary
         uses: actions/upload-release-asset@v1

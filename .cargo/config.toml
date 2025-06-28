@@ -60,6 +60,6 @@ codegen-backend = true
 # [profile.dev]
 # codegen-backend = "cranelift"
 
-# [target.x86_64-pc-windows-gnu]
-# linker = "x86_64-w64-mingw32-gcc"
-# ar = "x86_64-w64-mingw32-gcc-ar"
+# to disable some llvm wasm features that break my current tooling (e.g. wasm-opt)
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-cpu=mvp"]
