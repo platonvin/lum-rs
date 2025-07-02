@@ -161,6 +161,7 @@ jobs:
         id: get_upload_url
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "release" ]]; then
             echo "url=${{ github.event.release.upload_url }}" >> $GITHUB_OUTPUT
