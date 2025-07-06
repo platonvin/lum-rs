@@ -1,5 +1,7 @@
 IMPORTANT: Lum uses a RIGHT-HANDED coordinate system everywhere.
 
+define a price for state chagne and move things a little bit even if makes it depth not sorted
+
 todoy:
   docs
   code cleanup
