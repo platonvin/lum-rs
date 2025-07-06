@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [package]
 name = "as_u8_slice_derive"
 version = { workspace = true }

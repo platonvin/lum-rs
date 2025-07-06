@@ -1,11 +1,17 @@
+cargo-features = ["edition2024"]
+
 [package]
 name = "shaders"
 version = { workspace = true }
-edition = { workspace = true }
+# edition = { workspace = true }
 readme = { workspace = true }
+edition = "2024"
 
 [features]
 vk_backend = []
 wgpu_backend = []
 
 [lib]
+
+[build-dependencies]
+cargo-gpu = { git = "https://github.com/rust-gpu/cargo-gpu" }

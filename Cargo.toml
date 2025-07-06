@@ -5,12 +5,13 @@ resolver = "3"
 members = [
     "lum",
     "lumal",
-    "shaders",
     "example/demo",
     "example/assets",
     "as_u8_slice_derive",
     "containers",
     "voxc",
+    "shaders",
+    "shaders/sources",
 ]
 
 [workspace.package]
