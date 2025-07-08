@@ -1,0 +1,27 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "common"
+version = { workspace = true }
+edition = { workspace = true }
+readme = { workspace = true }
+
+[features]
+# vk_backend = []
+# wgpu_backend = []
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu", rev = "86fc48032c4cd4afb74f1d81ae859711d20386a1" }
+glam = { version = "0.29", default-features = false, features = ["libm"] }
+
+fastnoise-lite = { version = "1", default-features = false, features = [
+    "libm",
+] }
+# shared_types = { path = "../../.shared_types" }
+
+# Dependencies for CPU code
+# [target.'cfg(not(target_arch = "spirv"))'.dependencies]
+# glam = { version = "0.29", features = ["std"] }

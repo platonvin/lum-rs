@@ -11,8 +11,30 @@ members = [
     "containers",
     "voxc",
     "shaders",
-    "shader_sources",
     "shared_types",
+
+    "shaders/common",
+
+    "shaders/sources/diffuse",
+    "shaders/sources/fill_stencil_glossy",
+    "shaders/sources/fill_stencil_smoke",
+    "shaders/sources/fullscreen_triag",
+    "shaders/sources/glossy",
+    "shaders/sources/grass",
+    "shaders/sources/hbao",
+    "shaders/sources/lightmap",
+    "shaders/sources/map",
+    "shaders/sources/perlin",
+    "shaders/sources/radiance",
+    "shaders/sources/raygen_blocks",
+    "shaders/sources/raygen_models",
+    "shaders/sources/raygen_particles",
+    "shaders/sources/smoke",
+    "shaders/sources/tonemap",
+    "shaders/sources/update_grass",
+    "shaders/sources/update_water",
+    "shaders/sources/water_frag",
+    "shaders/sources/water_vert",
 ]
 
 [workspace.package]

@@ -1,0 +1,13 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "fullscreen_triag"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "fullscreen_triag.rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+common = { path = "../../common" }

@@ -549,6 +549,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "fastnoise-lite",
+ "glam 0.29.3",
+ "spirv-std",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -738,6 +747,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "diffuse"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "directories"
 version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -851,6 +867,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "fill_stencil_glossy"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "fill_stencil_smoke"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -890,6 +920,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "fullscreen_triag"
+version = "0.1.0"
+dependencies = [
+ "common",
 ]
 
 [[package]]
@@ -1056,6 +1093,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 
 [[package]]
+name = "glossy"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "glow"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1129,6 +1173,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "grass"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "half"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1146,6 +1197,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84b26c544d002229e640969970a2e74021aadf6e2f96372b9c58eff97de08eb3"
 dependencies = [
  "foldhash",
+]
+
+[[package]]
+name = "hbao"
+version = "0.1.0"
+dependencies = [
+ "common",
 ]
 
 [[package]]
@@ -1374,6 +1432,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lightmap"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1443,6 +1508,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "map"
+version = "0.1.0"
+dependencies = [
+ "common",
 ]
 
 [[package]]
@@ -1936,6 +2008,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
+name = "perlin"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2092,6 +2171,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74765f6d916ee2faa39bc8e68e4f3ed8949b48cccdac59983d287a7cb71ce9c5"
 
 [[package]]
+name = "radiance"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "range-alloc"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2119,6 +2205,27 @@ dependencies = [
  "core-graphics",
  "objc",
  "raw-window-handle",
+]
+
+[[package]]
+name = "raygen_blocks"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "raygen_models"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "raygen_particles"
+version = "0.1.0"
+dependencies = [
+ "common",
 ]
 
 [[package]]
@@ -2367,15 +2474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shader_sources"
-version = "0.1.0"
-dependencies = [
- "fastnoise-lite",
- "glam 0.29.3",
- "spirv-std",
-]
-
-[[package]]
 name = "shaders"
 version = "0.1.0"
 dependencies = [
@@ -2475,6 +2573,13 @@ dependencies = [
  "wayland-protocols-wlr",
  "wayland-scanner",
  "xkeysym",
+]
+
+[[package]]
+name = "smoke"
+version = "0.1.0"
+dependencies = [
+ "common",
 ]
 
 [[package]]
@@ -2695,6 +2800,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tonemap"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "tracing"
 version = "0.1.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2733,6 +2845,20 @@ name = "unicode-width"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
+
+[[package]]
+name = "update_grass"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "update_water"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
 
 [[package]]
 name = "utf8parse"
@@ -2860,6 +2986,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a05d73b933a847d6cccdda8f838a22ff101ad9bf93e33684f39c1f5f0eece3d"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "water_frag"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "water_vert"
+version = "0.1.0"
+dependencies = [
+ "common",
 ]
 
 [[package]]

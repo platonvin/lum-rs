@@ -42,3 +42,4 @@ pkg/*.js
 pkg/*.ts
 pkg/*.wasm
 questions.md
+/shader_sources/src/script.py
