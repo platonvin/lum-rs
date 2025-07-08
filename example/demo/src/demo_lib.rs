@@ -7,8 +7,9 @@
 use assets::{BlockAsset, ModelAsset};
 use containers::array3d::ConstDims;
 use lum::render_interface::ShaderSource;
+use lum::types::{fBLOCK_SIZE, sBLOCK_SIZE};
 use lum::{
-    fBLOCK_SIZE, for_zyx,
+    for_zyx,
     render_interface::{FoliageDescriptionBuilder, FoliageDescriptionCreate, RendererInterface},
     types::{u8vec3, vec3, MeshFoliage, MeshLiquid, MeshModel, MeshTransform, MeshVolumetric},
     Settings,
@@ -78,17 +79,17 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         // need to load it from somewhere else
         #[cfg(feature = "vk_backend")]
         let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-            ShaderSource::SpirV(shaders::Shader::get_spirv(shaders::Shader::GrassVert)),
+            ShaderSource::SpirVRef(c"grass_vert"),
             13,
             100,
         ));
 
-        #[cfg(feature = "wgpu_backend")]
-        let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-            ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
-            13,
-            100,
-        ));
+        // #[cfg(feature = "wgpu_backend")]
+        // let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
+        //     ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
+        //     13,
+        //     100,
+        // ));
 
         self.meshes = AllMeshes::new(lum, grass);
 
@@ -341,17 +342,17 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'stati
         <Renderer as RendererInterface<WorldSize>>::FoliageDescriptionBuilder::new();
     #[cfg(feature = "vk_backend")]
     let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-        ShaderSource::SpirV(shaders::Shader::get_spirv(shaders::Shader::GrassVert)),
+        ShaderSource::SpirVRef(c"grass::grass_vert"),
         13,
         100,
     ));
 
-    #[cfg(feature = "wgpu_backend")]
-    let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-        ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
-        13,
-        100,
-    ));
+    // #[cfg(feature = "wgpu_backend")]
+    // let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
+    //     ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
+    //     13,
+    //     100,
+    // ));
 
     let renderer = Renderer::new(
         &settings,

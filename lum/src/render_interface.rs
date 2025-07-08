@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+
 use super::types::*;
 use crate::{
     fBLOCK_SIZE,
@@ -5,7 +7,9 @@ use crate::{
     BLOCK_SIZE,
 };
 use containers::array3d::{Array3DView, Array3DViewMut, Dim3};
+// use lumal::vk::ShaderModule;
 use qvek::{vec3, vek::FrustumPlanes};
+// use vk::ShaderModule;
 use winit::window::Window;
 
 // i am clearly trash with managing division into files
@@ -119,6 +123,9 @@ pub trait FoliageDescriptionBuilder<FoliageDescType> {
 pub enum ShaderSource<'a> {
     /// SPIR-V binary data for Vulkan (compiled from GLSL).
     SpirV(&'a [u8]),
+    #[cfg(feature = "vk_backend")]
+    /// Using big Lum shader module
+    SpirVRef(&'a CStr),
     /// WGSL string for WebGPU.
     Wgsl(&'a str),
 }

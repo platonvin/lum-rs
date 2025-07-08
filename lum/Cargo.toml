@@ -12,8 +12,13 @@ path = "src/lib.rs"
 
 [features]
 default = []
-vk_backend = ["lumal", "shaders/vk_backend"]
-wgpu_backend = ["wgpu", "futures", "shaders/wgpu_backend"]
+vk_backend = ["lumal", "shaders/vk_backend", "shared_types/vk_backend"]
+wgpu_backend = [
+    "wgpu",
+    "futures",
+    "shaders/wgpu_backend",
+    "shared_types/wgpu_backend",
+]
 # these do nothing if wgpu_backend is not enabled
 wgpu_gl = []
 wgpu_vk = []
@@ -30,6 +35,7 @@ features = ["debug_validation_names"]
 
 
 [dependencies]
+shared_types = { path = "../shared_types" }
 # lumal is lum's abstraction layer over vulkan
 lumal = { path = "../lumal", optional = true }
 # crate with embedded into binary shader sources (SPIR-V / WGSL)

@@ -731,7 +731,6 @@ dependencies = [
  "log",
  "lum",
  "pollster",
- "shaders",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -828,6 +827,15 @@ checksum = "cea14ef9355e3beab063703aa9dab15afd25f0667c341310c1e5274bb1d0da18"
 dependencies = [
  "libc",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "fastnoise-lite"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e5f3c3cc9081e5d0e18bcd50e80cd33cba47fc22f88a9da9c33ecd1c87ea5c0"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -1411,6 +1419,7 @@ dependencies = [
  "qvek",
  "rayon",
  "shaders",
+ "shared_types",
  "wgpu",
  "winit",
  "zarray",
@@ -2361,6 +2370,7 @@ dependencies = [
 name = "shader_sources"
 version = "0.1.0"
 dependencies = [
+ "fastnoise-lite",
  "glam 0.29.3",
  "spirv-std",
 ]
@@ -2370,6 +2380,16 @@ name = "shaders"
 version = "0.1.0"
 dependencies = [
  "cargo-gpu",
+]
+
+[[package]]
+name = "shared_types"
+version = "0.1.0"
+dependencies = [
+ "as_u8_slice_derive",
+ "lumal",
+ "qvek",
+ "wgpu",
 ]
 
 [[package]]

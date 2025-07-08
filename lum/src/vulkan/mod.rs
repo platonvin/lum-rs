@@ -6,7 +6,7 @@ pub mod render;
 pub mod types;
 
 use super::{Camera, Settings, SunLight};
-use crate::{types::*, vulkan::types::*, BLOCK_SIZE};
+use crate::{types::*, vulkan::types::*};
 use containers::array3d::Dim3;
 use containers::Array3D;
 use containers::Ring;

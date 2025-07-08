@@ -41,6 +41,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             vk::Format::R16_SINT,
             vk::ImageUsageFlags::STORAGE
                 | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::STORAGE
                 | vk::ImageUsageFlags::SAMPLED,
             vk::ImageAspectFlags::COLOR,
             usvec3_to_extent3d(lum_settings.world_size.xyz()),
@@ -102,7 +103,9 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             lumal_settings.fif,
             vk::ImageType::TYPE_2D,
             vk::Format::R32_SFLOAT, // try R32G32
-            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+            vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::STORAGE,
             vk::ImageAspectFlags::COLOR,
             vk::Extent3D {
                 width: 6,

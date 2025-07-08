@@ -13,13 +13,8 @@
 use containers::array3d::{ConstDims, Dim3, RuntimeDims};
 use qvek::vek::FrustumPlanes;
 use qvek::{uvec2, vec3};
-use types::{mat4, uvec2, uvec3, vec2, vec3};
-
-pub const BLOCK_SIZE: u32 = 16;
-#[allow(non_upper_case_globals)]
-pub const sBLOCK_SIZE: usize = 16;
-#[allow(non_upper_case_globals)]
-pub const fBLOCK_SIZE: f32 = BLOCK_SIZE as f32;
+pub use shaders;
+use types::*;
 
 pub mod aabb;
 pub mod ao_lut;
@@ -28,8 +23,8 @@ pub mod render_interface;
 pub mod types;
 #[cfg(feature = "vk_backend")]
 pub mod vulkan;
-#[cfg(feature = "wgpu_backend")]
-pub mod webgpu;
+// #[cfg(feature = "wgpu_backend")]
+// pub mod webgpu;
 
 #[derive(Clone, Copy)]
 pub struct Settings<D: Dim3 = ConstDims<48, 48, 16>> {

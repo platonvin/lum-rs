@@ -2,7 +2,7 @@
 
 use crate::*;
 use crate::{ComputePipe, RasterPipe};
-use ash::vk::{self, CompareOp, StencilOp};
+use ash::vk::{self, CompareOp, ShaderModule, StencilOp};
 use descriptors::*;
 
 impl Renderer {
@@ -42,30 +42,31 @@ impl Renderer {
         &self,
         pipe: &mut ComputePipe,
         extra_dynamic_layout: Option<vk::DescriptorSetLayout>,
-        spirv_code: &[u8],
+        shader_module: &ShaderModule,
+        compute_name: &CStr,
         push_size: u32,
         create_flags: vk::PipelineCreateFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
-        assert!(!spirv_code.is_empty());
+        // assert!(!spirv_code.is_empty());
 
-        let (module, comp_shader_stage_info) = {
-            let module = Self::load_shader_module(&self.device, spirv_code);
+        // let (module, comp_shader_stage_info) = {
+        // let module = Self::load_shader_module(&self.device, spirv_code);
 
-            set_debug_names!(self, debug_name, (&module, "Shader Module"));
+        // set_debug_names!(self, debug_name, (&module, "Shader Module"));
 
-            assert!(module != vk::ShaderModule::null());
+        // assert!(module != vk::ShaderModule::null());
 
-            (
-                module,
-                vk::PipelineShaderStageCreateInfo {
-                    stage: vk::ShaderStageFlags::COMPUTE,
-                    module,
-                    p_name: c"main".as_ptr(),
-                    ..Default::default()
-                },
-            )
-        };
+        // (
+        //     module,
+        //     vk::PipelineShaderStageCreateInfo {
+        //         stage: vk::ShaderStageFlags::COMPUTE,
+        //         module,
+        //         p_name: c"main".as_ptr(),
+        //         ..Default::default()
+        //     },
+        // )
+        // };
 
         // Descriptor set layouts
         let mut used_dset_layouts = vec![pipe.set_layout];
@@ -98,7 +99,12 @@ impl Renderer {
 
         // Compute pipeline
         let pipeline_info = vk::ComputePipelineCreateInfo {
-            stage: comp_shader_stage_info,
+            stage: vk::PipelineShaderStageCreateInfo {
+                stage: vk::ShaderStageFlags::COMPUTE,
+                module: *shader_module,
+                p_name: compute_name.as_ptr(),
+                ..Default::default()
+            },
             layout: line_layout,
             flags: create_flags,
             ..Default::default()
@@ -111,9 +117,9 @@ impl Renderer {
         };
 
         // Clean up shader module
-        unsafe {
-            self.device.destroy_shader_module(module, None);
-        }
+        // unsafe {
+        //     self.device.destroy_shader_module(module, None);
+        // }
 
         assert!(line != vk::Pipeline::null());
         assert!(line_layout != vk::PipelineLayout::null());
@@ -136,8 +142,9 @@ impl Renderer {
         &self,
         pipe: &mut RasterPipe,
         extra_dynamic_layout: Option<vk::DescriptorSetLayout>,
-        vertex_code: &[u8],
-        fragment_code: Option<&[u8]>,
+        shader_module: &ShaderModule,
+        vertex_name: &CStr,
+        fragment_name: Option<&CStr>,
         attr_desc: &[AttrFormOffs],
         stride: u32,
         input_rate: vk::VertexInputRate,
@@ -151,19 +158,19 @@ impl Renderer {
         stencil: vk::StencilOpState,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
-        let vertex_module = Self::load_shader_module(&self.device, vertex_code);
+        // let vertex_module = Self::load_shader_module(&self.device, vertex_code);
         let vertex_stage = vk::PipelineShaderStageCreateInfo {
             stage: vk::ShaderStageFlags::VERTEX,
-            module: vertex_module,
-            p_name: c"main".as_ptr(),
+            module: *shader_module,
+            p_name: vertex_name.as_ptr() as *const i8,
             ..Default::default()
         };
-        let fragment_module =
-            fragment_code.map(|code| Self::load_shader_module(&self.device, code));
-        let fragment_stage = fragment_module.map(|module| vk::PipelineShaderStageCreateInfo {
+        // let fragment_module =
+        //     fragment_code.map(|code| Self::load_shader_module(&self.device, code));
+        let fragment_stage = fragment_name.map(|name| vk::PipelineShaderStageCreateInfo {
             stage: vk::ShaderStageFlags::FRAGMENT,
-            module,
-            p_name: c"main".as_ptr(),
+            module: *shader_module,
+            p_name: name.as_ptr() as *const i8,
             ..Default::default()
         });
         let pipeline_stages: Vec<vk::PipelineShaderStageCreateInfo> =
@@ -250,7 +257,7 @@ impl Renderer {
         //     push_range.stage_flags |= shader_stage.stage;
         // }
         push_range.stage_flags |= vk::ShaderStageFlags::VERTEX;
-        if fragment_code.is_some() {
+        if fragment_name.is_some() {
             push_range.stage_flags |= vk::ShaderStageFlags::VERTEX;
         }
 
@@ -389,12 +396,12 @@ impl Renderer {
                 .unwrap()
         }[0];
 
-        unsafe {
-            self.device.destroy_shader_module(vertex_module, None);
-            if let Some(module) = fragment_module {
-                self.device.destroy_shader_module(module, None)
-            }
-        };
+        // unsafe {
+        //     self.device.destroy_shader_module(vertex_module, None);
+        //     if let Some(module) = fragment_module {
+        //         self.device.destroy_shader_module(module, None)
+        //     }
+        // };
 
         // dots never meant anything]
         pipe.line = pipeline;
@@ -422,7 +429,7 @@ impl Renderer {
     }
 
     /// Helper function for loading SPIR-V shader modules
-    fn load_shader_module(device: &Device, spirv_code: &[u8]) -> vk::ShaderModule {
+    pub fn load_shader_module(device: &Device, spirv_code: &[u8]) -> vk::ShaderModule {
         let create_info = vk::ShaderModuleCreateInfo {
             code_size: spirv_code.len(),
             p_code: spirv_code.as_ptr() as *const u32,

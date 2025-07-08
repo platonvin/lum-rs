@@ -3,9 +3,8 @@ cargo-features = ["edition2024"]
 [package]
 name = "shader_sources"
 version = { workspace = true }
-# edition = { workspace = true }
+edition = { workspace = true }
 readme = { workspace = true }
-edition = "2024"
 
 [features]
 # vk_backend = []
@@ -18,9 +17,13 @@ crate-type = ["rlib", "cdylib"]
 spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu", rev = "86fc48032c4cd4afb74f1d81ae859711d20386a1" }
 
 # Dependencies for GPU code
-[target.'cfg(target_arch = "spirv")'.dependencies]
+# [target.'cfg(target_arch = "spirv")'.dependencies]
 glam = { version = "0.29", default-features = false, features = ["libm"] }
+fastnoise-lite = { version = "1", default-features = false, features = [
+    "libm",
+] }
+# shared_types = { path = "../../.shared_types" }
 
 # Dependencies for CPU code
-[target.'cfg(not(target_arch = "spirv"))'.dependencies]
-glam = { version = "0.29", features = ["std"] }
+# [target.'cfg(not(target_arch = "spirv"))'.dependencies]
+# glam = { version = "0.29", features = ["std"] }

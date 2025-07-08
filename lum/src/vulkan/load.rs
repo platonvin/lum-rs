@@ -2,7 +2,7 @@ use super::InternalRendererVulkan;
 use crate::load_interface::{ModelData, SimpleVertex};
 use crate::vulkan::types::InternalVoxel;
 use crate::vulkan::BLOCK_SIZE;
-use crate::{for_zyx, sBLOCK_SIZE, types::*};
+use crate::{for_zyx, types::*};
 use crate::{
     load_interface::LoadInterface,
     vulkan::{types::*, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y},

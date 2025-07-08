@@ -15,9 +15,9 @@ use containers::{
     array3d::{Array3DView, Array3DViewMut},
     BitArray3d,
 };
-use lumal::vk;
+use lumal::vk::{self, Sampler, ShaderModule};
 use qvek::{i16vec3, i16vec4, i8vec4, ivec3, ivec4, uvec2, uvec3, vec3, vec4, vek::Clamp};
-use std::time::Instant;
+use std::{ffi::CStr, time::Instant};
 use winit::window::Window;
 
 // i am clearly trash with managing division into files
@@ -1144,14 +1144,15 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         let model_voxels_info = vk::DescriptorImageInfo {
             image_view: model_mesh.voxels.view,
             image_layout: vk::ImageLayout::GENERAL,
-            sampler: self.samplers.unnorm_nearest,
+            // sampler: self.samplers.unnorm_nearest,
+            sampler: Sampler::null(),
         };
         let binding = [model_voxels_info];
         let model_voxels_write = vk::WriteDescriptorSet {
             dst_set: vk::DescriptorSet::null(),
             dst_binding: 0,
             dst_array_element: 0,
-            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
             descriptor_count: 1,
             p_image_info: &binding as *const _,
             ..Default::default()
@@ -1844,11 +1845,13 @@ pub struct RendererVulkan<'a, D: Dim3> {
 // these lifetimes mean that lifetime of ref in MeshFoliageDescription is same as ref in ShaderSource
 impl<'a> FoliageDescriptionCreate<'a> for MeshFoliageDescription<'a> {
     fn new(code: ShaderSource<'a>, vertices: usize, dencity: usize) -> Self {
-        let ShaderSource::SpirV(spirv) = code else {
+        let ShaderSource::SpirVRef(name) = code else {
             panic!()
         };
         Self {
-            spirv_code: spirv,
+            // module: module,
+            vertex_name: name,
+            // spirv_code: spirv,
             vertices: vertices as u32,
             density: dencity as u32,
         }
@@ -1856,11 +1859,15 @@ impl<'a> FoliageDescriptionCreate<'a> for MeshFoliageDescription<'a> {
 }
 
 /// Description of foliage mesh to be created
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MeshFoliageDescription<'a> {
-    /// Shader, compiled into spirv.
-    /// Owned by description for siplicity.
-    pub spirv_code: &'a [u8],
+    // Shader, compiled into spirv.
+    // Owned by description for siplicity.
+    // pub spirv_code: &'a [u8],
+
+    //
+    // pub module: &'a ShaderModule,
+    pub vertex_name: &'a CStr,
 
     /// How many vertices will be in per-blade drawcall.
     /// This is dependent on how many vertices does your corresponding foliage shader need.

@@ -10,7 +10,8 @@ Lum is not an extendable engine*, but a specialized rendering library. You shoul
 ### Prerequisites
 - nightly Rust: for certain #![features]
 - Vulkan drivers
-- Vulkan SDK: glslc and validation layers
+
+> NOTE! build process of Lum will install second Rust toolchain (for rust-gpu shader compilation)
 
 ### Usage
 look at the [demo source code](example/demo/src/demo_lib.rs) and [documentation](https://platonvin.github.io/docs/lum.html)
