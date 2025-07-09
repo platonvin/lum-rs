@@ -8,7 +8,7 @@ pub struct FillStencilSmokePushConstants {
 
 #[spirv(vertex)]
 #[unsafe(no_mangle)]
-pub fn fill_stencil_smoke_vert(
+pub fn main(
     #[spirv(vertex_index)] vertex_id: u32,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ubo: &UniformBufferObject,
     #[spirv(push_constant)] pco: &FillStencilSmokePushConstants,
@@ -26,15 +26,4 @@ pub fn fill_stencil_smoke_vert(
     *end_depth = clip_coords.z;
 
     *clip_pos = clip_coords.extend(1.0);
-}
-
-#[spirv(fragment)]
-#[unsafe(no_mangle)]
-pub fn fill_stencil_smoke_frag(
-    end_depth_in: f32,
-    far_depth_out: &mut f32,
-    near_depth_out: &mut f32,
-) {
-    *far_depth_out = end_depth_in;
-    *near_depth_out = end_depth_in;
 }

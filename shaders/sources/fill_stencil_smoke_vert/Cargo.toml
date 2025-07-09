@@ -1,12 +1,12 @@
 cargo-features = ["edition2024"]
 
 [package]
-name = "lightmap"
+name = "fill_stencil_smoke_vert"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-path = "lightmap.rs"
+path = "fill_stencil_smoke_vert.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]

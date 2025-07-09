@@ -78,7 +78,7 @@ pub(crate) fn adjust_saturation(color: Vec3, value: f32) -> Vec3 {
 
 #[spirv(fragment)]
 #[unsafe(no_mangle)]
-pub fn tonemap_frag(
+pub fn main(
     #[spirv(input_attachment_index = 0, descriptor_set = 0, binding = 0)] rendered_frame: &Image!(subpass, type=f32, sampled=false),
     frame_color: &mut Vec4,
 ) {

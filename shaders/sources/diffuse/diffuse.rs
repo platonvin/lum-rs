@@ -3,7 +3,7 @@ use common::*;
 
 #[spirv(fragment)]
 #[unsafe(no_mangle)]
-pub fn diffuse_frag(
+pub fn main(
     #[spirv(frag_coord)] in_frag_coord: Vec4,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ubo: &UniformBufferObject,
     #[spirv(descriptor_set = 0, binding = 1, input_attachment_index = 0)] mat_norm: &Image!(subpass, type=u32, sampled=false),

@@ -740,6 +740,7 @@ dependencies = [
  "log",
  "lum",
  "pollster",
+ "shaders",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -874,7 +875,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "fill_stencil_smoke"
+name = "fill_stencil_smoke_frag"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "fill_stencil_smoke_vert"
 version = "0.1.0"
 dependencies = [
  "common",
@@ -1173,7 +1181,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "grass"
+name = "grass_frag"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "grass_vert"
 version = "0.1.0"
 dependencies = [
  "common",
@@ -1432,7 +1447,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "lightmap"
+name = "lightmap_blocks"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "lightmap_models"
 version = "0.1.0"
 dependencies = [
  "common",
@@ -1484,7 +1506,6 @@ dependencies = [
  "qvek",
  "rayon",
  "shaders",
- "shared_types",
  "wgpu",
  "winit",
  "zarray",
@@ -2008,7 +2029,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
-name = "perlin"
+name = "perlin_2d"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "perlin_3d"
 version = "0.1.0"
 dependencies = [
  "common",
@@ -2208,21 +2236,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "raygen_blocks"
+name = "raygen_blocks_frag"
 version = "0.1.0"
 dependencies = [
  "common",
 ]
 
 [[package]]
-name = "raygen_models"
+name = "raygen_blocks_vert"
 version = "0.1.0"
 dependencies = [
  "common",
 ]
 
 [[package]]
-name = "raygen_particles"
+name = "raygen_models_frag"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "raygen_models_vert"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "raygen_particles_frag"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
+name = "raygen_particles_vert"
 version = "0.1.0"
 dependencies = [
  "common",

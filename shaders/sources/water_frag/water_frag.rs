@@ -3,7 +3,7 @@ use common::*;
 
 #[spirv(fragment)]
 #[unsafe(no_mangle)]
-pub fn water_frag(#[spirv(flat)] orig: Vec3, out_mat_norm: &mut UVec4) {
+pub fn main(#[spirv(flat)] orig: Vec3, out_mat_norm: &mut UVec4) {
     let normal_encoded;
 
     let mut normal = (orig.dfdx_fine()).cross(orig.dfdx_fine()).normalize();

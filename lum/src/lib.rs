@@ -13,8 +13,13 @@
 use containers::array3d::{ConstDims, Dim3, RuntimeDims};
 use qvek::vek::FrustumPlanes;
 use qvek::{uvec2, vec3};
-pub use shaders;
-use types::*;
+use types::{mat4, uvec2, uvec3, vec2, vec3};
+
+pub const BLOCK_SIZE: u32 = 16;
+#[allow(non_upper_case_globals)]
+pub const sBLOCK_SIZE: usize = 16;
+#[allow(non_upper_case_globals)]
+pub const fBLOCK_SIZE: f32 = BLOCK_SIZE as f32;
 
 pub mod aabb;
 pub mod ao_lut;

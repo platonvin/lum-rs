@@ -1,12 +1,12 @@
 cargo-features = ["edition2024"]
 
 [package]
-name = "raygen_particles"
+name = "perlin_2d"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-path = "raygen_particles.rs"
+path = "perlin_2d.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]

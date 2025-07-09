@@ -1,12 +1,6 @@
 #![no_std]
 use common::*;
 
-#[spirv(fragment)]
-#[unsafe(no_mangle)]
-pub fn frag(#[spirv(flat)] mat_norm: UVec4, out_mat_norm: &mut UVec4) {
-    *out_mat_norm = mat_norm;
-}
-
 #[repr(C)]
 pub struct GrassPushConstants {
     pub shift: Vec4,
@@ -155,7 +149,7 @@ pub(crate) fn get_blade_vert_data(
 
 #[spirv(vertex)]
 #[unsafe(no_mangle)]
-pub fn grass_vert(
+pub fn main(
     #[spirv(vertex_index)] vertex_id: u32,
     #[spirv(instance_index)] instance_id: u32,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ubo: &UniformBufferObject,

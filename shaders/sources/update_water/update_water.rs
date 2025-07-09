@@ -32,7 +32,7 @@ pub(crate) fn calculate_height(local_pos: Vec2, time: f32) -> f32 {
 
 #[spirv(compute(threads(8, 8, 1)))]
 #[unsafe(no_mangle)]
-pub fn update_water_comp(
+pub fn main(
     #[spirv(descriptor_set = 0, binding = 0)] heighmap: &Image!(
         2D,
         format = rgba16f,

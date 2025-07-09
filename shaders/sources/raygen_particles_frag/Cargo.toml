@@ -1,0 +1,13 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "raygen_particles_frag"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "raygen_particles_frag.rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+common = { path = "../../common" }

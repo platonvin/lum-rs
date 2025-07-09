@@ -1,15 +1,9 @@
 #![no_std]
 use common::*;
 
-#[spirv(fragment)]
-#[unsafe(no_mangle)]
-pub fn raygen_particles_frag(#[spirv(flat)] mat_norm: UVec4, out_mat_norm: &mut UVec4) {
-    *out_mat_norm = mat_norm;
-}
-
 #[spirv(vertex)]
 #[unsafe(no_mangle)]
-pub fn raygen_particles_vert(
+pub fn main(
     #[spirv(vertex_index)] vertex_id: i32,
     pos_in: Vec3,
     _vel_in: Vec3,

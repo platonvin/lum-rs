@@ -1260,7 +1260,6 @@ unsafe fn create_logical_device(
         storage_push_constant8: vk::TRUE,
         storage_buffer8_bit_access: vk::TRUE,
         shader_int8: vk::TRUE,
-        vulkan_memory_model: vk::TRUE,
         ..Default::default()
     };
 
@@ -1290,7 +1289,7 @@ unsafe fn create_logical_device(
 }
 
 /// Creates a swapchain and swapchain images.
-fn create_swapchain(
+unsafe fn create_swapchain(
     settings: &LumalSettings,
     size: PhysicalSize<u32>,
     instance: &Instance,
@@ -1341,9 +1340,9 @@ fn create_swapchain(
     };
 
     let swapchain_loader = swapchain::Device::new(instance, device);
-    let swapchain = unsafe { swapchain_loader.create_swapchain(&info, None).unwrap() };
+    let swapchain = swapchain_loader.create_swapchain(&info, None).unwrap();
 
-    let swapchain_images = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
+    let swapchain_images = swapchain_loader.get_swapchain_images(swapchain).unwrap();
 
     let swapchain_images = Ring::from_vec(
         swapchain_images
@@ -1375,7 +1374,7 @@ fn create_swapchain(
                     ..Default::default()
                 };
 
-                let view = unsafe { device.create_image_view(&info, None).unwrap() };
+                let view = device.create_image_view(&info, None).unwrap();
 
                 // manually give swapchain image views debug names
                 #[cfg(feature = "debug_validation_names")]
@@ -1518,14 +1517,13 @@ struct QueueFamilyIndices {
 }
 
 impl QueueFamilyIndices {
-    fn get(
+    unsafe fn get(
         instance: &Instance,
         entry: &Entry,
         surface: &SurfaceKHR,
         physical_device: &vk::PhysicalDevice,
     ) -> VkResult<Self> {
-        let properties =
-            unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
+        let properties = instance.get_physical_device_queue_family_properties(*physical_device);
         let surface_loader = surface::Instance::new(entry, instance);
 
         let graphics = properties
@@ -1535,13 +1533,11 @@ impl QueueFamilyIndices {
 
         let mut present = None;
         for (index, _) in properties.iter().enumerate() {
-            if unsafe {
-                surface_loader.get_physical_device_surface_support(
-                    *physical_device,
-                    index as u32,
-                    *surface,
-                )
-            }? {
+            if surface_loader.get_physical_device_surface_support(
+                *physical_device,
+                index as u32,
+                *surface,
+            )? {
                 present = Some(index as u32);
                 break;
             }
@@ -1564,7 +1560,7 @@ struct SwapchainSupport {
 }
 
 impl SwapchainSupport {
-    fn get(
+    unsafe fn get(
         instance: &Instance,
         entry: &Entry,
         physical_device: &vk::PhysicalDevice,
@@ -1572,15 +1568,13 @@ impl SwapchainSupport {
     ) -> VkResult<SwapchainSupport> {
         let surface_loader = surface::Instance::new(entry, instance);
 
-        Ok(unsafe {
-            SwapchainSupport {
-                capabilities: surface_loader
-                    .get_physical_device_surface_capabilities(*physical_device, *surface)?,
-                formats: surface_loader
-                    .get_physical_device_surface_formats(*physical_device, *surface)?,
-                present_modes: surface_loader
-                    .get_physical_device_surface_present_modes(*physical_device, *surface)?,
-            }
+        Ok(SwapchainSupport {
+            capabilities: surface_loader
+                .get_physical_device_surface_capabilities(*physical_device, *surface)?,
+            formats: surface_loader
+                .get_physical_device_surface_formats(*physical_device, *surface)?,
+            present_modes: surface_loader
+                .get_physical_device_surface_present_modes(*physical_device, *surface)?,
         })
     }
 }

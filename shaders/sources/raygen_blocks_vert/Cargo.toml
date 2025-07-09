@@ -1,12 +1,12 @@
 cargo-features = ["edition2024"]
 
 [package]
-name = "fill_stencil_smoke"
+name = "raygen_blocks_vert"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-path = "fill_stencil_smoke.rs"
+path = "raygen_blocks_vert.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]

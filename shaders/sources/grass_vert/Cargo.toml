@@ -1,12 +1,12 @@
 cargo-features = ["edition2024"]
 
 [package]
-name = "perlin"
+name = "grass_vert"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-path = "perlin.rs"
+path = "grass_vert.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]

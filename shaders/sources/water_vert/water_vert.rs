@@ -141,7 +141,7 @@ pub(crate) fn get_water_vert(
 
 #[spirv(vertex)]
 #[unsafe(no_mangle)]
-pub fn water_vert(
+pub fn main(
     #[spirv(vertex_index)] gl_vertex_index: i32,
     #[spirv(instance_index)] gl_instance_index: i32,
     #[spirv(push_constant)] pco: &WaterPushConstants,

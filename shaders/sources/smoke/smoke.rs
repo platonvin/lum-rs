@@ -3,7 +3,7 @@ use common::*;
 
 #[spirv(fragment)]
 #[unsafe(no_mangle)]
-pub fn smoke_frag(
+pub fn main(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ubo: &UniformBufferObject,
     #[spirv(descriptor_set = 0, binding = 1, input_attachment_index = 0)]
     smoke_depth_far_subpass: &Image!(subpass, type=f32, sampled=false),

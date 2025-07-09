@@ -67,7 +67,7 @@ pub fn ssr_trace_ray(
 
 #[spirv(fragment)]
 #[unsafe(no_mangle)]
-pub fn glossy_frag(
+pub fn main(
     #[spirv(frag_coord)] in_frag_coord: Vec4,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] ubo: &UniformBufferObject,
     #[spirv(descriptor_set = 0, binding = 1)] mat_norm: &Image!(2D, type=u32, sampled=false),

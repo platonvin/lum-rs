@@ -63,16 +63,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             pipes,
         );
 
-        // yep all shaders are in the same spv file
-        // TODO: store shader module?? for recreation
-        let shader_module =
-            lumal::Renderer::load_shader_module(&lumal.device, shaders::get_shader());
-
         lumal.create_raster_pipe(
             &mut pipes.lightmap_blocks_pipe,
             None,
-            &shader_module,
-            c"lightmap::blocks_vert",
+            shaders::Shader::get_bytes(shaders::Shader::LightmapBlocks),
             None,
             &[AttrFormOffs {
                 binding: 0,
@@ -99,8 +93,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.lightmap_models_pipe,
             None,
-            &shader_module,
-            c"lightmap::models_vert",
+            shaders::Shader::get_bytes(shaders::Shader::LightmapModels),
             None,
             &[AttrFormOffs {
                 binding: 0,
@@ -128,9 +121,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.raygen_blocks_pipe,
             None,
-            &shader_module,
-            c"raygen_blocks::raygen_blocks_vert",
-            Some(c"raygen_blocks::raygen_blocks_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::RaygenBlocksVert),
+            Some(shaders::Shader::get_bytes(
+                shaders::Shader::RaygenBlocksFrag,
+            )),
             &[AttrFormOffs {
                 binding: 0,
                 format: vk::Format::R8G8B8_UINT, // TODO: automatic in macro
@@ -154,9 +148,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.raygen_models_pipe,
             Some(pipes.raygen_models_push_layout),
-            &shader_module,
-            c"raygen_models::raygen_models_vert",
-            Some(c"raygen_models::raygen_models_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::RaygenModelsVert),
+            Some(shaders::Shader::get_bytes(
+                shaders::Shader::RaygenModelsFrag,
+            )),
             &[AttrFormOffs {
                 binding: 0,
                 format: vk::Format::R8G8B8_UINT,
@@ -180,9 +175,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.raygen_particles_pipe,
             None,
-            &shader_module,
-            c"raygen_particles::raygen_particles_vert",
-            Some(c"raygen_particles::raygen_particles_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::RaygenParticlesVert),
+            Some(shaders::Shader::get_bytes(
+                shaders::Shader::RaygenParticlesFrag,
+            )),
             &[
                 AttrFormOffs {
                     binding: 0,
@@ -223,9 +219,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.raygen_water_pipe,
             None,
-            &shader_module,
-            c"water::water_vert",
-            Some(c"water::water_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::WaterVert),
+            Some(shaders::Shader::get_bytes(shaders::Shader::WaterFrag)),
             &[],
             0,
             vk::VertexInputRate::VERTEX,
@@ -248,9 +243,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             lumal.create_raster_pipe(
                 foliage,
                 None,
-                &shader_module,
-                &desc.vertex_name,
-                Some(c"grass::frag"),
+                &desc.spirv_code,
+                Some(shaders::Shader::get_bytes(shaders::Shader::GrassFrag)),
                 &[AttrFormOffs {
                     binding: 0,
                     format: vk::Format::R8G8B8_UINT,
@@ -275,9 +269,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.diffuse_pipe,
             None,
-            &shader_module,
-            c"fullscreen_triag_vert",
-            Some(c"diffuse::diffuse_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::FullscreenTriag),
+            Some(shaders::Shader::get_bytes(shaders::Shader::Diffuse)),
             &[],
             0,
             vk::VertexInputRate::VERTEX,
@@ -299,9 +292,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.ao_pipe,
             None,
-            &shader_module,
-            c"fullscreen_triag_vert",
-            Some(c"hbao::hbao_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::FullscreenTriag),
+            Some(shaders::Shader::get_bytes(shaders::Shader::Hbao)),
             &[],
             0,
             vk::VertexInputRate::VERTEX,
@@ -321,9 +313,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.fill_stencil_glossy_pipe,
             None,
-            &shader_module,
-            c"fullscreen_triag_vert",
-            Some(c"fill_stencil_glossy::fill_stencil_glossy_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::FullscreenTriag),
+            Some(shaders::Shader::get_bytes(
+                shaders::Shader::FillStencilGlossy,
+            )),
             &[], // Fullscreen pass, no attributes
             0,
             vk::VertexInputRate::VERTEX,
@@ -351,9 +344,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.fill_stencil_smoke_pipe,
             None,
-            &shader_module,
-            c"fill_stencil_smoke::fill_stencil_smoke_vert",
-            Some(c"fill_stencil_smoke::fill_stencil_smoke_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::FillStencilSmokeVert),
+            Some(shaders::Shader::get_bytes(
+                shaders::Shader::FillStencilSmokeFrag,
+            )),
             &[], // Push constants only
             0,
             vk::VertexInputRate::VERTEX,
@@ -385,9 +379,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.glossy_pipe,
             None,
-            &shader_module,
-            c"fullscreen_triag_vert",
-            Some(c"glossy::glossy_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::FullscreenTriag),
+            Some(shaders::Shader::get_bytes(shaders::Shader::Glossy)),
             &[], // Fullscreen pass, no attributes
             0,
             vk::VertexInputRate::VERTEX,
@@ -415,9 +408,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.smoke_pipe,
             None,
-            &shader_module,
-            c"fullscreen_triag_vert",
-            Some(c"smoke::smoke_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::FullscreenTriag),
+            Some(shaders::Shader::get_bytes(shaders::Shader::Smoke)),
             &[], // Fullscreen pass, no attributes
             0,
             vk::VertexInputRate::VERTEX,
@@ -445,9 +437,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_raster_pipe(
             &mut pipes.tonemap_pipe,
             None,
-            &shader_module,
-            c"fullscreen_triag_vert",
-            Some(c"tonemap::tonemap_frag"),
+            shaders::Shader::get_bytes(shaders::Shader::FullscreenTriag),
+            Some(shaders::Shader::get_bytes(shaders::Shader::Tonemap)),
             &[], // Fullscreen pass, no attributes
             0,   // No vk::ShaderStageFlags::vertex size
             vk::VertexInputRate::VERTEX,
@@ -512,8 +503,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_compute_pipe(
             &mut pipes.radiance_pipe,
             None,
-            &shader_module,
-            c"radiance::radiance_comp",
+            shaders::Shader::get_bytes(shaders::Shader::Radiance),
             (std::mem::size_of::<i32>() * 2) as u32,
             vk::PipelineCreateFlags::DISPATCH_BASE,
             #[cfg(feature = "debug_validation_names")]
@@ -523,8 +513,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_compute_pipe(
             &mut pipes.update_grass_pipe,
             None,
-            &shader_module,
-            c"update_grass::update_grass_comp",
+            shaders::Shader::get_bytes(shaders::Shader::UpdateGrass),
             (std::mem::size_of::<vec2>() * 2 + std::mem::size_of::<f32>()) as u32,
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -534,8 +523,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_compute_pipe(
             &mut pipes.update_water_pipe,
             None,
-            &shader_module,
-            c"update_water::update_water_comp",
+            shaders::Shader::get_bytes(shaders::Shader::UpdateWater),
             (std::mem::size_of::<f32>() + std::mem::size_of::<vec2>() * 2) as u32,
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -545,8 +533,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin2d_pipe,
             None,
-            &shader_module,
-            c"perlin::comp_2d",
+            shaders::Shader::get_bytes(shaders::Shader::Perlin2d),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -556,8 +543,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_compute_pipe(
             &mut pipes.gen_perlin3d_pipe,
             None,
-            &shader_module,
-            c"perlin::comp_3d",
+            shaders::Shader::get_bytes(shaders::Shader::Perlin3d),
             0, // No push constants
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -567,8 +553,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         lumal.create_compute_pipe(
             &mut pipes.map_pipe,
             Some(pipes.map_push_layout),
-            &shader_module,
-            c"map::map_comp",
+            shaders::Shader::get_bytes(shaders::Shader::Map),
             (std::mem::size_of::<mat4>() + std::mem::size_of::<ivec4>()) as u32,
             vk::PipelineCreateFlags::empty(),
             #[cfg(feature = "debug_validation_names")]
@@ -696,18 +681,18 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::StorageImage(
+                    resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
-                        // samplers.nearest_sampler,
+                        samplers.nearest_sampler,
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::StorageImage(
+                    resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Previous(&iimages.radiance_cache),
                         vk::ImageLayout::GENERAL,
-                        // samplers.unnorm_linear,
+                        samplers.unnorm_linear,
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
@@ -760,10 +745,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::StorageImage(
+                    resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
-                        // samplers.nearest_sampler,
+                        samplers.nearest_sampler,
                     ),
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
@@ -779,8 +764,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Single(&iimages.lightmap),
                         vk::ImageLayout::GENERAL,
-                        samplers.nearest_sampler,
-                        // samplers.shadow_sampler,
+                        samplers.shadow_sampler,
                     ),
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
@@ -866,10 +850,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::StorageImage(
+                    resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
-                        // samplers.nearest_sampler,
+                        samplers.nearest_sampler,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
@@ -944,10 +928,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::StorageImage(
+                    resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
-                        // samplers.nearest_sampler,
+                        samplers.nearest_sampler,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
@@ -1029,10 +1013,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::StorageImage(
+                    resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Current(&iimages.block_palette),
                         vk::ImageLayout::GENERAL,
-                        // samplers.unnorm_nearest,
+                        samplers.unnorm_nearest,
                     ),
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
@@ -1358,7 +1342,7 @@ fn setup_all_separate_descriptor_layouts(lumal: &mut Renderer, pipes: &mut AllPi
     );
     lumal.create_descriptor_set_layout(
         &[ShortDescriptorInfo {
-            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
             stages: vk::ShaderStageFlags::FRAGMENT,
         }],
         &mut pipes.raygen_models_push_layout,

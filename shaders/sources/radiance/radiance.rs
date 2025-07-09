@@ -12,9 +12,9 @@ pub struct ReqBuffer {
     pub update_requests: [IVec4; 1],
 }
 
-pub(crate) const K_HASH: u32 = 1103515245;
+const K_HASH: u32 = 1103515245;
 
-pub(crate) fn hash33(mut x: UVec3) -> Vec3 {
+fn hash33(mut x: UVec3) -> Vec3 {
     x = ((x >> 8) ^ uvec3(x.y, x.z, x.x)) * K_HASH;
     x = ((x >> 8) ^ uvec3(x.y, x.z, x.x)) * K_HASH;
     x = ((x >> 8) ^ uvec3(x.y, x.z, x.x)) * K_HASH;
@@ -22,13 +22,13 @@ pub(crate) fn hash33(mut x: UVec3) -> Vec3 {
     vec3(x.x as f32, x.y as f32, x.z as f32) * (1.0 / 0xffffffff_u32 as f32)
 }
 
-pub(crate) fn random3d(random_storage: &mut UVec3) -> Vec3 {
+fn random3d(random_storage: &mut UVec3) -> Vec3 {
     let res = hash33(*random_storage);
     random_storage.x += 1;
     res
 }
 
-pub(crate) fn random_sphere_point(rand: Vec3) -> Vec3 {
+fn random_sphere_point(rand: Vec3) -> Vec3 {
     let ang1 = (rand.x + 1.0) * PI;
     let u = rand.y;
     let u2 = u * u;
@@ -39,12 +39,12 @@ pub(crate) fn random_sphere_point(rand: Vec3) -> Vec3 {
     vec3(x, y, z)
 }
 
-pub(crate) fn normal_oriented_hemisphere_point(rand: Vec3, n: Vec3) -> Vec3 {
+fn normal_oriented_hemisphere_point(rand: Vec3, n: Vec3) -> Vec3 {
     let v = random_sphere_point(rand);
     v * v.dot(n).signum()
 }
 
-pub(crate) fn random_cosine_weighted_hemisphere_point(rand: Vec3, n: Vec3) -> Vec3 {
+fn random_cosine_weighted_hemisphere_point(rand: Vec3, n: Vec3) -> Vec3 {
     let r = rand.x * 0.5 + 0.5;
     let angle = PI * rand.y + PI;
     let sr = r.sqrt();
@@ -59,7 +59,7 @@ pub(crate) fn random_cosine_weighted_hemisphere_point(rand: Vec3, n: Vec3) -> Ve
     tangent * ph.x + bitangent * ph.y + n * ph.z
 }
 
-pub(crate) fn get_voxel3(
+fn get_voxel3(
     pos: Vec3,
     blocks: &Image!(3D, type = i32, sampled),
     block_palette: &Image!(3D, type = u32, sampled),
@@ -76,7 +76,7 @@ pub(crate) fn get_voxel3(
     ivec2(voxel, block_id)
 }
 
-pub(crate) fn cast_ray_fast2(
+fn cast_ray_fast2(
     blocks: &Image!(3D, type = i32, sampled),
     block_palette: &Image!(3D, type = u32, sampled),
     voxel_palette: &Image!(2D, type = f32, sampled = false),
@@ -185,7 +185,7 @@ pub(crate) fn cast_ray_fast2(
     current_voxel != 0
 }
 
-pub(crate) fn spherical_fibonacci(i: f32, n: f32) -> Vec3 {
+fn spherical_fibonacci(i: f32, n: f32) -> Vec3 {
     let phi_val = i * (f32::sqrt(5.0) * 0.5 + 0.5 - 1.0);
     let phi = 2.0 * PI * (phi_val - phi_val.floor());
 
@@ -195,11 +195,11 @@ pub(crate) fn spherical_fibonacci(i: f32, n: f32) -> Vec3 {
     vec3(phi.cos() * sin_theta, phi.sin() * sin_theta, cos_theta)
 }
 
-pub(crate) fn probe_id_to_ray_dir(probe_id: i32) -> Vec3 {
+fn probe_id_to_ray_dir(probe_id: i32) -> Vec3 {
     spherical_fibonacci(probe_id as f32, RAYS_PER_PROBE as f32)
 }
 
-pub(crate) fn trace_ray(
+fn trace_ray(
     blocks: &Image!(3D, type = i32, sampled),
     block_palette: &Image!(3D, type = u32, sampled),
     voxel_palette: &Image!(2D, type = f32, sampled=false),
@@ -254,7 +254,7 @@ pub(crate) fn trace_ray(
     light
 }
 
-pub(crate) fn store_probe(
+fn store_probe(
     radiance_cache2read: &Image!(3D, type = f32, sampled = false),
     radiance_cache2write: &Image!(3D, format = rgb10_a2, sampled = false),
     probe_pos: IVec3,
@@ -270,7 +270,7 @@ pub(crate) fn store_probe(
 
 #[spirv(compute(threads(64, 1, 1)))]
 #[unsafe(no_mangle)]
-pub fn radiance_comp(
+pub fn main(
     #[spirv(global_invocation_id)] global_id: UVec3,
     #[spirv(subgroup_id)] subgroup_id: u32,
     #[spirv(subgroup_size)] subgroup_size: u32,

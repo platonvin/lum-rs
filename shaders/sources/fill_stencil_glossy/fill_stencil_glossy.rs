@@ -3,7 +3,7 @@ use common::*;
 
 #[spirv(fragment)]
 #[unsafe(no_mangle)]
-pub fn fill_stencil_glossy_frag(
+pub fn main(
     #[spirv(descriptor_set = 0, binding = 0, input_attachment_index = 0)] mat_norm: &Image!(
          subpass,
          type = u32,

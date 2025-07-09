@@ -9,7 +9,7 @@ pub struct MapPushConstants {
 
 #[spirv(compute(threads(4, 4, 4)))]
 #[unsafe(no_mangle)]
-pub fn map_comp(
+pub fn main(
     #[spirv(push_constant)] pco: &MapPushConstants,
 
     #[spirv(descriptor_set = 0, binding = 0)] blocks: &Image!(3D, format = r16i, sampled = false),

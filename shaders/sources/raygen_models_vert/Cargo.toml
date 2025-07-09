@@ -1,12 +1,12 @@
 cargo-features = ["edition2024"]
 
 [package]
-name = "grass"
+name = "raygen_models_vert"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-path = "grass.rs"
+path = "raygen_models_vert.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]

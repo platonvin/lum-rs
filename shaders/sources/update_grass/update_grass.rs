@@ -10,7 +10,7 @@ pub struct UpdateGrassPushConstants {
 
 #[spirv(compute(threads(8, 8, 1)))]
 #[unsafe(no_mangle)]
-pub fn update_grass_comp(
+pub fn main(
     #[spirv(descriptor_set = 0, binding = 0)] state_image: &Image!(
         2D,
         format = rg16f,

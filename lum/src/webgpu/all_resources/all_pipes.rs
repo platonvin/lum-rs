@@ -12,7 +12,7 @@ use crate::{
 };
 use containers::array3d::Dim3;
 use containers::Ring;
-// use shaders::Shader;
+use shaders::Shader;
 use std::mem::offset_of;
 use wgpu::*;
 

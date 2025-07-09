@@ -1,0 +1,13 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "perlin_3d"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "perlin_3d.rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+common = { path = "../../common" }
