@@ -561,7 +561,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         );
     }
 
-    pub fn destroy_all_pipes(lumal: &mut Renderer, mut pipes: AllPipes) {
+    pub fn destroy_all_pipes(lumal: &mut Renderer, pipes: AllPipes) {
         lumal.destroy_raster_pipe(pipes.lightmap_blocks_pipe);
         lumal.destroy_raster_pipe(pipes.lightmap_models_pipe);
 

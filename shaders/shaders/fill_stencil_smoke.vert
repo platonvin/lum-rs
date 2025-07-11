@@ -6,7 +6,7 @@ layout (location = 0) out float end_depth;
 #include "common/ext.glsl"
 #include "common/ubo.glsl"
 
-layout(push_constant) uniform restrict readonly constants{
+layout(push_constant) uniform restrict constants{
     vec4 originSize;
 } pco;
 

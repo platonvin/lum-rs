@@ -59,7 +59,6 @@ vec3 get_shift_from_depth_uv(float depth_diff, vec2 uv){
         (ubo.camdir.xyz*depth_diff);
     return shift;
 }
-const float COLOR_ENCODE_VALUE = 1.0;
 vec3 decode_color(vec3 encoded_color){
     return encoded_color*COLOR_ENCODE_VALUE;
 }

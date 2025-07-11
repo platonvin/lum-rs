@@ -12,6 +12,7 @@ precision highp float;
 #include "common/ext.glsl"
 #include "common/ubo.glsl"
 #include "common/consts.glsl"
+#include "common/lib.glsl"
 
 layout(set = 0, binding = 1) uniform usampler2D matNorm;
 layout(set = 0, binding = 2) uniform sampler2D depthBuffer;
@@ -25,28 +26,9 @@ layout(location = 0) out vec4 frame_color;
 
 // layout(constant_id = 1) const int MAX_DEPTH = 1;
 // layout(constant_id = 2) const int NUM_SAMPLES = 1; //for 4090 owners i guess
-layout(constant_id = 0) const int BLOCK_PALETTE_SIZE_X = 64;
-
-const float PI = 3.1415926535;
 
 ivec2 size;
 ivec2 pix;
-
-struct Material{
-    vec3 color;
-    float emmitance;
-    // vec3 diffuse_light;
-    float roughness;
-    // float transparancy;
-};
-
-vec3 get_origin_from_depth(float depth, vec2 clip_pos){
-    vec3 origin = ubo.campos.xyz +
-        (ubo.horizline_scaled.xyz*clip_pos.x) + 
-        (ubo.vertiline_scaled.xyz*clip_pos.y) +
-        (ubo.camdir.xyz*depth);
-    return origin;
-}
 
 int GetBlock(in ivec3 block_pos){
     int block;
@@ -82,24 +64,17 @@ ivec2 GetVoxel(in vec3 pos){
     return ivec2(voxel, block_id);
 }
 
-Material GetMat(in int voxel){
-    Material mat;
+// Material GetMat(in int voxel){
+//     Material mat;
 
-    mat.color.r      = texelFetch(voxelPalette, ivec2(0,voxel), 0).r;
-    mat.color.g      = texelFetch(voxelPalette, ivec2(1,voxel), 0).r;
-    mat.color.b      = texelFetch(voxelPalette, ivec2(2,voxel), 0).r;
-    // mat.transparancy = 1.0 - texelFetch(voxelPalette, ivec2(3,voxel), 0).r;
-    mat.emmitance    =       texelFetch(voxelPalette, ivec2(4,voxel), 0).r;
-    mat.roughness    =       texelFetch(voxelPalette, ivec2(5,voxel), 0).r;
-    return mat;
-}
-
-vec3 sample_radiance(vec3 position, vec3 normal){
-    vec3 block_pos = (position+normal*16.0) / 16.0;
-    vec3 sampled_light = textureLod(radianceCache, (block_pos+0.5) / vec3(world_size), 0).rgb;
-
-    return sampled_light;
-}
+//     mat.color.r      = texelFetch(voxelPalette, ivec2(0,voxel), 0).r;
+//     mat.color.g      = texelFetch(voxelPalette, ivec2(1,voxel), 0).r;
+//     mat.color.b      = texelFetch(voxelPalette, ivec2(2,voxel), 0).r;
+//     // mat.transparancy = 1.0 - texelFetch(voxelPalette, ivec2(3,voxel), 0).r;
+//     mat.emmitance    =       texelFetch(voxelPalette, ivec2(4,voxel), 0).r;
+//     mat.roughness    =       texelFetch(voxelPalette, ivec2(5,voxel), 0).r;
+//     return mat;
+// }
 
 bool initTvals(out vec3 tMax, out vec3 tDelta, out ivec3 blockPos, in vec3 rayOrigin, in vec3 rayDirection){
     vec3 effective_origin = rayOrigin;
@@ -219,7 +194,7 @@ bool CastRay_fast(in vec3 origin, in vec3 direction,
         vec3 tFinal = tMax - tDelta;
         fraction = dot(tFinal, fcurrentStepDiretion);
 
-        material = GetMat(current_voxel_id);
+        material = get_mat(current_voxel_id, voxelPalette);
     }
 
     return (current_voxel !=0);
@@ -287,7 +262,7 @@ bool CastRay_precise(in vec3 rayOrigin, in vec3 rayDirection,
     vec3 tFinal = tMax - tDelta;
     block_fraction = dot(tFinal, vec3(currentStepDiretion));
 
-    material = GetMat(current_voxel);
+    material = get_mat(current_voxel, voxelPalette);
 
     fraction = block_fraction;
 
@@ -316,7 +291,7 @@ void ProcessHit(inout vec3 origin, inout vec3 direction,
             origin = origin + (fraction * direction);
             // origin += normal * 0.001; //TODO
 
-            vec3 diffuse_light = sample_radiance(origin, normal);
+            vec3 diffuse_light = sample_radiance(origin, normal, radianceCache);
             // vec3 diffuse_light = vec3(0);
             
             accumulated_reflection *= material.color; 
@@ -418,7 +393,7 @@ bool ssr_traceRay(in vec3 origin, in vec3 direction, inout vec2 pix, inout float
         if (ssr_intersects(depth, pix, smooth_intersection, fraction_step)) {
             if(smooth_intersection){
                     normal = load_norm(ivec2(pix));
-                    material = GetMat(load_mat(ivec2(pix)));
+                    material = get_mat(load_mat(ivec2(pix)), voxelPalette);
                 return true;
             } else {
                 // fraction -= fraction_step;
@@ -432,21 +407,13 @@ bool ssr_traceRay(in vec3 origin, in vec3 direction, inout vec2 pix, inout float
     return false;
 }
 
-const float COLOR_ENCODE_VALUE = 1.0;
-vec3 decode_color(vec3 encoded_color){
-    return encoded_color*COLOR_ENCODE_VALUE;
-}
-vec3 encode_color(vec3 color){
-    return color/COLOR_ENCODE_VALUE;
-}
-
 // layout(local_size_x = 8, local_size_y = 8) in;
 void main(void){
     size = textureSize(matNorm, 0);
 
     pix = ivec2(gl_FragCoord.xy);
 
-    Material   mat       = GetMat(load_mat(pix));
+    Material mat = get_mat(load_mat(pix), voxelPalette);
     vec3 direction = ubo.camdir.xyz;
 
     vec2 clip_pos = gl_FragCoord.xy / ubo.frame_size * 2.0 - 1.0;

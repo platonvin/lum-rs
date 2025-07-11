@@ -82,7 +82,7 @@ where
         let bit = pos % Self::BITS;
         let one: T = 1_u8.into();
         let mask = one << bit;
-        (*self.data.get_unchecked(chunk) & mask) != T::default()
+        (*unsafe { self.data.get_unchecked(chunk) } & mask) != T::default()
     }
 
     pub fn set(&mut self, x: usize, y: usize, z: usize, value: bool) {
@@ -110,7 +110,7 @@ where
         let bit = pos % Self::BITS;
         let one: T = 1_u8.into();
         let mask = one << bit;
-        let slot = self.data.get_unchecked_mut(chunk);
+        let slot = unsafe { self.data.get_unchecked_mut(chunk) };
         if value {
             *slot |= mask;
         } else {

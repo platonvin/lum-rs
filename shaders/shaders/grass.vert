@@ -20,7 +20,7 @@ but 32 is clearly not multiply of 11, and sadly 11x3=33 is one more than 32
 
 layout(set = 0, binding = 1) uniform sampler2D state;
 
-layout(push_constant) uniform restrict readonly PushConstants{
+layout(push_constant) uniform restrict PushConstants{
     vec4 shift;
     int size; //total size*size blades
     int time; //seed
@@ -29,11 +29,6 @@ layout(push_constant) uniform restrict readonly PushConstants{
 } pco;
 
 layout(location = 0) lowp flat out uvec4 mat_norm;
-
-const int BLOCK_PALETTE_SIZE_X = 64;
-const int STATIC_BLOCK_COUNT = 15; // 0 + 1..static block count so >=STATIC_BLOCK_COUNT
-const float PI = 3.1415926535;
-// const ivec3 world_size = ivec3(48,48,16);
 
 ivec3 voxel_in_palette(ivec3 relative_voxel_pos, int block_id) {
     int block_x = block_id % BLOCK_PALETTE_SIZE_X;

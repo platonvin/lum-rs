@@ -1,5 +1,7 @@
 IMPORTANT: Lum uses a RIGHT-HANDED coordinate system everywhere.
 
+
+remove clamps from shaders from everywhere (docs where clamps happen, maybe do them everywhere explicitly)
 define a price for state chagne and move things a little bit even if makes it depth not sorted
 
 todoy:

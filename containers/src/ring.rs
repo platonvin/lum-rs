@@ -230,10 +230,6 @@ pub struct RingIterator<'a, T> {
     ring: &'a Ring<T>,
     position: usize,
 }
-pub struct RingIteratorMut<'a, T> {
-    ring: &'a mut Ring<T>,
-    position: usize,
-}
 
 impl<'a, T> IntoIterator for &'a Ring<T> {
     type Item = &'a T;

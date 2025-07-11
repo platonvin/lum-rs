@@ -1639,17 +1639,18 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
                 wgpu::IndexFormat::Uint16,
             );
 
-            #[repr(C)] // for push constants
-            #[derive(AsU8Slice)] // allow cast to &[u8]
-            struct PushConstant {
-                rot: quat,
-                shift: vec4,
-            }
-            let push_constant = PushConstant {
-                rot: mrr.trans.rotation,
-                // 1 cause we will add 1 anyways, right?
-                shift: vec4!(mrr.trans.translation, 1),
-            };
+            // #[repr(C)] // for push constants
+            // #[derive(AsU8Slice)] // allow cast to &[u8]
+            // struct PushConstant {
+            //     rot: quat,
+            //     shift: vec4,
+            // }
+            // dont need it :)
+            // let _push_constant = PushConstant {
+            //     rot: mrr.trans.rotation,
+            //     // 1 cause we will add 1 anyways, right?
+            //     shift: vec4!(mrr.trans.translation, 1),
+            // };
 
             macro_rules! CHECK_AND_DRAW_BLOCK_FACE {
                 ($__normal:expr, $__face:ident) => {
@@ -2555,11 +2556,11 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
         self.renderer.recreate_window(new_size);
     }
 
-    fn get_world_blocks(&self) -> Array3DView<InternalBlockId, MeshBlock, D> {
+    fn get_world_blocks(&'_ self) -> Array3DView<'_, InternalBlockId, MeshBlock, D> {
         self.renderer.origin_world.as_view()
     }
 
-    fn get_world_blocks_mut(&mut self) -> Array3DViewMut<InternalBlockId, MeshBlock, D> {
+    fn get_world_blocks_mut(&'_ mut self) -> Array3DViewMut<'_, InternalBlockId, MeshBlock, D> {
         self.renderer.origin_world.as_view_mut()
     }
 

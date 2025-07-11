@@ -10,10 +10,11 @@
 #![allow(clippy::too_many_arguments)] // LOL
 #![allow(clippy::option_map_unit_fn)]
 
-use containers::array3d::{ConstDims, Dim3, RuntimeDims};
-use qvek::vek::FrustumPlanes;
-use qvek::{uvec2, vec3};
-use types::{mat4, uvec2, uvec3, vec2, vec3};
+pub use shaders;
+
+use containers::array3d::{ConstDims, Dim3};
+use qvek::{vek::FrustumPlanes, *};
+use types::*;
 
 pub const BLOCK_SIZE: u32 = 16;
 #[allow(non_upper_case_globals)]
@@ -98,7 +99,7 @@ impl Default for SunLight {
 }
 
 impl Camera {
-    fn update_camera(&mut self, y_flip: bool) {
+    pub fn update_camera(&mut self, y_flip: bool) {
         // hey, wats up?
         // up is 0,0,1
         let up = vec3!(0, 0, 1);
@@ -125,7 +126,7 @@ impl Camera {
 }
 
 impl SunLight {
-    fn update_light_transform<D: Dim3>(&mut self, world_size: D, y_flip: bool) {
+    pub fn update_light_transform<D: Dim3>(&mut self, world_size: D, y_flip: bool) {
         // TODO: remove magic
         // :wizard_sad:
         let up = vec3!(0, 0, 1).normalized();

@@ -12,7 +12,7 @@ can probably be optimized by few times
 #include "common/ubo.glsl"
 #include "common/consts.glsl"
 
-layout(push_constant) uniform readonly restrict constants{
+layout(push_constant) uniform restrict constants{
     vec4 shift;
     int size;
     int time; //that thing that no one can define 
@@ -21,10 +21,6 @@ layout(set = 0, binding = 1) uniform sampler2D state;
 
 layout(location = 0) out vec3 orig;
 
-const int BLOCK_PALETTE_SIZE_X = 64;
-const int STATIC_BLOCK_COUNT = 15; // 0 + 1..static block count so >=STATIC_BLOCK_COUNT
-const float PI = 3.1415926535;
-// const ivec3 world_size = ivec3(48,48,16);
 const int lods = 6;
 
 ivec3 voxel_in_palette(ivec3 relative_voxel_pos, int block_id) {

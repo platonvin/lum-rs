@@ -447,7 +447,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         Self::destroy_all_samplers(&mut lumal, self.samplers);
         Self::destroy_all_command_buffers(&lumal, &self.cmdbufs);
 
-        unsafe { lumal.destroy() };
+        lumal.destroy();
     }
 
     fn destroy_dependent(

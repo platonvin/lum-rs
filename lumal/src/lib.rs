@@ -19,22 +19,22 @@ pub mod barriers;
 pub mod buffers;
 pub mod descriptors;
 pub mod images;
-pub mod macros;
 pub mod pipes;
 pub mod renderer;
 pub mod rpass;
 pub mod samplers;
 
 pub use ash::vk;
+#[cfg(feature = "debug_validation_names")]
+use ash::vk::DebugUtilsObjectNameInfoEXT;
 use ash::{
     ext::debug_utils,
     khr::{push_descriptor, surface, swapchain},
     prelude::VkResult,
     vk::{
-        CommandPool, ConformanceVersion, DebugUtilsObjectNameInfoEXT, DescriptorPool, Extent2D,
-        Fence, Format, ImageAspectFlags, PhysicalDevice, Queue, Semaphore, SurfaceKHR,
-        SwapchainKHR, EXT_DEBUG_UTILS_NAME, KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_NAME,
-        KHR_PORTABILITY_ENUMERATION_NAME,
+        CommandPool, ConformanceVersion, DescriptorPool, Extent2D, Fence, Format, ImageAspectFlags,
+        PhysicalDevice, Queue, Semaphore, SurfaceKHR, SwapchainKHR, EXT_DEBUG_UTILS_NAME,
+        KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_NAME, KHR_PORTABILITY_ENUMERATION_NAME,
     },
     Device, Entry, Instance,
 };
@@ -170,19 +170,6 @@ pub struct RenderPass {
     pub extent: vk::Extent2D,
 }
 
-// // Structure for SwapChainSupportDetails
-// pub(crate) struct SwapChainSupportDetails {
-//     pub capabilities: vk::SurfaceCapabilitiesKHR,
-//     pub formats: Vec<vk::SurfaceFormatKHR>,
-//     pub present_modes: Vec<vk::PresentModeKHR>,
-// }
-
-// impl SwapChainSupportDetails {
-//     pub fn is_suitable(&self) -> bool {
-//         !self.formats.is_empty() && !self.present_modes.is_empty()
-//     }
-// }
-
 /// Settings for some runtime properties of Lumal
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LumalSettings {
@@ -314,6 +301,7 @@ pub struct BufferDeletion {
     pub lifetime: i32,
 }
 
+/// Main lumal struct, aka *context*, bundling all necessary structs
 pub struct Renderer {
     /// Vulkan memory allocator (for buffer and images)
     /// we do not allocate a lot in runtime so small overhead is fine
@@ -354,10 +342,15 @@ pub struct Renderer {
     pub instance: Instance,
     /// Internal Vulkan (logical) device
     pub device: Device,
+    /// loader for surface-related functions
     pub surface_loader: surface::Instance,
+    /// loader for device-related functions
     pub swapchain_loader: swapchain::Device,
+    /// loader for debug_utils-related functions
     pub debug_utils_loader: debug_utils::Instance,
+    /// loader for debug_utils-related functions
     pub debug_utils_device_loader: debug_utils::Device,
+    /// loader for push_descriptors-related functions
     pub push_descriptors_loader: push_descriptor::Device,
 
     /// Global counter of rendered frames, mostly for rng
@@ -575,13 +568,13 @@ impl Renderer {
 
     /// Destroys the renderer.
     /// Buffers, images, pipelines - everything created manually should be destroyed manually before this call
-    pub unsafe fn destroy(mut self) {
+    pub fn destroy(mut self) {
         self.process_deletion_queues_untill_all_done();
         {
-            self.device.destroy_descriptor_pool(self.descriptor_pool, None);
+            unsafe { self.device.destroy_descriptor_pool(self.descriptor_pool, None) };
             self.descriptor_pool = vk::DescriptorPool::null();
         }
-        self.device.destroy_command_pool(self.command_pool, None);
+        unsafe { self.device.destroy_command_pool(self.command_pool, None) };
         self.destroy_swapchain();
         self.destroy_sync_primitives();
 
@@ -589,30 +582,32 @@ impl Renderer {
         // how the fuck am i supposed to do it? Put it 7 lines below and it fucking segfaults
         std::mem::drop(self.allocator);
 
-        self.device.destroy_device(None);
+        unsafe { self.device.destroy_device(None) };
         unsafe {
             self.surface_loader.destroy_surface(self.surface, None);
         }
-        self.instance.destroy_instance(None);
+        unsafe { self.instance.destroy_instance(None) };
     }
 
-    unsafe fn destroy_swapchain(&self) {
+    fn destroy_swapchain(&self) {
         self.swapchain_images
             .iter()
-            .for_each(|v| self.device.destroy_image_view(v.view, None));
+            .for_each(|v| unsafe { self.device.destroy_image_view(v.view, None) });
         unsafe {
             self.swapchain_loader.destroy_swapchain(self.swapchain, None);
         }
     }
 
-    unsafe fn destroy_sync_primitives(&self) {
-        self.in_flight_fences.iter().for_each(|f| self.device.destroy_fence(*f, None));
+    fn destroy_sync_primitives(&self) {
+        self.in_flight_fences
+            .iter()
+            .for_each(|f| unsafe { self.device.destroy_fence(*f, None) });
         self.render_finished_semaphores
             .iter()
-            .for_each(|s| self.device.destroy_semaphore(*s, None));
+            .for_each(|s| unsafe { self.device.destroy_semaphore(*s, None) });
         self.image_available_semaphores
             .iter()
-            .for_each(|s| self.device.destroy_semaphore(*s, None));
+            .for_each(|s| unsafe { self.device.destroy_semaphore(*s, None) });
     }
 
     /// Creates command buffer for single-time use (like loading resource in runtime)
@@ -1079,13 +1074,13 @@ extern "system" fn debug_callback(
 }
 
 /// Picks a suitable physical device.
-unsafe fn pick_physical_device(
+fn pick_physical_device(
     instance: &Instance,
     entry: &Entry,
     surface: &SurfaceKHR,
 ) -> PhysicalDevice {
-    for physical_device in instance.enumerate_physical_devices().unwrap() {
-        let properties = instance.get_physical_device_properties(physical_device);
+    for physical_device in unsafe { instance.enumerate_physical_devices().unwrap() } {
+        let properties = unsafe { instance.get_physical_device_properties(physical_device) };
         if let Err(err) = check_physical_device(instance, entry, surface, &physical_device) {
             //TODO:
             println!(
@@ -1106,7 +1101,7 @@ unsafe fn pick_physical_device(
 }
 
 /// Checks that a physical device is suitable.
-unsafe fn check_physical_device(
+fn check_physical_device(
     instance: &Instance,
     entry: &Entry,
     surface: &SurfaceKHR,
@@ -1181,15 +1176,15 @@ impl std::hash::Hash for VkExtName {
 }
 
 /// Checks that a physical device supports the required device extensions.
-unsafe fn check_physical_device_extensions(
+fn check_physical_device_extensions(
     instance: &Instance,
     physical_device: &vk::PhysicalDevice,
 ) -> VkResult<()> {
-    let available_exts: HashSet<VkExtName> = instance
-        .enumerate_device_extension_properties(*physical_device)?
-        .iter()
-        .map(|prop| VkExtName::from_raw(prop.extension_name))
-        .collect::<HashSet<_>>();
+    let available_exts: HashSet<VkExtName> =
+        unsafe { instance.enumerate_device_extension_properties(*physical_device) }?
+            .iter()
+            .map(|prop| VkExtName::from_raw(prop.extension_name))
+            .collect::<HashSet<_>>();
 
     for &req in REQUIRED_DEVICE_EXTENSIONS.iter() {
         if !available_exts.contains(&req) {
@@ -1207,7 +1202,7 @@ unsafe fn check_physical_device_extensions(
 }
 
 /// Creates a logical device for the picked physical device.
-unsafe fn create_logical_device(
+fn create_logical_device(
     entry: &Entry,
     instance: &Instance,
     surface: &SurfaceKHR,
@@ -1235,7 +1230,7 @@ unsafe fn create_logical_device(
 
     // Required by Vulkan SDK on macOS since 1.3.216.
     if cfg!(target_os = "macos")
-        && entry.try_enumerate_instance_version().unwrap().unwrap()
+        && unsafe { entry.try_enumerate_instance_version().unwrap().unwrap() }
             >= PORTABILITY_MACOS_VERSION.major as u32
     {
         extensions.push(vk::KHR_PORTABILITY_SUBSET_NAME.as_ptr());
@@ -1280,16 +1275,18 @@ unsafe fn create_logical_device(
         ..Default::default()
     };
 
-    let device = instance.create_device(*physical_device, &info, None).unwrap();
+    unsafe {
+        let device = instance.create_device(*physical_device, &info, None).unwrap();
 
-    let graphics_queue = device.get_device_queue(indices.graphics, 0);
-    let present_queue = device.get_device_queue(indices.present, 0);
+        let graphics_queue = device.get_device_queue(indices.graphics, 0);
+        let present_queue = device.get_device_queue(indices.present, 0);
 
-    (device, graphics_queue, present_queue)
+        (device, graphics_queue, present_queue)
+    }
 }
 
 /// Creates a swapchain and swapchain images.
-unsafe fn create_swapchain(
+fn create_swapchain(
     settings: &LumalSettings,
     size: PhysicalSize<u32>,
     instance: &Instance,
@@ -1340,9 +1337,9 @@ unsafe fn create_swapchain(
     };
 
     let swapchain_loader = swapchain::Device::new(instance, device);
-    let swapchain = swapchain_loader.create_swapchain(&info, None).unwrap();
+    let swapchain = unsafe { swapchain_loader.create_swapchain(&info, None).unwrap() };
 
-    let swapchain_images = swapchain_loader.get_swapchain_images(swapchain).unwrap();
+    let swapchain_images = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
 
     let swapchain_images = Ring::from_vec(
         swapchain_images
@@ -1374,7 +1371,7 @@ unsafe fn create_swapchain(
                     ..Default::default()
                 };
 
-                let view = device.create_image_view(&info, None).unwrap();
+                let view = unsafe { device.create_image_view(&info, None).unwrap() };
 
                 // manually give swapchain image views debug names
                 #[cfg(feature = "debug_validation_names")]
@@ -1400,6 +1397,7 @@ unsafe fn create_swapchain(
                         }
                     }
                 };
+                let _ = i; // to supress warning
 
                 Image {
                     image: *vk_img,
@@ -1470,7 +1468,7 @@ fn get_swapchain_extent(
 }
 
 /// Creates a command pool
-unsafe fn create_command_pool(
+fn create_command_pool(
     instance: &Instance,
     entry: &Entry,
     device: &Device,
@@ -1483,10 +1481,10 @@ unsafe fn create_command_pool(
         queue_family_index: indices.graphics,
         ..Default::default()
     };
-    device.create_command_pool(&info, None).unwrap()
+    unsafe { device.create_command_pool(&info, None).unwrap() }
 }
 
-unsafe fn create_sync_objects(device: &Device) -> (Ring<Semaphore>, Ring<Semaphore>, Ring<Fence>) {
+fn create_sync_objects(device: &Device) -> (Ring<Semaphore>, Ring<Semaphore>, Ring<Fence>) {
     let semaphore_info = vk::SemaphoreCreateInfo::default();
     let fence_info = vk::FenceCreateInfo {
         flags: vk::FenceCreateFlags::SIGNALED,
@@ -1498,9 +1496,11 @@ unsafe fn create_sync_objects(device: &Device) -> (Ring<Semaphore>, Ring<Semapho
     let mut render_finished_semaphores = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
     let mut in_flight_fences = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
     for i in 0..DEFAULT_FRAMES_IN_FLIGHT {
-        image_available_semaphores[i] = device.create_semaphore(&semaphore_info, None).unwrap();
-        render_finished_semaphores[i] = device.create_semaphore(&semaphore_info, None).unwrap();
-        in_flight_fences[i] = device.create_fence(&fence_info, None).unwrap();
+        unsafe {
+            image_available_semaphores[i] = device.create_semaphore(&semaphore_info, None).unwrap();
+            render_finished_semaphores[i] = device.create_semaphore(&semaphore_info, None).unwrap();
+            in_flight_fences[i] = device.create_fence(&fence_info, None).unwrap();
+        }
     }
 
     (
@@ -1517,13 +1517,14 @@ struct QueueFamilyIndices {
 }
 
 impl QueueFamilyIndices {
-    unsafe fn get(
+    fn get(
         instance: &Instance,
         entry: &Entry,
         surface: &SurfaceKHR,
         physical_device: &vk::PhysicalDevice,
     ) -> VkResult<Self> {
-        let properties = instance.get_physical_device_queue_family_properties(*physical_device);
+        let properties =
+            unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
         let surface_loader = surface::Instance::new(entry, instance);
 
         let graphics = properties
@@ -1533,11 +1534,13 @@ impl QueueFamilyIndices {
 
         let mut present = None;
         for (index, _) in properties.iter().enumerate() {
-            if surface_loader.get_physical_device_surface_support(
-                *physical_device,
-                index as u32,
-                *surface,
-            )? {
+            if unsafe {
+                surface_loader.get_physical_device_surface_support(
+                    *physical_device,
+                    index as u32,
+                    *surface,
+                )
+            }? {
                 present = Some(index as u32);
                 break;
             }
@@ -1560,7 +1563,7 @@ struct SwapchainSupport {
 }
 
 impl SwapchainSupport {
-    unsafe fn get(
+    fn get(
         instance: &Instance,
         entry: &Entry,
         physical_device: &vk::PhysicalDevice,
@@ -1568,13 +1571,15 @@ impl SwapchainSupport {
     ) -> VkResult<SwapchainSupport> {
         let surface_loader = surface::Instance::new(entry, instance);
 
-        Ok(SwapchainSupport {
-            capabilities: surface_loader
-                .get_physical_device_surface_capabilities(*physical_device, *surface)?,
-            formats: surface_loader
-                .get_physical_device_surface_formats(*physical_device, *surface)?,
-            present_modes: surface_loader
-                .get_physical_device_surface_present_modes(*physical_device, *surface)?,
+        Ok(unsafe {
+            SwapchainSupport {
+                capabilities: surface_loader
+                    .get_physical_device_surface_capabilities(*physical_device, *surface)?,
+                formats: surface_loader
+                    .get_physical_device_surface_formats(*physical_device, *surface)?,
+                present_modes: surface_loader
+                    .get_physical_device_surface_present_modes(*physical_device, *surface)?,
+            }
         })
     }
 }

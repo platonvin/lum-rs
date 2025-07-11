@@ -92,7 +92,7 @@ pub fn cast_slice<T>(b: &'static [u8]) -> &'static [T] {
 // This is done this way for binary size and perfomance
 
 /// Trait for abstracting (internal) renderer resource loading (to/from GPU)
-pub(crate) trait LoadInterface {
+pub trait LoadInterface {
     type Buffer;
     type Image;
     type BlockId: Clone;

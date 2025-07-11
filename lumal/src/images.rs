@@ -1,4 +1,5 @@
-/// Simple wrapper crate for managing Image's - bundles of vk::Image, vk::ImageView and some metadata
+//! Simple wrapper crate for managing Image's - bundles of vk::Image, vk::ImageView and some metadata
+
 use crate::Renderer;
 use crate::{set_debug_names, Image};
 use ash::vk;

@@ -15,7 +15,7 @@ layout(location = 1) out flat uint bunorm;
 
 layout(binding = 1, set = 0) uniform usampler3D blockPalette;
 
-layout(scalar, push_constant) restrict readonly uniform constants{
+layout(scalar, push_constant) restrict uniform constants{
     int16_t block;
     i16vec3 shift;
     u8vec4 unorm;

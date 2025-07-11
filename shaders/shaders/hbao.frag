@@ -10,6 +10,7 @@ precision highp int;
 #include "common/ext.glsl"
 #include "common/ubo.glsl"
 #include "common/consts.glsl"
+#include "common/lib.glsl"
 
 layout(location = 0) out vec4 frame_color;
 
@@ -25,9 +26,6 @@ layout(std430, binding = 1, set = 0) uniform restrict readonly LutBuffer {
 } lut;
 layout(input_attachment_index = 0, set = 0, binding = 2) uniform usubpassInput matNorm;
 layout(set = 0, binding = 3) uniform sampler2D depthBuffer;
-
-const float PI = 3.1415926535;
-// const ivec3 world_size = ivec3(48,48,16);
 
 vec3 load_norm(){
     // i16vec3 nenc = i16vec3(subpassLoad(matNorm).gba);
@@ -56,13 +54,6 @@ float load_depth(vec2 uv){
 //         (ubo.camdir.xyz*depth_diff);
 //     return shift;
 // }
-const float COLOR_ENCODE_VALUE = 1.0;
-vec3 decode_color(vec3 encoded_color){
-    return encoded_color*COLOR_ENCODE_VALUE;
-}
-vec3 encode_color(vec3 color){
-    return color/COLOR_ENCODE_VALUE;
-}
 
 mat2 rotate2d(float a) {
 	float s = sin(a);
@@ -70,7 +61,7 @@ mat2 rotate2d(float a) {
 	mat2 m = mat2(c, s, -s, c);
 	return m;
 }
-float square(float x) {return x*x;}
+
 void main() {
     // horizline_doublescaled = ubo.horizline_scaled.xyz*2.0;
     // vertiline_doublescaled = ubo.vertiline_scaled.xyz*2.0;

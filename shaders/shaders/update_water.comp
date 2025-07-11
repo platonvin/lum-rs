@@ -15,13 +15,12 @@ precision highp float;
 //32x32x6
 layout(set = 0, binding = 0, rgba16f) uniform image2D heighmap;
 
-layout(push_constant) uniform readonly restrict constants{
+layout(push_constant) uniform restrict constants{
     vec2 windDirection;
     float time;
 } pco;
 
 // const ivec3 world_size = ivec3(48,48,16);
-const float PI = 3.1415926535;
 const int lods = 6;
 
 float calculate_height(vec2 local_pos, float time){

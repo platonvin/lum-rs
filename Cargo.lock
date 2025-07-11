@@ -583,7 +583,6 @@ dependencies = [
  "log",
  "lum",
  "pollster",
- "shaders",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

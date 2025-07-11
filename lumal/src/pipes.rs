@@ -78,7 +78,7 @@ impl Renderer {
             set_layout_count: used_dset_layouts.len() as u32,
             p_set_layouts: used_dset_layouts.as_ptr(),
             push_constant_range_count: (push_size > 0) as u32,
-            p_push_constant_ranges: if (push_size > 0) {
+            p_push_constant_ranges: if push_size > 0 {
                 &vk::PushConstantRange {
                     stage_flags: vk::ShaderStageFlags::COMPUTE,
                     offset: 0,
@@ -142,7 +142,7 @@ impl Renderer {
         stride: u32,
         input_rate: vk::VertexInputRate,
         topology: vk::PrimitiveTopology,
-        extent: vk::Extent2D,
+        _extent: vk::Extent2D,
         blends: &[BlendAttachment],
         push_size: u32,
         depth_test: DepthTesting,

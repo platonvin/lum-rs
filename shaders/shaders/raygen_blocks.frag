@@ -17,7 +17,6 @@ layout(location = 1) in flat uint bunorm;
 
 layout(location = 0) lowp out uvec4 outMatNorm;
 
-const int BLOCK_PALETTE_SIZE_X = 64;
 ivec3 voxel_in_palette(ivec3 relative_voxel_pos, int block_id) {
     int block_x = block_id % BLOCK_PALETTE_SIZE_X;
     int block_y = block_id / BLOCK_PALETTE_SIZE_X;

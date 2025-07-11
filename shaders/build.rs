@@ -72,18 +72,38 @@ fn compile_spirv_shaders(dest: &Path) -> std::io::Result<Vec<String>> {
 
                     let out_path = dest.join(format!("{}.spv", name));
                     if needs_recompile(&path, &out_path) {
-                        println!("cargo:warning=Compiling SPIR‑V: {}", path.display());
+                        println!("cargo:warning=Compiling SPIR-V: {}", path.display());
                         let status = Command::new("glslc")
                             .arg(&path)
                             .arg("-o")
                             .arg(&out_path)
                             .arg("--target-env=vulkan1.1")
-                            .arg("-g")
+                            // .arg("-g") // TODO: enable in release but not distribution
+                            .arg("-Os") // TODO: enable in release but not distribution
                             .status()
                             .expect("Failed to launch glslc");
                         if !status.success() {
                             panic!("glslc failed on {}", path.display());
                         }
+
+                        let status = Command::new("spirv-opt")
+                            .arg(&out_path)
+                            .arg("-o")
+                            .arg(&out_path)
+                            .arg("-Os")
+                            .arg("--eliminate-dead-functions")
+                            .status()
+                            .expect("Failed to launch spirv-opt");
+                        if !status.success() {
+                            panic!("spirv-opt failed on {}", out_path.display());
+                        }
+                    }
+                    // Emit rerun-if-changed for this file and all of its includes:
+                    let mut deps = Vec::new();
+                    collect_includes_recursively(&path, &mut deps)?;
+                    println!("cargo:rerun-if-changed={}", path.display());
+                    for dep in &deps {
+                        println!("cargo:rerun-if-changed={}", dep.display());
                     }
                     names.push(name);
                 }
@@ -105,7 +125,6 @@ fn collect_wgsl_shaders() -> std::io::Result<Vec<String>> {
         let path = entry?.path();
         if path.is_file() {
             let file_name = path.file_name().unwrap().to_str().unwrap();
-            // assume `.wgsl` suffix
             let name = file_name.trim_end_matches(".wgsl").to_string();
             names.push(name);
         }
@@ -185,13 +204,59 @@ fn generate_shader_enum(out_file: &Path, spirv: &[String], wgsl: &[String]) -> s
     Ok(())
 }
 
-fn needs_recompile(src: &Path, out: &Path) -> bool {
+fn _needs_recompile(src: &Path, out: &Path) -> bool {
     if !out.exists() {
         return true;
     }
     let src_m = fs::metadata(src).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
     let out_m = fs::metadata(out).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
     src_m > out_m
+}
+
+fn needs_recompile(src: &Path, out: &Path) -> bool {
+    if !out.exists() {
+        return true;
+    }
+    let out_m = fs::metadata(out).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
+    let src_m = fs::metadata(src).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
+
+    if src_m > out_m {
+        return true;
+    }
+
+    // all its includes
+    let mut deps = Vec::new();
+    if let Ok(()) = collect_includes_recursively(src, &mut deps) {
+        for dep in deps {
+            if let Ok(dep_m) = fs::metadata(&dep).and_then(|m| m.modified()) {
+                if dep_m > out_m {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn collect_includes_recursively(src: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    let data = fs::read_to_string(src)?;
+    for line in data.lines() {
+        if let Some(rest) = line.trim().strip_prefix("#include") {
+            if let Some(start) = rest.find('"') {
+                if let Some(end) = rest[start + 1..].find('"') {
+                    let inc_path = &rest[start + 1..][..end];
+                    let inc = PathBuf::from("shaders").join(inc_path);
+                    // avoid infinite loops
+                    if out.iter().all(|p| p != &inc) {
+                        out.push(inc.clone());
+                        // recurse into nested includes
+                        collect_includes_recursively(&inc, out)?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn to_pascal(s: &str) -> String {

@@ -1,3 +1,5 @@
+//! Module with code for frame execution and presentation
+
 use crate::*;
 use ash::prelude::VkResult;
 use std::result::Result::Ok;

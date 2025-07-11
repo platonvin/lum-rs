@@ -8,7 +8,7 @@ precision highp int;
 
 layout(set = 0, binding = 1) uniform sampler2D state;
 
-layout(push_constant) uniform restrict readonly PushConstants {
+layout(push_constant) uniform restrict PushConstants {
     vec4 shift;
     int size;
     int time;

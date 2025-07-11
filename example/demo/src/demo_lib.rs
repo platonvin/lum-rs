@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![allow(incomplete_features)]
 #![feature(inherent_associated_types)]
 
 //! Actual code for the Lum example ([bin]s demo_vk and demo_wgpu are 3-line callers of this [lib])
@@ -7,6 +8,8 @@
 use assets::{BlockAsset, ModelAsset};
 use containers::array3d::ConstDims;
 use lum::render_interface::ShaderSource;
+#[cfg(feature = "vk_backend")]
+use lum::shaders;
 use lum::{
     fBLOCK_SIZE, for_zyx,
     render_interface::{FoliageDescriptionBuilder, FoliageDescriptionCreate, RendererInterface},
@@ -330,6 +333,7 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'stati
     let attributes = Window::default_attributes().with_title("Lum demo");
 
     // i typically avoid arcs and restructure code to be simple references & lifetimes, but Window is an exception
+    #[allow(deprecated)]
     let window = Arc::new(event_loop.create_window(attributes).unwrap());
 
     let settings = Settings {

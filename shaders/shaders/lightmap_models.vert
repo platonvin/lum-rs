@@ -13,7 +13,7 @@ layout(binding = 0, set = 0) uniform restrict readonly UniformBufferObject {
 } ubo;
 
 //quatornions!
-layout(push_constant) uniform restrict readonly constants{
+layout(push_constant) uniform restrict constants{
     vec4 rot;
     vec4 shift;
 } pco;

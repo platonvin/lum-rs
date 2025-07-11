@@ -135,21 +135,21 @@ impl<T, D: Dim3> Array3D<T, D> {
     /// # Safety
     /// slice OOB (out-of-bounds) when array OOB (so UB)
     pub unsafe fn get_unchecked(&self, x: usize, y: usize, z: usize) -> &T {
-        self.data.get_unchecked(self.index_internal(x, y, z))
+        unsafe { self.data.get_unchecked(self.index_internal(x, y, z)) }
     }
 
     /// Unchecked mutable reference (no bounds checks)
     /// # Safety
     /// slice OOB (out-of-bounds) when array OOB (so UB)
     pub unsafe fn get_unchecked_mut(&mut self, x: usize, y: usize, z: usize) -> &mut T {
-        self.data.get_unchecked_mut(self.index_internal(x, y, z))
+        unsafe { self.data.get_unchecked_mut(self.index_internal(x, y, z)) }
     }
 
     /// Unchecked setter without bounds checks
     /// # Safety
     /// slice OOB (out-of-bounds) when array OOB (so UB)
     pub unsafe fn set_unchecked(&mut self, x: usize, y: usize, z: usize, value: T) {
-        *self.get_unchecked_mut(x, y, z) = value;
+        *unsafe { self.get_unchecked_mut(x, y, z) } = value;
     }
 }
 

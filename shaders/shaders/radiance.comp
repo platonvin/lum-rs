@@ -7,6 +7,7 @@ precision highp float;
 #extension GL_GOOGLE_include_directive : require
 #include "common/ext.glsl"
 #include "common/consts.glsl"
+#include "common/lib.glsl"
 
 //well, its not really radiance. Its more of a minecraft lighting but raytraced
 //its not that realistic but imho looks good
@@ -25,28 +26,15 @@ layout(std430,set = 0, binding = 5) restrict readonly buffer ReqBuffer{
 	i8vec4 updateReqests[];
 } reqBuffer;
 
-layout(constant_id = 1) const int BLOCK_PALETTE_SIZE_X = 64;
-layout(constant_id = 2) const float REACTIVNESS = 0.01;
+layout(constant_id = 42) const float REACTIVNESS = 0.01;
 
-layout(push_constant) uniform restrict readonly constants{
+layout(push_constant) uniform constants{
     int timeSeed;
     // unused:
     int iters;
 } pco;
 
-#define RAYS_PER_PROBE (64) //TODO: change to spec const
-//funniest thing is that it should even work on amd, tho _light might take twice more
-
-const float PI = 3.1415926535897932384626433832795;
-// const ivec3 world_size = ivec3(48,48,16);
 vec3 globalLightDir = normalize(vec3(0.5, 0.5, -0.9));
-
-struct Material{
-    vec3 color;
-    float emmitance;
-    float roughness;
-    float transparancy; // casually ignoring the fact that i do not have transparency
-};
 
 const uint k = 1103515245U;  // GLIB C
 vec3 hash33( uvec3 x )
@@ -154,15 +142,6 @@ Material GetMat(in int voxel){
     // assumeEXT((mat.emmitance >= 0));
     // assumeEXT((mat.roughness >= 0));
     return mat;
-}
-
-float square(float a){return a*a;}
-
-vec3 sample_radiance(vec3 position, vec3 normal){
-    vec3 block_pos = (position+normal*16.0) / 16.0;
-    vec3 sampled_light = textureLod(radianceCache2read, (block_pos+0.5) / vec3(world_size), 0).rgb;
-
-    return sampled_light;
 }
 
 bool initTvals(out vec3 tMax, out vec3 tDelta, out ivec3 blockPos, in vec3 rayOrigin, in vec3 rayDirection){
@@ -329,7 +308,7 @@ vec3 trace_ray(vec3 ray_pos, vec3 ray_dir){
     hit = CastRay_fast(origin, direction, fraction, normal, material, left_bounds);
 
     if(hit){
-        vec3 propagated_light = sample_radiance(origin+fraction*direction, normal);
+        vec3 propagated_light = sample_radiance(origin+fraction*direction, normal, radianceCache2read);
         light += reflection*propagated_light*material.color + material.color*material.emmitance;
     } else {
         float global_light_participance = -dot(direction, globalLightDir);

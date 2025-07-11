@@ -8,47 +8,19 @@ precision highp int;
 #include "common/ext.glsl"
 #include "common/ubo.glsl"
 #include "common/consts.glsl"
+#include "common/lib.glsl"
 
-// layout(location = 0) in vec3 zero_origin;
-// layout(location = 0) in vec2 clip_pos;
 layout(location = 0) out vec4 smoke_color;
 layout(input_attachment_index = 0, set = 0, binding = 1) uniform subpassInput smoke_depth_far;
 layout(input_attachment_index = 0, set = 0, binding = 2) uniform subpassInput smoke_depth_near;
-layout(set = 0, binding = 3, rgb10_a2) uniform restrict readonly image3D radianceCache;
+layout(set = 0, binding = 3) uniform sampler3D radianceCache;
 layout(set = 0, binding = 4) uniform sampler3D noise;
-
-// const ivec3 world_size = ivec3(48,48,16);
-
-
-// vec3 load_norm(){
-//     // vec3 norm = (imageLoad(matNorm, pixel).gba);
-//     vec3 norm = (subpassLoad(matNorm).gba);
-//     // subpass
-//     return norm;
-// }
-// int load_mat(){
-//     int mat = int(round(subpassLoad(matNorm).x*127.0))+127;
-//     // int mat = int(subpassLoad(matNorm).x);
-//     return mat;
-// }
-
-vec3 sample_probe(ivec3 probe_ipos, vec3 direction){
-    // int closest_id = clamp(int(inverseFibonacciPoint(direction).x), 0,RAYS_PER_PROBE-1);
-    ivec3 probe_ipos_clamped = clamp(probe_ipos, ivec3(0), world_size);
-    ivec3 subprobe_pos;
-          subprobe_pos.x  = probe_ipos_clamped.x; //same as local_pos actually but its optimized away and worth it for modularity
-          subprobe_pos.yz = probe_ipos_clamped.yz; //reuses but its optimized away
-    // vec3 light = imageLoad(radianceCache, clamp(subprobe_pos, ivec3(0), world_size)).xyz;
-    vec3 light = imageLoad(radianceCache, (subprobe_pos)).xyz;
-    return clamp(light, 0, 2);
-}
-float square(float a){return a*a;}
-
+ 
 vec3 sample_radiance(vec3 position, vec3 normal){
     vec3 sampled_light;
 
     float total_weight =      0 ;
-     vec3 total_colour = vec3(0);
+     vec3 total_colour = vec3(0); 
 
     ivec3 zero_probe_ipos = clamp(ivec3(floor(position - 8.0))/16, ivec3(0), world_size);
      vec3 zero_probe_pos = vec3(zero_probe_ipos)*16.0 + 8.0;
@@ -90,7 +62,7 @@ vec3 sample_radiance(vec3 position, vec3 normal){
         //     probe_weight *= probe_weight * probe_weight * (1.0 / square(crushThreshold)); 
         // }
 
-        probe_colour = sample_probe(zero_probe_ipos + offset, direction_to_probe);
+        probe_colour = fetch_probe(zero_probe_ipos + offset, direction_to_probe, radianceCache);
         // probe_colour = vec3(zero_probe_ipos + offset) / vec3(world_size);
 
         probe_weight  = max(1e-7, probe_weight);
@@ -127,7 +99,7 @@ vec3 sample_radiance(vec3 position){
         vec3 trilinear = mix(1.0-alpha, alpha, vec3(offset));
         probe_weight = trilinear.x * trilinear.y * trilinear.z;
         
-        probe_colour = sample_probe(zero_probe_ipos + offset, direction_to_probe);
+        probe_colour = fetch_probe(zero_probe_ipos + offset, direction_to_probe, radianceCache);
 
         total_weight += probe_weight;
         total_colour += probe_weight * probe_colour;
@@ -154,14 +126,6 @@ vec3 cameraRayDirPlane;
 vec3 horizline;
 vec3 vertiline;
 
-vec3 get_origin_from_depth(float depth, vec2 clip_pos){
-    vec3 origin = ubo.campos.xyz +
-        (ubo.horizline_scaled.xyz*clip_pos.x) + 
-        (ubo.vertiline_scaled.xyz*clip_pos.y) +
-        (ubo.camdir.xyz*depth);
-    return origin;
-}
-
 vec2 rotate(vec2 v, float a) {
 	float s = sin(a);
 	float c = cos(a);
@@ -174,14 +138,6 @@ mat2 rotatem(float a) {
 	float c = cos(a);
 	mat2 m = mat2(c, s, -s, c);
 	return m;
-}
-
-const float COLOR_ENCODE_VALUE = 1.0;
-vec3 decode_color(vec3 encoded_color){
-    return encoded_color*COLOR_ENCODE_VALUE;
-}
-vec3 encode_color(vec3 color){
-    return color/COLOR_ENCODE_VALUE;
 }
 
 void main() {
@@ -250,5 +206,5 @@ void main() {
     //1-I because its inverted
     float smoke_opacity = 1.0 - I;
     smoke_color = vec4(encode_color(vec3(final_light)), smoke_opacity);
-    // smoke_color = vec4(encode_color(vec3(final_light)), 0.0);
+    // smoke_color = vec4(encode_color(vec3(0.0)), 1.0);
 } 

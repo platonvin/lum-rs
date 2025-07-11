@@ -6,9 +6,7 @@ use crate::{
     vulkan::{pc_types, BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y},
     Settings, *,
 };
-use crate::{
-    load_interface::LoadInterface, render_interface::RendererInterface, types::*, vulkan::types::*,
-};
+use crate::{load_interface::LoadInterface, render_interface::RendererInterface, vulkan::types::*};
 use aabb::{get_shift, iAABB};
 use containers::Arena;
 use containers::{

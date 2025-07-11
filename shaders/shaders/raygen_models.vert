@@ -14,7 +14,7 @@ layout(location = 0) out vec3 sample_point;
 layout(location = 1) out flat uint normal_encoded_packed;
 // layout(location = 2) out vec3 n;
 
-layout(scalar, push_constant) uniform restrict readonly constants{
+layout(scalar, push_constant) uniform restrict constants{
     vec4 rot;
     vec4 shift;
     vec4 fnormal; //not encoded

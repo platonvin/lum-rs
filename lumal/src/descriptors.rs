@@ -367,7 +367,7 @@ impl Renderer {
     }
 
     // anounce is just a request, this is an actual logic
-    pub(crate) unsafe fn actually_setup_descriptor_impl(
+    pub(crate) fn actually_setup_descriptor_impl(
         descriptor_pool: &vk::DescriptorPool,
         settings: &LumalSettings,
         device: &Device,
@@ -380,14 +380,16 @@ impl Renderer {
         *descriptor_sets = Ring::new(DEFAULT_FRAMES_IN_FLIGHT);
         let dset_layouts = [*dset_layout; DEFAULT_FRAMES_IN_FLIGHT];
         for frame_i in 0..DEFAULT_FRAMES_IN_FLIGHT {
-            descriptor_sets[frame_i] = device
-                .allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
-                    descriptor_pool: *descriptor_pool,
-                    descriptor_set_count: DEFAULT_FRAMES_IN_FLIGHT as u32,
-                    p_set_layouts: dset_layouts.as_ptr(),
-                    ..Default::default()
-                })
-                .unwrap()[0];
+            descriptor_sets[frame_i] = unsafe {
+                device
+                    .allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
+                        descriptor_pool: *descriptor_pool,
+                        descriptor_set_count: DEFAULT_FRAMES_IN_FLIGHT as u32,
+                        p_set_layouts: dset_layouts.as_ptr(),
+                        ..Default::default()
+                    })
+                    .unwrap()
+            }[0];
         }
         assert!(descriptor_sets.len() == DEFAULT_FRAMES_IN_FLIGHT);
 
@@ -479,7 +481,7 @@ impl Renderer {
                 })
                 .collect();
 
-            device.update_descriptor_sets(&writes, &[]);
+            unsafe { device.update_descriptor_sets(&writes, &[]) };
         }
     }
 
@@ -503,18 +505,16 @@ impl Renderer {
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
         // actually setup descriptor
-        unsafe {
-            Self::actually_setup_descriptor_impl(
-                &self.descriptor_pool,
-                &self.settings,
-                &self.device,
-                dset_layout,
-                descriptor_sets,
-                descriptions,
-                default_stages,
-                #[cfg(feature = "debug_validation_names")]
-                debug_name,
-            );
-        }
+        Self::actually_setup_descriptor_impl(
+            &self.descriptor_pool,
+            &self.settings,
+            &self.device,
+            dset_layout,
+            descriptor_sets,
+            descriptions,
+            default_stages,
+            #[cfg(feature = "debug_validation_names")]
+            debug_name,
+        );
     }
 }
