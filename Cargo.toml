@@ -28,6 +28,10 @@ overflow-checks = true
 incremental = true
 debug = true
 
+# wtf so does it work or not? TODO:
+# features = ["lum/debug_validation_names"]
+
+
 [profile.dev.package.lum]
 opt-level = 0
 debug = true
@@ -40,6 +44,7 @@ inline = "never"
 opt-level = 3
 debug = true
 
+
 # applies to all packages not listed above
 [profile.dev.package."*"]
 opt-level = 3
@@ -51,6 +56,16 @@ panic = "unwind"
 codegen-units = 16
 lto = false
 overflow-checks = true # TODO: unchecked math (UB on overflow)
+
+[profile.flame]
+inherits = "release"
+debug = "full"
+opt-level = 3
+panic = "unwind"
+codegen-units = 1
+lto = false
+overflow-checks = false
+
 
 # TODO: multiverse cfg?
 # highest possible optimizations

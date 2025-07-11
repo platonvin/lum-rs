@@ -1,4 +1,4 @@
-// (single) triagle, that covers entire screen.
+// (single) triangle, that covers entire screen.
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,

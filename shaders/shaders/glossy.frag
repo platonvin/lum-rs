@@ -27,6 +27,9 @@ layout(location = 0) out vec4 frame_color;
 // layout(constant_id = 1) const int MAX_DEPTH = 1;
 // layout(constant_id = 2) const int NUM_SAMPLES = 1; //for 4090 owners i guess
 
+#include "common/material.glsl"
+#include "common/radiance.glsl"
+
 ivec2 size;
 ivec2 pix;
 
@@ -194,7 +197,7 @@ bool CastRay_fast(in vec3 origin, in vec3 direction,
         vec3 tFinal = tMax - tDelta;
         fraction = dot(tFinal, fcurrentStepDiretion);
 
-        material = get_mat(current_voxel_id, voxelPalette);
+        material = get_mat(current_voxel_id);
     }
 
     return (current_voxel !=0);
@@ -262,7 +265,7 @@ bool CastRay_precise(in vec3 rayOrigin, in vec3 rayDirection,
     vec3 tFinal = tMax - tDelta;
     block_fraction = dot(tFinal, vec3(currentStepDiretion));
 
-    material = get_mat(current_voxel, voxelPalette);
+    material = get_mat(current_voxel);
 
     fraction = block_fraction;
 
@@ -291,7 +294,7 @@ void ProcessHit(inout vec3 origin, inout vec3 direction,
             origin = origin + (fraction * direction);
             // origin += normal * 0.001; //TODO
 
-            vec3 diffuse_light = sample_radiance(origin, normal, radianceCache);
+            vec3 diffuse_light = sample_radiance(origin, normal);
             // vec3 diffuse_light = vec3(0);
             
             accumulated_reflection *= material.color; 
@@ -393,7 +396,7 @@ bool ssr_traceRay(in vec3 origin, in vec3 direction, inout vec2 pix, inout float
         if (ssr_intersects(depth, pix, smooth_intersection, fraction_step)) {
             if(smooth_intersection){
                     normal = load_norm(ivec2(pix));
-                    material = get_mat(load_mat(ivec2(pix)), voxelPalette);
+                    material = get_mat(load_mat(ivec2(pix)));
                 return true;
             } else {
                 // fraction -= fraction_step;
@@ -413,7 +416,7 @@ void main(void){
 
     pix = ivec2(gl_FragCoord.xy);
 
-    Material mat = get_mat(load_mat(pix), voxelPalette);
+    Material mat = get_mat(load_mat(pix));
     vec3 direction = ubo.camdir.xyz;
 
     vec2 clip_pos = gl_FragCoord.xy / ubo.frame_size * 2.0 - 1.0;

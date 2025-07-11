@@ -12,7 +12,6 @@ vk_backend = ["lum/vk_backend"]
 [dependencies]
 lum = { path = "../../lum" }
 containers = { path = "../../containers" }
-# shaders = { path = "../../shaders" }
 assets = { path = "../assets" }
 winit = "0.30.11"
 

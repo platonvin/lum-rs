@@ -8,7 +8,7 @@ precision highp float;
 
 //TODO: move per-workgroup computations to different shader
 //TODO: AND test shared perfomance
-layout(push_constant) restrict readonly uniform constants{
+layout(push_constant) restrict uniform constants{
      mat4 inverse_trans; //map game voxel world to modelVoxels
     ivec4 shift;
 } pco;

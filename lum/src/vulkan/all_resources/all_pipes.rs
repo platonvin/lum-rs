@@ -1,4 +1,5 @@
 use crate::types::*;
+use crate::vulkan::pc_types;
 use crate::{
     vulkan::{
         self, types::*, AllBuffers, AllIndependentImages, AllPipes, AllSamplers,
@@ -202,8 +203,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
             ],
             std::mem::size_of::<Particle>() as u32,
-            vk::VertexInputRate::VERTEX,
-            vk::PrimitiveTopology::POINT_LIST,
+            vk::VertexInputRate::INSTANCE,
+            vk::PrimitiveTopology::TRIANGLE_LIST,
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
             0,
@@ -223,7 +224,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             Some(shaders::Shader::get_spirv(shaders::Shader::WaterFrag)),
             &[],
             0,
-            vk::VertexInputRate::VERTEX,
+            vk::VertexInputRate::VERTEX, // does not make any difference rn
             vk::PrimitiveTopology::TRIANGLE_STRIP,
             lumal.swapchain_extent,
             &[BlendAttachment::NoBlend],
@@ -357,11 +358,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 BlendAttachment::BlendReplaceIfGreater,
                 BlendAttachment::BlendReplaceIfLess,
             ],
-            (std::mem::size_of::<vec3>() + std::mem::size_of::<i32>() + std::mem::size_of::<vec4>())
-                as u32,
+            std::mem::size_of::<pc_types::RaygenMapSmoke>() as u32,
             DepthTesting::Read,
             // DepthTesting::DT_None,
-            vk::CompareOp::LESS,
+            vk::CompareOp::ALWAYS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
                 fail_op: vk::StencilOp::KEEP,
@@ -369,7 +369,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 depth_fail_op: vk::StencilOp::KEEP,
                 compare_op: vk::CompareOp::ALWAYS,
                 compare_mask: 0b00,
-                write_mask: 0b10, // 10 for smoke
+                write_mask: 0b10, // 0b10 for smoke
                 reference: 0b10,
             },
             #[cfg(feature = "debug_validation_names")]
@@ -978,9 +978,10 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::StorageImage(
+                    resources: DescriptorResource::SampledImage(
                         lumal::descriptors::RelativeResource::Current(&iimages.radiance_cache),
                         vk::ImageLayout::GENERAL,
+                        samplers.nearest_sampler,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },

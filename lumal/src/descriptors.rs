@@ -283,7 +283,8 @@ impl Renderer {
             .enumerate()
             .map(|(i, info)| {
                 // add 1 to corresponding counter
-                self.descriptor_counter.increment_counter(info.descriptor_type);
+                self.descriptor_counter
+                    .increment_counter(info.descriptor_type, self.settings.fif as u32);
 
                 vk::DescriptorSetLayoutBinding {
                     binding: i as u32,

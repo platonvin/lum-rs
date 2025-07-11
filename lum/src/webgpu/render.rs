@@ -333,18 +333,20 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
         // Copy the static block palette region from untouched image .
         let copy_extent = Extent3d {
             // TODO: we assume that static block palettes only take the first raw, which is a bad assumption
-            width: BLOCK_SIZE * self.static_block_palette_size,
-            height: BLOCK_SIZE,
+            width: BLOCK_SIZE * BLOCK_PALETTE_SIZE_X,
+            height: BLOCK_SIZE * BLOCK_PALETTE_SIZE_Y,
             depth_or_array_layers: BLOCK_SIZE,
         };
+        // we have *just* moved the block palette ring - previous() is what is "dirty" and what we wrote into in previous frame
+        // so we just copy fresh, clean data into our previous() block palette ring to "reset" it (TODO: zero it)
         let src = TexelCopyTextureInfo {
-            texture: &self.independent_images.block_palette.previous().texture,
+            texture: &self.independent_images.block_palette.current().texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         };
         let dst = TexelCopyTextureInfo {
-            texture: &self.independent_images.block_palette.current().texture,
+            texture: &self.independent_images.block_palette.previous().texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
@@ -356,11 +358,26 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
 
         // Execute all the requested copies (for "duplicating" blocks data in block palette.
         // We need this to write model voxels to world)
-        for (src, dst, region) in self.block_copies_queue.iter() {
-            self.current_encoder
-                .as_mut()
-                .unwrap()
-                .copy_texture_to_texture(*src, *dst, *region);
+        for (src, dst) in self.block_copies_queue.iter() {
+            self.current_encoder.as_mut().unwrap().copy_texture_to_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &self.dependent_images.as_ref().unwrap().mat_norm.texture,
+                    mip_level: 0,
+                    origin: *src,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyTextureInfo {
+                    texture: &self.dependent_images.as_ref().unwrap().mat_norm.texture,
+                    mip_level: 0,
+                    origin: *dst,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: 16,
+                    height: 16,
+                    depth_or_array_layers: 1,
+                },
+            );
         }
 
         // Finally, copy the world buffer to the world texture.
@@ -1011,141 +1028,104 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
         self.renderer.start_blockify();
         for mrr in &self.model_que {
             let model_mesh = self.storage.models.get(mrr.mesh).unwrap();
-            {
-                let this = &mut self.renderer;
-                let trans: &MeshTransform = &mrr.trans;
-                let rotate = mat4::from(trans.rotation);
-                let shift = mat4::identity().translated_3d(trans.translation);
-                let border_in_voxel = get_shift(shift * rotate, model_mesh.size);
+            let trans: &MeshTransform = &mrr.trans;
+            let rotate = mat4::from(trans.rotation);
+            let shift = mat4::identity().translated_3d(trans.translation);
+            let border_in_voxel = get_shift(shift * rotate, model_mesh.size);
 
-                let mut border = iAABB {
-                    min: ivec3!(border_in_voxel.min - 1.0) / BLOCK_SIZE as i32,
-                    max: ivec3!(border_in_voxel.max + 1.0) / BLOCK_SIZE as i32,
-                };
+            let mut border = iAABB {
+                min: ivec3!(border_in_voxel.min - 1.0) / BLOCK_SIZE as i32,
+                max: ivec3!(border_in_voxel.max + 1.0) / BLOCK_SIZE as i32,
+            };
 
-                // clamp to world size so no out of bounds
-                border.min = ivec3::clamped(
-                    border.min,
-                    ivec3::zero(),
-                    ivec3!(this.settings.world_size.xyz() - 1),
-                );
-                border.max = ivec3::clamped(
-                    border.max,
-                    ivec3::zero(),
-                    ivec3!(this.settings.world_size.xyz() - 1),
-                );
+            // clamp to world size so no out of bounds
+            border.min = ivec3::clamped(
+                border.min,
+                ivec3::zero(),
+                ivec3!(self.renderer.settings.world_size.xyz() - 1),
+            );
+            border.max = ivec3::clamped(
+                border.max,
+                ivec3::zero(),
+                ivec3!(self.renderer.settings.world_size.xyz() - 1),
+            );
 
-                for zz in border.min.z..=border.max.z {
-                    for yy in border.min.y..=border.max.y {
-                        for xx in border.min.x..=border.max.x {
-                            let current_block =
-                                this.current_world[(xx as usize, yy as usize, zz as usize)];
-                            if (current_block as u32) < this.static_block_palette_size {
-                                // static
-                                //add to copy queue
-                                let _src_block = this.index_block_xy(current_block as usize);
-                                let _dst_block = this.index_block_xy(this.palette_counter);
+            for zz in border.min.z..=border.max.z {
+                for yy in border.min.y..=border.max.y {
+                    for xx in border.min.x..=border.max.x {
+                        let current_block =
+                            self.renderer.current_world[(xx as usize, yy as usize, zz as usize)];
+                        if (current_block as u32) < self.renderer.static_block_palette_size {
+                            // static
+                            //add to copy queue
+                            let src_block = self.renderer.index_block_xy(current_block as usize);
+                            let dst_block =
+                                self.renderer.index_block_xy(self.renderer.palette_counter);
 
-                                // do image copy on for non-zero-src blocks. Other things still done for every allocated block
-                                // because zeroing is fast
-                                if current_block != 0 {
-                                    // Create a command encoder for copying
-                                    // let mut encoder = this.wal.device.create_command_encoder(
-                                    //     &wgpu::CommandEncoderDescriptor {
-                                    //         label: Some("Block Copy Command Encoder"),
-                                    //     },
-                                    // );
+                            // do image copy on for non-zero-src blocks. Other things still done for every allocated block
+                            // because zeroing is fast
+                            // if current_block != 0 {
+                            // not for wgpu though
 
-                                    // Copy the block data
-                                    // encoder.copy_texture_to_texture(
-                                    //     wgpu::TexelCopyTextureInfo {
-                                    //         texture: &this
-                                    //             .dependent_images
-                                    //             .as_ref()
-                                    //             .unwrap()
-                                    //             .highres_mat_norm
-                                    //             .current()
-                                    //             .texture,
-                                    //         mip_level: 0,
-                                    //         origin: wgpu::Origin3d {
-                                    //             x: src_block.x as u32 * 16,
-                                    //             y: src_block.y as u32 * 16,
-                                    //             z: 0,
-                                    //         },
-                                    //         aspect: wgpu::TextureAspect::All,
-                                    //     },
-                                    //     wgpu::TexelCopyTextureInfo {
-                                    //         texture: &this
-                                    //             .dependent_images
-                                    //             .as_ref()
-                                    //             .unwrap()
-                                    //             .highres_mat_norm
-                                    //             .current()
-                                    //             .texture,
-                                    //         mip_level: 0,
-                                    //         origin: wgpu::Origin3d {
-                                    //             x: dst_block.x as u32 * 16,
-                                    //             y: dst_block.y as u32 * 16,
-                                    //             z: 0,
-                                    //         },
-                                    //         aspect: wgpu::TextureAspect::All,
-                                    //     },
-                                    //     wgpu::Extent3d {
-                                    //         width: 16,
-                                    //         height: 16,
-                                    //         depth_or_array_layers: 1,
-                                    //     },
-                                    // );
-                                    // this.current_encoder.unwrap().copy_texture_to_texture();
+                            self.renderer.block_copies_queue.push((
+                                wgpu::Origin3d {
+                                    x: src_block.x as u32 * 16,
+                                    y: src_block.y as u32 * 16,
+                                    z: 0,
+                                },
+                                wgpu::Origin3d {
+                                    x: dst_block.x as u32 * 16,
+                                    y: dst_block.y as u32 * 16,
+                                    z: 0,
+                                },
+                            ));
 
-                                    // Submit the copy command
-                                    // this.current_encoder.unwrap().texte;
-                                }
+                            // } else {
+                            //     // push block to "zero"
+                            //     self.renderer.block_clear_queue.push(wgpu::Origin3d {
+                            //         x: dst_block.x as u32 * 16,
+                            //         y: dst_block.y as u32 * 16,
+                            //         z: 0,
+                            //     });
+                            // }
 
-                                this.current_world[(xx as usize, yy as usize, zz as usize)] =
-                                    this.palette_counter as InternalBlockId;
-                                this.palette_counter += 1;
-                            } else {
-                                //already new block, just leave it
-                            }
+                            self.renderer.current_world[(xx as usize, yy as usize, zz as usize)] =
+                                self.renderer.palette_counter as InternalBlockId;
+                            self.renderer.palette_counter += 1;
+                        } else {
+                            //already new block, just leave it
                         }
                     }
                 }
-            };
+            }
         }
-        {
-            let (dim_x, dim_y, dim_z) = self.renderer.current_world.dimensions();
-            let padded_dim_x = (dim_x).next_multiple_of(
-                COPY_BYTES_PER_ROW_ALIGNMENT as usize / size_of::<InternalBlockId>(),
-            );
-            let padded_count_to_copy = padded_dim_x * dim_y * dim_z;
+        let (dim_x, dim_y, dim_z) = self.renderer.current_world.dimensions();
+        let padded_dim_x = (dim_x)
+            .next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT as usize / size_of::<InternalBlockId>());
+        let padded_count_to_copy = padded_dim_x * dim_y * dim_z;
 
-            let mut padded_data: Vec<InternalBlockId> = vec![0; padded_count_to_copy];
-            for zz in 0..dim_z {
-                for yy in 0..dim_y {
-                    for xx in 0..dim_x {
-                        let index = xx + yy * padded_dim_x + zz * padded_dim_x * dim_y;
-                        padded_data[index] =
-                            self.renderer.current_world[(xx, yy, zz)] as InternalBlockId;
-                    }
+        let mut padded_data: Vec<InternalBlockId> = vec![0; padded_count_to_copy];
+        for zz in 0..dim_z {
+            for yy in 0..dim_y {
+                for xx in 0..dim_x {
+                    let index = xx + yy * padded_dim_x + zz * padded_dim_x * dim_y;
+                    padded_data[index] =
+                        self.renderer.current_world[(xx, yy, zz)] as InternalBlockId;
                 }
             }
+        }
 
-            let size_to_copy = padded_count_to_copy * size_of::<InternalBlockId>();
-            let data: &[u8] = unsafe {
-                std::slice::from_raw_parts(padded_data.as_ptr() as *const u8, size_to_copy)
-            };
+        let size_to_copy = padded_count_to_copy * size_of::<InternalBlockId>();
+        let data: &[u8] =
+            unsafe { std::slice::from_raw_parts(padded_data.as_ptr() as *const u8, size_to_copy) };
 
-            let mut write = self.renderer.wal.queue.write_buffer_with(
-                self.renderer.buffers.staging_world.current(),
-                0,
-                std::num::NonZeroU64::new(size_to_copy as u64).unwrap(),
-            );
+        let mut write = self.renderer.wal.queue.write_buffer_with(
+            self.renderer.buffers.staging_world.current(),
+            0,
+            std::num::NonZeroU64::new(size_to_copy as u64).unwrap(),
+        );
 
-            write.as_mut().unwrap().copy_from_slice(data);
-
-            drop(write);
-        };
+        write.as_mut().unwrap().copy_from_slice(data);
     }
 
     fn updade_grass(&mut self, _wind_direction: vec2) {
@@ -1803,12 +1783,12 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
     }
 
     fn raygen_block_face<'a>(
-        wal: &Wal,
+        _wal: &Wal,
         pc_write_slice: &mut Vec<u8>, // The mutable slice for writing
         pc_counter: &mut u32,
         normal: ivec3,
         shift: ivec3,
-        buff: &IndexedVertices,
+        _buff: &IndexedVertices,
         block_id: MeshBlock,
     ) {
         debug_assert!(block_id > 0);
@@ -1978,7 +1958,6 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
     }
 
     fn update_ubo(&mut self) {
-        // let this = &mut self.renderer;
         // Update the uniform buffer with camera and light properties.
         let horizline_scaled =
             self.renderer.camera.horizline * (self.renderer.camera.view_size.x / 2.0);
@@ -2011,9 +1990,9 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
         // self.renderer.wal.queue.submit([]);
     }
 
-    fn shift_radiance(&mut self, shift: ivec3) {
-        self.radiance_shift = shift;
-    }
+    // fn shift_radiance(&mut self, shift: ivec3) {
+    //     self.radiance_shift = shift;
+    // }
 
     fn raygen_models(&mut self) {
         // Begin the raygen models render pass
@@ -2154,7 +2133,7 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
         shift: &vec3,
         // model_voxels_bg: &BindGroup,
         normal: vec3,
-        buff: &IndexedVertices,
+        _buff: &IndexedVertices,
     ) {
         #[repr(C)] // for push constants
         #[derive(AsU8Slice)] // allow cast to &[u8]
@@ -2590,6 +2569,13 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
 
     fn get_material_palette_mut(&mut self) -> &mut [Material] {
         &mut self.renderer.material_palette
+    }
+
+    fn get_time(&self) -> std::time::Instant {
+        self.renderer.last_time
+    }
+    fn get_dt(&self) -> f32 {
+        self.renderer.delta_time
     }
 }
 

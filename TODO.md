@@ -1,26 +1,25 @@
 IMPORTANT: Lum uses a RIGHT-HANDED coordinate system everywhere.
 
-
+zero instead of copy wgpu
 remove clamps from shaders from everywhere (docs where clamps happen, maybe do them everywhere explicitly)
 define a price for state chagne and move things a little bit even if makes it depth not sorted
-
-todoy:
-  docs
-  code cleanup
-  separate builds & good flags
-  less magic constants
-  static(?) rings
-  better traits
-  divide into more crates
-  formats
-  fix smoke
-  fix particles (remove geom)
-  resizing in wgpu
-  pub(crate) instead of pub
-  single index / vertex buffer?
-  merge models & blocks since they both are some sort of slot arenas
-  block palette in image layout with array views
-  is ConstDims / RuntimeDims worth keeping?
+store size of the allocated buffers and ensure that we are in bounds
+docs
+code cleanup
+separate builds & good flags
+less magic constants
+static(?) rings
+better traits
+divide into more crates
+formats
+fix smoke
+fix particles (remove geom)
+resizing in wgpu
+pub(crate) instead of pub
+single index / vertex buffer?
+merge models & blocks since they both are some sort of slot arenas
+block palette in image layout with array views
+is ConstDims / RuntimeDims worth keeping?
 
 wgpu pipeline bound caching / at high level (array of sorted arrays)
 inherit TODO from lum++
@@ -32,7 +31,7 @@ stack Ring (FIFO_Ring / FIFRing) for known resources. How to have no-size stored
 #repr C for types used in push constants
  - vec3 / vec4
 
-shader JIT
+shader JIT for optimization strategies
 
 optimize update_radiance
 

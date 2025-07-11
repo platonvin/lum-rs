@@ -1010,7 +1010,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_blocks_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 8,
                 push_constant.as_u8_slice(),
             )
@@ -1051,7 +1051,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_blocks_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1094,7 +1094,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_models_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 32, // TODO sizeof of merged struct
                 push_constant.as_u8_slice(),
             )
@@ -1133,7 +1133,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_models_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1324,7 +1324,14 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             )
         }
 
-        let size_to_flush = capped_particle_count * size_of::<Particle>();
+        let ideal_size_to_flush = capped_particle_count * size_of::<Particle>();
+
+        // we must flush with respect to this property/limit
+        let atom_size = self.lumal.device_limits.non_coherent_atom_size;
+        let size_to_flush = ideal_size_to_flush.next_multiple_of(atom_size as usize);
+
+        // what effectively happens is we ask driver to Actually upload data to GPU,
+        // but we ask for slightly more than we need due to required "alignment"
         unsafe {
             self.lumal
                 .device
@@ -1357,7 +1364,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 );
                 self.lumal
                     .device
-                    .cmd_draw(*command_buffer, self.particles.len() as u32, 1, 0, 0);
+                    .cmd_draw(*command_buffer, 36, self.particles.len() as u32, 0, 0);
             }
         }
     }
@@ -1476,7 +1483,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffers,
                 pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1517,7 +1524,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.raygen_water_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1606,7 +1613,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.diffuse_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1663,14 +1670,14 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         let command_buffer = self.cmdbufs.graphics_command_buffers.current();
 
         let push_constant = pc_types::RaygenMapSmoke {
-            center_size: vec4!(pos * fBLOCK_SIZE, 32),
+            center_size: vec4!(*pos, 16),
         };
 
         unsafe {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.fill_stencil_smoke_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1715,7 +1722,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             self.lumal.device.cmd_push_constants(
                 *command_buffer,
                 self.pipes.glossy_pipe.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX,
                 0,
                 push_constant.as_u8_slice(),
             )
@@ -1777,6 +1784,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
 
         let should_recreate = self.lumal.should_recreate;
         if should_recreate {
+            print!("recreated from flag: ");
             self.recreate_window(window.inner_size());
             self.lumal.should_recreate = false;
         }
@@ -1815,9 +1823,10 @@ pub struct VolumetricRenderRequest {
     pub pos: vec3,
 }
 
+/// Bundle of arenas for different objects, allocated by user
+/// Instead of giving user pointers, we give them "handles" - indices into arenas
 #[derive(Default)]
 pub struct RendererStorage {
-    // TODO: arena?
     models: Arena<InternalMeshModel>,
     volumetrics: Arena<InternalMeshVolumetric>,
     liquids: Arena<InternalMeshLiquid>,
@@ -2323,6 +2332,13 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
 
     fn get_material_palette_mut(&mut self) -> &mut [Material] {
         &mut self.renderer.material_palette
+    }
+
+    fn get_time(&self) -> std::time::Instant {
+        self.renderer.last_time
+    }
+    fn get_dt(&self) -> f32 {
+        self.renderer.delta_time
     }
 }
 

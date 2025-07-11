@@ -1,4 +1,4 @@
-const COLOR_ENCODE_VALUE: f32 = 1.0;
+const COLOR_ENCODE_VALUE: f32 = 4.0;
 const MAX_STEPS: i32 = 8;
 const TRESHOLD: f32 = 0.7;
 const MULTIPLIER: f32 = 1.7;

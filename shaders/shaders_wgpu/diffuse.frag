@@ -1,6 +1,6 @@
 // Global constants. TODO: move to specialization constants
 const WORLD_SIZE: vec3<i32> = vec3<i32>(48, 48, 16);
-const COLOR_ENCODE_VALUE: f32 = 1.0;
+const COLOR_ENCODE_VALUE: f32 = 4.0;
 const PI: f32 = 3.1415926535;
 
 struct UboData {

@@ -24,7 +24,7 @@ struct AoLutEntry {
 @group(0) @binding(3) var depth_buffer_texture: texture_depth_2d;
 @group(0) @binding(4) var depth_sampler: sampler;
 
-const COLOR_ENCODE_VALUE: f32 = 1.0;
+const COLOR_ENCODE_VALUE: f32 = 4.0;
 const SAMPLE_COUNT: i32 = 8;
 
 struct FragmentOutput {

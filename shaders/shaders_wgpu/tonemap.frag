@@ -1,4 +1,4 @@
-const COLOR_ENCODE_VALUE: f32 = 1.0;
+const COLOR_ENCODE_VALUE: f32 = 4.0;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -99,10 +99,10 @@ fn main(@builtin(position) pos: vec4<f32>) -> FragmentOutput {
     let encoded_color = textureLoad(rendered_frame, tex_coord, 0).rgb;
     var color = decode_color(encoded_color);
 
-    // color = adjust_saturation(color, 0.1);
-    // color = adjust_contrast(color, 0.1);
-    // color = adjust_exposure(color, 0.5);
-    // color = tonemap(color);
+    color = adjust_saturation(color, 0.1);
+    color = adjust_contrast(color, 0.1);
+    color = adjust_exposure(color, 0.5);
+    color = tonemap(color);
 
     var out: FragmentOutput;
     out.frame_color = vec4<f32>(color, 1.0);

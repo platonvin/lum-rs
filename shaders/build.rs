@@ -77,7 +77,7 @@ fn compile_spirv_shaders(dest: &Path) -> std::io::Result<Vec<String>> {
                             .arg(&path)
                             .arg("-o")
                             .arg(&out_path)
-                            .arg("--target-env=vulkan1.1")
+                            .arg("--target-env=vulkan1.2")
                             // .arg("-g") // TODO: enable in release but not distribution
                             .arg("-Os") // TODO: enable in release but not distribution
                             .status()
@@ -86,17 +86,16 @@ fn compile_spirv_shaders(dest: &Path) -> std::io::Result<Vec<String>> {
                             panic!("glslc failed on {}", path.display());
                         }
 
-                        let status = Command::new("spirv-opt")
-                            .arg(&out_path)
-                            .arg("-o")
-                            .arg(&out_path)
-                            .arg("-Os")
-                            .arg("--eliminate-dead-functions")
-                            .status()
-                            .expect("Failed to launch spirv-opt");
-                        if !status.success() {
-                            panic!("spirv-opt failed on {}", out_path.display());
-                        }
+                        // let status = Command::new("spirv-opt")
+                        //     .arg(&out_path)
+                        //     .arg("-o")
+                        //     .arg(&out_path)
+                        //     .arg("-Os")
+                        //     .status()
+                        //     .expect("Failed to launch spirv-opt");
+                        // if !status.success() {
+                        //     panic!("spirv-opt failed on {}", out_path.display());
+                        // }
                     }
                     // Emit rerun-if-changed for this file and all of its includes:
                     let mut deps = Vec::new();
@@ -214,6 +213,7 @@ fn _needs_recompile(src: &Path, out: &Path) -> bool {
 }
 
 fn needs_recompile(src: &Path, out: &Path) -> bool {
+    // return true;
     if !out.exists() {
         return true;
     }

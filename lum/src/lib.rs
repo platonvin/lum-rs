@@ -32,6 +32,9 @@ pub mod vulkan;
 #[cfg(feature = "wgpu_backend")]
 pub mod webgpu;
 
+#[cfg(feature = "vk_backend")]
+pub use lumal as al;
+
 #[derive(Clone, Copy)]
 pub struct Settings<D: Dim3 = ConstDims<48, 48, 16>> {
     pub world_size: D,

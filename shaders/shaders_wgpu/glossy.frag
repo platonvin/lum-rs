@@ -1,7 +1,7 @@
 const world_size: vec3<i32> = vec3<i32>(48, 48, 16);
 const PI: f32 = 3.1415926535;
 const BLOCK_PALETTE_SIZE_X: i32 = 64;
-const COLOR_ENCODE_VALUE: f32 = 1.0;
+const COLOR_ENCODE_VALUE: f32 = 4.0;
 
 struct UboData {
     trans_w2s: mat4x4<f32>,

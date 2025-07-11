@@ -2,14 +2,16 @@
 #![allow(unused_variables)]
 #![allow(incomplete_features)]
 #![feature(inherent_associated_types)]
+#![feature(random)]
 
 //! Actual code for the Lum example ([bin]s demo_vk and demo_wgpu are 3-line callers of this [lib])
 
 use assets::{BlockAsset, ModelAsset};
 use containers::array3d::ConstDims;
+use core::f64;
 use lum::render_interface::ShaderSource;
-#[cfg(feature = "vk_backend")]
 use lum::shaders;
+use lum::types::quat;
 use lum::{
     fBLOCK_SIZE, for_zyx,
     render_interface::{FoliageDescriptionBuilder, FoliageDescriptionCreate, RendererInterface},
@@ -17,11 +19,12 @@ use lum::{
     Settings,
 };
 use std::marker::PhantomData;
+use std::random::random;
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{DeviceEvent, DeviceId, WindowEvent},
+    event::{DeviceEvent, DeviceId, StartCause, WindowEvent},
     event_loop::ActiveEventLoop,
     window::{Window, WindowId},
 };
@@ -48,6 +51,12 @@ struct DemoState<'renderer, Renderer: RendererInterface<'renderer, WorldSize>> {
     meshes: AllMeshes,
     transforms: AllTransforms,
     about_to_close: bool,
+    /// crutch cause winit cant initialize properly for the last multiple years
+    /// also, there is multiple bad things this causes and it behaves differently depending on the platform
+    /// tracking issue: https://github.com/rust-windowing/winit/issues/2094
+    /// what we effectively do is we dont resize if its still Init phase
+    is_init: bool,
+    init_time: std::time::Instant,
     _phantom: PhantomData<&'renderer Renderer>,
 }
 
@@ -61,6 +70,8 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
             meshes: AllMeshes::default(),
             transforms: Default::default(),
             about_to_close: false,
+            is_init: true,
+            init_time: std::time::Instant::now(),
             _phantom: PhantomData::default(),
         }
     }
@@ -144,15 +155,44 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         self.lum.unload_block(12);
         self.lum.unload_block(13);
         self.lum.unload_block(14);
+
         self.lum.destroy();
     }
 
     pub fn render(&mut self) {
         let lum = &mut self.lum;
 
+        // some movement
+        self.transforms.tank_body.translation.z = 20.0;
+
+        let ftime = self.init_time.elapsed().as_secs_f64();
+        self.transforms.tank_body.translation.x = (10.0 * 16.0 + 10.0 * f64::sin(ftime)) as f32;
+        self.transforms.tank_body.translation.y =
+            (10.0 * 16.0 + 25.0 * f64::sin(f64::consts::FRAC_PI_2 - ftime)) as f32;
+        self.transforms.tank_body.rotation.rotate_z(lum.get_dt());
+
         lum.start_frame();
         lum.draw_world();
         lum.draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
+
+        let frand01 = || (random::<u64>() as f64 / u64::MAX as f64) as f32;
+        let s = lum.get_model_size(self.meshes.tank_body);
+        let size = vec3::new(s.x as f32, s.y as f32, s.z as f32);
+        fn rotate_vector_by_quaternion(q: quat, v: vec3) -> vec3 {
+            let pure_quat = quat::from_xyzw(v.x, v.y, v.z, 0.0);
+            let rotated_quat = q * pure_quat * q.conjugate();
+            vec3::new(rotated_quat.x, rotated_quat.y, rotated_quat.z)
+        }
+
+        let pos = self.transforms.tank_body.translation
+            + rotate_vector_by_quaternion(self.transforms.tank_body.rotation, size / 2.0);
+
+        lum.spawn_particle(&lum::types::Particle {
+            pos,
+            vel: vec3::new(5.0 * frand01(), 5.0 * frand01(), 20.0),
+            life_time: 3.0,
+            mat_id: 31,
+        });
 
         for xx in 4..20 {
             for yy in 4..20 {
@@ -222,7 +262,10 @@ impl<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static> App
             WindowEvent::Resized(PhysicalSize { width, height }) => {
                 #[cfg(target_arch = "wasm32")]
                 log::info!("Resizing renderer surface to: ({width}, {height})");
-                self.lum.resize(PhysicalSize { width, height });
+                if !self.is_init {
+                    // if still in init phase, completely ignore resize events from Winit
+                    self.lum.resize(PhysicalSize { width, height });
+                }
             }
             _ => { /* Ignore other window events for this example */ }
         }
@@ -239,7 +282,6 @@ impl<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static> App
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        // This is called when the event loop is about to go idle.
         if self.about_to_close {
             _event_loop.exit(); // Exit the event loop if requested
         } else {
@@ -253,7 +295,12 @@ impl<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static> App
         }
     }
 
-    fn new_events(&mut self, _event_loop: &ActiveEventLoop, _cause: winit::event::StartCause) {}
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        match cause {
+            StartCause::Init => self.is_init = true,
+            _ => self.is_init = false,
+        }
+    }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {}
 
@@ -369,6 +416,8 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'stati
     app.load_scene();
 
     event_loop.run_app(&mut app).unwrap();
+
+    app.destroy();
 }
 
 // You probably should use some sort of "Asset library" - hashmap (array) of YourEntityTypeEnum -> LumMeshModel
@@ -399,6 +448,7 @@ impl AllMeshes {
         Self {
             tank_body: lum.load_model(assets::get_model(ModelAsset::TankBody)),
             tank_head: lum.load_model(assets::get_model(ModelAsset::TankHead)),
+            // they are the same but for demonstration purposes...
             tank_rf_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
             tank_lb_leg: lum.load_model(assets::get_model(ModelAsset::TankRfLbLeg)),
             tank_lf_leg: lum.load_model(assets::get_model(ModelAsset::TankLfRbLeg)),

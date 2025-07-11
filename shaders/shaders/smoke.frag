@@ -15,98 +15,8 @@ layout(input_attachment_index = 0, set = 0, binding = 1) uniform subpassInput sm
 layout(input_attachment_index = 0, set = 0, binding = 2) uniform subpassInput smoke_depth_near;
 layout(set = 0, binding = 3) uniform sampler3D radianceCache;
 layout(set = 0, binding = 4) uniform sampler3D noise;
- 
-vec3 sample_radiance(vec3 position, vec3 normal){
-    vec3 sampled_light;
 
-    float total_weight =      0 ;
-     vec3 total_colour = vec3(0); 
-
-    ivec3 zero_probe_ipos = clamp(ivec3(floor(position - 8.0))/16, ivec3(0), world_size);
-     vec3 zero_probe_pos = vec3(zero_probe_ipos)*16.0 + 8.0;
-
-    vec3 alpha = clamp((position - zero_probe_pos) / 16.0, 0,1);
-    // alpha = vec3(1);
-
-    for (int i=0; i<8; i++){
-        //weird algo to make it little more readable and maybe low-instruction-cache-but-fast-loops gpu's friendly (if they will ever exist)
-        ivec3 offset = ivec3(i, i >> 1, i >> 2) & ivec3(1);
-
-        float probe_weight =     (1);
-         vec3 probe_colour = vec3(0);
-
-        vec3 probe_pos = zero_probe_pos + vec3(offset)*16.0;
-
-        vec3  probeToPoint = probe_pos - position;
-        vec3 direction_to_probe = normalize(probeToPoint);
-
-        vec3 trilinear = mix(1.0-alpha, alpha, vec3(offset));
-        probe_weight = trilinear.x * trilinear.y * trilinear.z;
-
-        
-        /*
-        actually, not using directional weight **might** increase quality 
-        by adding extra shadows in corners made of solid blocks
-        but im still going to use it
-
-        0.1 clamp to prevent weird cases where occasionally every single one would be 0 - in such cases, it will lead to trilinear
-        */
-        float direction_weight = clamp(dot(direction_to_probe, normal), 0.1,1);
-        // float direction_weight = square(max(0.0001, (dot(direction_to_probe, normal) + 1.0) * 0.5)) + 0.2;
-        // float direction_weight = float(dot(direction_to_probe, normal) > 0);
-
-        probe_weight *= direction_weight;
-        
-        // const float crushThreshold = 0.2;
-        // if (probe_weight < crushThreshold) {
-        //     probe_weight *= probe_weight * probe_weight * (1.0 / square(crushThreshold)); 
-        // }
-
-        probe_colour = fetch_probe(zero_probe_ipos + offset, direction_to_probe, radianceCache);
-        // probe_colour = vec3(zero_probe_ipos + offset) / vec3(world_size);
-
-        probe_weight  = max(1e-7, probe_weight);
-        total_weight += probe_weight;
-        total_colour += probe_weight * probe_colour;
-    }
-
-    return total_colour / total_weight;
-}
-
-vec3 sample_radiance(vec3 position){
-    vec3 sampled_light;
-
-    float total_weight =      0 ;
-     vec3 total_colour = vec3(0);
-
-    ivec3 zero_probe_ipos = clamp(ivec3(floor(position - 8.0))/16, ivec3(0), world_size);
-     vec3 zero_probe_pos = vec3(zero_probe_ipos)*16.0 + 8.0;
-
-    vec3 alpha = clamp((position - zero_probe_pos) / 16.0, 0,1);
-
-    for (int i=0; i<8; i++){
-        //weird algo to make it little more readable and maybe low-instruction-cache-but-fast-loops gpu's friendly (if they will ever exist)
-        ivec3 offset = ivec3(i, i >> 1, i >> 2) & ivec3(1);
-
-        float probe_weight =     (1);
-         vec3 probe_colour = vec3(0);
-
-        vec3 probe_pos = zero_probe_pos + vec3(offset)*16.0;
-
-        vec3  probeToPoint = probe_pos - position;
-        vec3 direction_to_probe = normalize(probeToPoint);
-
-        vec3 trilinear = mix(1.0-alpha, alpha, vec3(offset));
-        probe_weight = trilinear.x * trilinear.y * trilinear.z;
-        
-        probe_colour = fetch_probe(zero_probe_ipos + offset, direction_to_probe, radianceCache);
-
-        total_weight += probe_weight;
-        total_colour += probe_weight * probe_colour;
-    }
-
-    return total_colour / total_weight;
-}
+#include "common/radiance.glsl"
 
 float decode_depth(float d){
     return (d)*1000.0;
@@ -199,12 +109,15 @@ void main() {
         I = (1.0 - dencity * step_size) * I;
         total_dencity += dencity * step_size;
     }
-    //at point of leaving smoke
-    //does not look realistic but fits engine blocky style
-    vec3 final_light = sample_radiance(position, direction);
 
     //1-I because its inverted
     float smoke_opacity = 1.0 - I;
-    smoke_color = vec4(encode_color(vec3(final_light)), smoke_opacity);
-    // smoke_color = vec4(encode_color(vec3(0.0)), 1.0);
+    
+    //at point of leaving smoke
+    //does not look realistic but fits engine blocky style
+
+    // vec3 final_light = sample_radiance(position, direction);
+    // smoke_color = vec4(encode_color(vec3(final_light)), smoke_opacity);
+
+    smoke_color = vec4(encode_color(vec3(0.15)), smoke_opacity);
 } 

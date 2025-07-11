@@ -7,10 +7,9 @@ ambient + "radiant" diffuse + lightmaps
 
 precision highp int;
 precision highp float;
+
 #extension GL_GOOGLE_include_directive : require
 #include "common/consts.glsl"
-#include "common/ext.glsl"
-#include "common/spass.glsl"
 #include "common/ubo.glsl"
 #include "common/lib.glsl"
 
@@ -20,13 +19,18 @@ layout(set = 0, binding = 3) uniform sampler2D voxelPalette;
 layout(set = 0, binding = 4) uniform sampler3D radianceCache;
 layout(set = 0, binding = 5) uniform sampler2DShadow lightmap;
 
+#include "common/radiance.glsl"
+#include "common/material.glsl"
+#include "common/spass_matnorm.glsl"
+#include "common/spass_depth.glsl"
+
 layout(location = 0) out vec4 frame_color;
 
-float sample_lightmap_with_shift(sampler2DShadow _lightmap, int xx, int yy, vec2 base_uv, float test_depth) {
+float sample_lightmap_with_shift(int xx, int yy, vec2 base_uv, float test_depth) {
     vec2 pcfshift = vec2(1.0 / 1024.0);
     vec2 lighmap_shift = vec2(xx, yy) * pcfshift;
 
-    float shadow = texture(_lightmap, vec3(base_uv + lighmap_shift, test_depth)).r; //TODO PCF
+    float shadow = texture(lightmap, vec3(base_uv + lighmap_shift, test_depth)).r; //TODO PCF
     return shadow;
 }
 
@@ -76,11 +80,11 @@ float sample_lightmap(vec3 world_pos, vec3 normal) {
     //     }
     // }}
 
-    total_light += sample_lightmap_with_shift(lightmap, -1, 0, light_uv, world_depth);
-    total_light += sample_lightmap_with_shift(lightmap, 0, 0, light_uv, world_depth);
-    total_light += sample_lightmap_with_shift(lightmap, 1, 0, light_uv, world_depth);
-    total_light += sample_lightmap_with_shift(lightmap, 0, -1, light_uv, world_depth);
-    total_light += sample_lightmap_with_shift(lightmap, 0, 1, light_uv, world_depth);
+    total_light += sample_lightmap_with_shift(-1, 0, light_uv, world_depth);
+    total_light += sample_lightmap_with_shift(0, 0, light_uv, world_depth);
+    total_light += sample_lightmap_with_shift(1, 0, light_uv, world_depth);
+    total_light += sample_lightmap_with_shift(0, -1, light_uv, world_depth);
+    total_light += sample_lightmap_with_shift(0, 1, light_uv, world_depth);
 
     return ((total_light / 5.0)) * 0.15;
     // return 0.5;
@@ -89,16 +93,16 @@ float sample_lightmap(vec3 world_pos, vec3 normal) {
 void main(void) {
     vec3 final_color = vec3(0);
 
-    const Material stored_mat = get_mat(load_mat_spass(matNorm), voxelPalette);
+    const Material stored_mat = get_mat(load_mat_spass());
     const vec3 stored_accumulated_reflection = vec3(1);
     const vec3 stored_accumulated_light = vec3(0);
     const vec3 direction = ubo.camdir.xyz;
 
     vec2 clip_pos = gl_FragCoord.xy / ubo.frame_size * 2.0 - 1.0;
-    const vec3 origin = get_origin_from_depth(load_depth_spass(depthBuffer), clip_pos);
-    const vec3 stored_normal = load_norm_spass(matNorm);
+    const vec3 origin = get_origin_from_depth(load_depth_spass(), clip_pos);
+    const vec3 stored_normal = load_norm_spass();
 
-    vec3 incoming_light = sample_radiance(origin + stored_normal * 6.0, radianceCache);
+    vec3 incoming_light = sample_radiance(origin + stored_normal * 6.0);
     float sunlight = sample_lightmap(origin, stored_normal);
 
     final_color = (2.0 * incoming_light + stored_mat.emmitance + sunlight) * stored_mat.color;

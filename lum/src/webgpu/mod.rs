@@ -134,12 +134,8 @@ pub struct InternalRendererWebGPU<'window, D: Dim3> {
     pub camera: Camera,
     pub light: SunLight,
 
-    pub block_copies_queue: Vec<(
-        wgpu::TexelCopyTextureInfo<'window>,
-        wgpu::TexelCopyTextureInfo<'window>,
-        wgpu::Extent3d,
-    )>,
-    pub block_clear_queue: Vec<wgpu::ImageSubresourceRange>,
+    pub block_copies_queue: Vec<(wgpu::Origin3d, wgpu::Origin3d)>,
+    pub block_clear_queue: Vec<wgpu::Origin3d>,
 
     pub palette_counter: usize,
     pub static_block_palette_size: u32,

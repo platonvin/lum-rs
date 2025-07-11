@@ -19,6 +19,7 @@ pub mod barriers;
 pub mod buffers;
 pub mod descriptors;
 pub mod images;
+pub mod macros;
 pub mod pipes;
 pub mod renderer;
 pub mod rpass;
@@ -213,19 +214,20 @@ pub struct DescriptorCounter {
 }
 
 impl DescriptorCounter {
-    fn increment_counter(&mut self, desc_type: vk::DescriptorType) {
+    fn increment_counter(&mut self, desc_type: vk::DescriptorType, fif: u32) {
+        // dbg!(desc_type);
         match desc_type {
-            vk::DescriptorType::SAMPLER => self.SAMPLER += 1,
-            vk::DescriptorType::COMBINED_IMAGE_SAMPLER => self.COMBINED_IMAGE_SAMPLER += 1,
-            vk::DescriptorType::SAMPLED_IMAGE => self.SAMPLED_IMAGE += 1,
-            vk::DescriptorType::STORAGE_IMAGE => self.STORAGE_IMAGE += 1,
-            vk::DescriptorType::UNIFORM_TEXEL_BUFFER => self.UNIFORM_TEXEL_BUFFER += 1,
-            vk::DescriptorType::STORAGE_TEXEL_BUFFER => self.STORAGE_TEXEL_BUFFER += 1,
-            vk::DescriptorType::UNIFORM_BUFFER => self.UNIFORM_BUFFER += 1,
-            vk::DescriptorType::STORAGE_BUFFER => self.STORAGE_BUFFER += 1,
-            vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC => self.UNIFORM_BUFFER_DYNAMIC += 1,
-            vk::DescriptorType::STORAGE_BUFFER_DYNAMIC => self.STORAGE_BUFFER_DYNAMIC += 1,
-            vk::DescriptorType::INPUT_ATTACHMENT => self.INPUT_ATTACHMENT += 1,
+            vk::DescriptorType::SAMPLER => self.SAMPLER += fif,
+            vk::DescriptorType::COMBINED_IMAGE_SAMPLER => self.COMBINED_IMAGE_SAMPLER += fif,
+            vk::DescriptorType::SAMPLED_IMAGE => self.SAMPLED_IMAGE += fif,
+            vk::DescriptorType::STORAGE_IMAGE => self.STORAGE_IMAGE += fif,
+            vk::DescriptorType::UNIFORM_TEXEL_BUFFER => self.UNIFORM_TEXEL_BUFFER += fif,
+            vk::DescriptorType::STORAGE_TEXEL_BUFFER => self.STORAGE_TEXEL_BUFFER += fif,
+            vk::DescriptorType::UNIFORM_BUFFER => self.UNIFORM_BUFFER += fif,
+            vk::DescriptorType::STORAGE_BUFFER => self.STORAGE_BUFFER += fif,
+            vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC => self.UNIFORM_BUFFER_DYNAMIC += fif,
+            vk::DescriptorType::STORAGE_BUFFER_DYNAMIC => self.STORAGE_BUFFER_DYNAMIC += fif,
+            vk::DescriptorType::INPUT_ATTACHMENT => self.INPUT_ATTACHMENT += fif,
             _ => {
                 panic!("Unknown descriptor type");
             }
@@ -352,6 +354,8 @@ pub struct Renderer {
     pub debug_utils_device_loader: debug_utils::Device,
     /// loader for push_descriptors-related functions
     pub push_descriptors_loader: push_descriptor::Device,
+    /// Physical Device Limits - some hw properties that you should respect, like max Push constants size or allowed alignments
+    pub device_limits: vk::PhysicalDeviceLimits,
 
     /// Global counter of rendered frames, mostly for rng
     pub frame: i32,
@@ -426,6 +430,8 @@ impl Renderer {
             let debug_utils_device_loader = debug_utils::Device::new(&instance, &device);
             let push_descriptors_loader = push_descriptor::Device::new(&instance, &device);
 
+            let device_limits = instance.get_physical_device_properties(physical_device).limits;
+
             let descriptor_pool = DescriptorPool::null();
 
             Renderer {
@@ -462,6 +468,7 @@ impl Renderer {
                 debug_utils_loader,
                 debug_utils_device_loader,
                 push_descriptors_loader,
+                device_limits,
             }
         }
     }

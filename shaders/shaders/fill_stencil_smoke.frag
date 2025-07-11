@@ -13,12 +13,6 @@ layout(location = 1) out float near_depth_out;
 #include "common/ext.glsl"
 
 void main() {
-    if(!gl_FrontFacing){
-        gl_FragDepth = end_depth_in - 0.01;
-    } else {
-        gl_FragDepth = end_depth_in;
-    }
-
     far_depth_out = end_depth_in;
     near_depth_out = end_depth_in;
 }
