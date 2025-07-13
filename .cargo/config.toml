@@ -1,5 +1,5 @@
 [alias]
-# just shorter alias... saves 1 character!!!
+# just shorter alias... saves 1 character!!!11
 nv = "rnv"
 nw = "rnw"
 rnv = "run -Zbuild-std=std,panic_abort --profile native --package demo --bin demo_vk --features vk_backend"
@@ -35,6 +35,9 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 [env]
 RUST_BACKTRACE = "short" # this is what i love in Rust
 
+# [profile.dev.build-override]
+# rustflags = ["-Z", "self-profile"]
+
 # native is highest perfomance build
 [profile.native.build-override]
 rustflags = [
@@ -58,6 +61,8 @@ rustflags = [
 codegen-backend = true
 
 # [profile.dev]
+# codegen-backend = "cranelift"
+# [profile.release]
 # codegen-backend = "cranelift"
 
 # to disable some llvm wasm features that break my current tooling (e.g. wasm-opt)

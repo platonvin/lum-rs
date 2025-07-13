@@ -10,7 +10,7 @@ Lum is not an extendable engine*, but a specialized rendering library. You shoul
 ### Prerequisites
 - nightly Rust: for certain #![features]
 - Vulkan drivers
-- Vulkan SDK: glslc and validation layers
+- Vulkan SDK: glslc and validation layers (to build demo without validation layers enabled, glslc is sufficient)
 
 ### Usage
 look at the [demo source code](example/demo/src/demo_lib.rs) and [documentation](https://platonvin.github.io/docs/lum.html)
@@ -23,10 +23,10 @@ look at the [demo source code](example/demo/src/demo_lib.rs) and [documentation]
 
 > You can also download pre-built binaries from the [releases](https://github.com/platonvin/lum-rs/releases)
 
-`cargo 123`, where
-- **1** = `b` / `r` - build / build & run
-- **2** = `d` / `r` / `n` / `i` - dev / release(some optimizations) / native (all optimizations with SIMD) / distribution(all optimizations without SIMD) profile
-- **3** = `v` / `w` - Vulkan / WGPU backend
+`cargo 123`, where\
+* **1** = `b` / `r` - build / build & run\
+* **2** = `d` / `r` / `n` / `i` - dev / release(some optimizations) / native (all optimizations with SIMD) / distribution(all optimizations without SIMD) profile\
+* **3** = `v` / `w` - Vulkan / WGPU backend\
 
 example: `cargo brv` will `build` `release` `vulkan` demo 
 

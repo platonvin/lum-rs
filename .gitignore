@@ -4,6 +4,7 @@ temp
 /temp.md
 # compiled shaders (SPIR-V). They are not shipped
 *.spv 
+*.mm_profdata 
 # magicavoxel models. I kinda need them for demos to work on other machines
 # /assets
 # mtg deck. Dont ask.
