@@ -181,7 +181,10 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         lum.draw_world();
         lum.draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
 
+        #[cfg(not(target_arch = "wasm32"))]
         let frand01 = || (random::<u64>() as f64 / u64::MAX as f64) as f32;
+        #[cfg(target_arch = "wasm32")]
+        let frand01 = || ((lum.get_counter() % 17) as f32 / 16.0) as f32;
         let s = lum.get_model_size(self.meshes.tank_body);
         let size = vec3::new(s.x as f32, s.y as f32, s.z as f32);
         fn rotate_vector_by_quaternion(q: quat, v: vec3) -> vec3 {
@@ -195,6 +198,9 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
 
         lum.spawn_particle(&lum::types::Particle {
             pos,
+            #[cfg(not(target_arch = "wasm32"))]
+            vel: vec3::new(5.0 * frand01(), 5.0 * frand01(), 20.0),
+            #[cfg(target_arch = "wasm32")]
             vel: vec3::new(5.0 * frand01(), 5.0 * frand01(), 20.0),
             life_time: 3.0,
             mat_id: 31,
