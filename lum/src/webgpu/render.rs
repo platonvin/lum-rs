@@ -2571,8 +2571,15 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
         &mut self.renderer.material_palette
     }
 
+    fn get_counter(&self) -> isize {
+        self.renderer.counter
+    }
     fn get_time(&self) -> std::time::Instant {
-        self.renderer.last_time
+        #[cfg(not(target_arch = "wasm32"))]
+        return self.renderer.last_time;
+
+        #[cfg(target_arch = "wasm32")]
+        panic!()
     }
     fn get_dt(&self) -> f32 {
         self.renderer.delta_time

@@ -3,7 +3,7 @@
 ### Lum
 Fast voxel renderer for web and native.
 
-Lum is not an extendable engine*, but a specialized rendering library. You should only use it if you want to build a voxel game that looks very close to what Lum has to offer.
+Lum is not an extendable engine*, but a specialized rendering library, developed to power my future games. You should only use it if you want to build a voxel game that looks very close to what Lum has to offer.
 
 \* I don't believe in engines that are extendable, fast, **and** simple 
 

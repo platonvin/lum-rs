@@ -96,8 +96,9 @@ fn compile_spirv_shaders(dest: &Path) -> std::io::Result<Vec<String>> {
                         // if !status.success() {
                         //     panic!("spirv-opt failed on {}", out_path.display());
                         // }
+
+                        // i think its fine to only update deps when file itself changed
                     }
-                    // Emit rerun-if-changed for this file and all of its includes:
                     let mut deps = Vec::new();
                     collect_includes_recursively(&path, &mut deps)?;
                     println!("cargo:rerun-if-changed={}", path.display());

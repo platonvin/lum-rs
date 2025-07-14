@@ -8,9 +8,9 @@
 #![feature(const_trait_impl)]
 // clippy settings
 #![allow(clippy::too_many_arguments)] // LOL
-#![allow(clippy::option_map_unit_fn)]
 
 pub use shaders;
+pub use winit;
 
 use containers::array3d::{ConstDims, Dim3};
 use qvek::{vek::FrustumPlanes, *};

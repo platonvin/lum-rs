@@ -2334,6 +2334,9 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
         &mut self.renderer.material_palette
     }
 
+    fn get_counter(&self) -> isize {
+        self.renderer.counter
+    }
     fn get_time(&self) -> std::time::Instant {
         self.renderer.last_time
     }

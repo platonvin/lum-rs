@@ -12,6 +12,7 @@ use core::f64;
 use lum::render_interface::ShaderSource;
 use lum::shaders;
 use lum::types::quat;
+use lum::winit;
 use lum::{
     fBLOCK_SIZE, for_zyx,
     render_interface::{FoliageDescriptionBuilder, FoliageDescriptionCreate, RendererInterface},
@@ -56,6 +57,7 @@ struct DemoState<'renderer, Renderer: RendererInterface<'renderer, WorldSize>> {
     /// tracking issue: https://github.com/rust-windowing/winit/issues/2094
     /// what we effectively do is we dont resize if its still Init phase
     is_init: bool,
+    #[cfg(not(target_arch = "wasm32"))]
     init_time: std::time::Instant,
     _phantom: PhantomData<&'renderer Renderer>,
 }
@@ -71,6 +73,7 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
             transforms: Default::default(),
             about_to_close: false,
             is_init: true,
+            #[cfg(not(target_arch = "wasm32"))]
             init_time: std::time::Instant::now(),
             _phantom: PhantomData::default(),
         }
@@ -165,7 +168,10 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         // some movement
         self.transforms.tank_body.translation.z = 20.0;
 
+        #[cfg(not(target_arch = "wasm32"))]
         let ftime = self.init_time.elapsed().as_secs_f64();
+        #[cfg(target_arch = "wasm32")]
+        let ftime = lum.get_counter() as f64 * (1.0 / 60.0);
         self.transforms.tank_body.translation.x = (10.0 * 16.0 + 10.0 * f64::sin(ftime)) as f32;
         self.transforms.tank_body.translation.y =
             (10.0 * 16.0 + 25.0 * f64::sin(f64::consts::FRAC_PI_2 - ftime)) as f32;

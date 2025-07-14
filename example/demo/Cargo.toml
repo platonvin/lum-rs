@@ -13,7 +13,6 @@ vk_backend = ["lum/vk_backend"]
 lum = { path = "../../lum" }
 containers = { path = "../../containers" }
 assets = { path = "../assets" }
-winit = "0.30.11"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4.0"

@@ -26,6 +26,8 @@ pub mod rpass;
 pub mod samplers;
 
 pub use ash::vk;
+pub use winit;
+
 #[cfg(feature = "debug_validation_names")]
 use ash::vk::DebugUtilsObjectNameInfoEXT;
 use ash::{
