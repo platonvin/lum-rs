@@ -361,13 +361,14 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
         for (src, dst) in self.block_copies_queue.iter() {
             self.current_encoder.as_mut().unwrap().copy_texture_to_texture(
                 wgpu::TexelCopyTextureInfo {
-                    texture: &self.dependent_images.as_ref().unwrap().mat_norm.texture,
+                    // TODO: cant we really copy from current to current?
+                    texture: &self.independent_images.block_palette.previous().texture,
                     mip_level: 0,
                     origin: *src,
                     aspect: wgpu::TextureAspect::All,
                 },
                 wgpu::TexelCopyTextureInfo {
-                    texture: &self.dependent_images.as_ref().unwrap().mat_norm.texture,
+                    texture: &self.independent_images.block_palette.current().texture,
                     mip_level: 0,
                     origin: *dst,
                     aspect: wgpu::TextureAspect::All,
