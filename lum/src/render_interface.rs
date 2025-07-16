@@ -130,6 +130,6 @@ pub trait RendererInterface<'a, D: Dim3> {
     fn get_material_palette_mut(&mut self) -> &mut [Material];
 
     fn get_counter(&self) -> isize;
-    fn get_time(&self) -> std::time::Instant;
+    fn get_time(&self) -> web_time::Instant;
     fn get_dt(&self) -> f32;
 }

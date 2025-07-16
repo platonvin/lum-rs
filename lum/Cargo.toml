@@ -44,6 +44,10 @@ winit = "0.30.11"
 wgpu = { version = "25.0.2", optional = true }
 futures = { version = "0.3.31", optional = true }
 
+# [target.'cfg(target_arch = "wasm32")'.dependencies]
+# it re-exports normal std time when not wasm
+web-time = "1.1.0"
+
 [dev-dependencies]
 criterion = "0.6.0"
 zarray = "1.3.0"

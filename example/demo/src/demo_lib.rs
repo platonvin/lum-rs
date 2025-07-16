@@ -11,6 +11,7 @@ use containers::array3d::ConstDims;
 use core::f64;
 use lum::render_interface::ShaderSource;
 use lum::shaders;
+use lum::time;
 use lum::types::quat;
 use lum::winit;
 use lum::{
@@ -20,7 +21,7 @@ use lum::{
     Settings,
 };
 use std::marker::PhantomData;
-use std::random::random;
+use std::random::Random;
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -29,6 +30,7 @@ use winit::{
     event_loop::ActiveEventLoop,
     window::{Window, WindowId},
 };
+mod demo_rnd;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -41,6 +43,8 @@ use winit::platform::web::WindowAttributesExtWebSys;
 use console_error_panic_hook;
 #[cfg(target_arch = "wasm32")]
 use console_log;
+
+use crate::demo_rnd::JustFuckingRandomGenerator;
 
 // we "harcode" world size but it could also be dynamic with `RuntimeDims`
 pub type WorldSize = ConstDims<48, 48, 16>;
@@ -56,10 +60,11 @@ struct DemoState<'renderer, Renderer: RendererInterface<'renderer, WorldSize>> {
     /// also, there is multiple bad things this causes and it behaves differently depending on the platform
     /// tracking issue: https://github.com/rust-windowing/winit/issues/2094
     /// what we effectively do is we dont resize if its still Init phase
-    is_init: bool,
-    #[cfg(not(target_arch = "wasm32"))]
-    init_time: std::time::Instant,
+    /// Ofcourse, in web it behaves differently. "fuck you, thats why"
+    is_still_init: bool,
+    init_time: time::Instant,
     _phantom: PhantomData<&'renderer Renderer>,
+    rng: JustFuckingRandomGenerator,
 }
 
 impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
@@ -72,10 +77,10 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
             meshes: AllMeshes::default(),
             transforms: Default::default(),
             about_to_close: false,
-            is_init: true,
-            #[cfg(not(target_arch = "wasm32"))]
-            init_time: std::time::Instant::now(),
+            is_still_init: true,
+            init_time: time::Instant::now(),
             _phantom: PhantomData::default(),
+            rng: JustFuckingRandomGenerator::new(std::num::NonZero::new(42).unwrap()),
         }
     }
 
@@ -168,10 +173,8 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         // some movement
         self.transforms.tank_body.translation.z = 20.0;
 
-        #[cfg(not(target_arch = "wasm32"))]
         let ftime = self.init_time.elapsed().as_secs_f64();
-        #[cfg(target_arch = "wasm32")]
-        let ftime = lum.get_counter() as f64 * (1.0 / 60.0);
+
         self.transforms.tank_body.translation.x = (10.0 * 16.0 + 10.0 * f64::sin(ftime)) as f32;
         self.transforms.tank_body.translation.y =
             (10.0 * 16.0 + 25.0 * f64::sin(f64::consts::FRAC_PI_2 - ftime)) as f32;
@@ -181,10 +184,8 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         lum.draw_world();
         lum.draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
 
-        #[cfg(not(target_arch = "wasm32"))]
-        let frand01 = || (random::<u64>() as f64 / u64::MAX as f64) as f32;
-        #[cfg(target_arch = "wasm32")]
-        let frand01 = || ((lum.get_counter() % 17) as f32 / 16.0) as f32;
+        let mut frand01 = || (u64::random(&mut self.rng) as f64 / u64::MAX as f64) as f32;
+
         let s = lum.get_model_size(self.meshes.tank_body);
         let size = vec3::new(s.x as f32, s.y as f32, s.z as f32);
         fn rotate_vector_by_quaternion(q: quat, v: vec3) -> vec3 {
@@ -198,9 +199,6 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
 
         lum.spawn_particle(&lum::types::Particle {
             pos,
-            #[cfg(not(target_arch = "wasm32"))]
-            vel: vec3::new(5.0 * frand01(), 5.0 * frand01(), 20.0),
-            #[cfg(target_arch = "wasm32")]
             vel: vec3::new(5.0 * frand01(), 5.0 * frand01(), 20.0),
             life_time: 3.0,
             mat_id: 31,
@@ -272,9 +270,7 @@ impl<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static> App
                 self.render();
             }
             WindowEvent::Resized(PhysicalSize { width, height }) => {
-                #[cfg(target_arch = "wasm32")]
-                log::info!("Resizing renderer surface to: ({width}, {height})");
-                if !self.is_init {
+                if !self.is_still_init {
                     // if still in init phase, completely ignore resize events from Winit
                     self.lum.resize(PhysicalSize { width, height });
                 }
@@ -309,8 +305,10 @@ impl<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static> App
 
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
         match cause {
-            StartCause::Init => self.is_init = true,
-            _ => self.is_init = false,
+            // set to still initializing on native, but in web it for whatever reason means already initialized
+            #[cfg(not(target_arch = "wasm32"))]
+            StartCause::Init => self.is_still_init = true,
+            _ => self.is_still_init = false,
         }
     }
 

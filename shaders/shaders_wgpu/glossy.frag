@@ -127,7 +127,7 @@ fn CastRay_fast(origin: vec3<f32>, direction: vec3<f32>, fraction_inout: ptr<fun
         let current_voxel = voxel_info.x;
         let current_block = voxel_info.y;
 
-        // yeah this is faster...s
+        // yeah this is faster...
         if (current_block == 0) {
             let block_base_coord = floor(pos / 16.0) * 16.0;
             let precomputed_corner_offset = vec3<f32>(b_pos_dir) * 16.0;
@@ -207,7 +207,7 @@ fn CastRay_fast(origin: vec3<f32>, direction: vec3<f32>, fraction_inout: ptr<fun
                 return false; 
             }
         }
-    // Continue coarse step loop if current_voxel is air but block is not empty, or if block was skipped
+        // Continue coarse step loop if current_voxel is air but block is not empty, or if block was skipped
     } 
 
     *left_bounds_out = true;

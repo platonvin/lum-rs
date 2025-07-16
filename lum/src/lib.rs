@@ -10,6 +10,7 @@
 #![allow(clippy::too_many_arguments)] // LOL
 
 pub use shaders;
+pub use web_time as time;
 pub use winit;
 
 use containers::array3d::{ConstDims, Dim3};

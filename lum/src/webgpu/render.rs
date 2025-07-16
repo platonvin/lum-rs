@@ -151,18 +151,10 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
 
     /// Starts the stage where you can "request drawing" things
     pub fn start_frame(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let now = std::time::Instant::now();
-            let delta = now - self.last_time;
-            self.delta_time = (delta.subsec_nanos() as f64 / 1e9_f64) as f32;
-            self.last_time = now;
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            self.delta_time = 15.0 / 1000.0;
-        }
+        let now = web_time::Instant::now();
+        let delta = now - self.last_time;
+        self.delta_time = (delta.subsec_nanos() as f64 / 1e9_f64) as f32;
+        self.last_time = now;
 
         self.update_camera();
         self.update_light_transform();
@@ -330,15 +322,9 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
         // (cause its faster to zero entire image and copy static block_palette part back)
         // so we put data back by copying current() to previous() and now both are purely static palette
 
-        // Copy the static block palette region from untouched image .
-        let copy_extent = Extent3d {
-            // TODO: we assume that static block palettes only take the first raw, which is a bad assumption
-            width: BLOCK_SIZE * BLOCK_PALETTE_SIZE_X,
-            height: BLOCK_SIZE * BLOCK_PALETTE_SIZE_Y,
-            depth_or_array_layers: BLOCK_SIZE,
-        };
         // we have *just* moved the block palette ring - previous() is what is "dirty" and what we wrote into in previous frame
         // so we just copy fresh, clean data into our previous() block palette ring to "reset" it (TODO: zero it)
+        // this approach is kinda error-prone since we have no "origin" state and rely on proper order of moving "origin state" from frame to frame
         let src = TexelCopyTextureInfo {
             texture: &self.independent_images.block_palette.current().texture,
             mip_level: 0,
@@ -351,6 +337,14 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         };
+        // copy enture block palette (with air blocks for most of it, as a way to zero)
+        let copy_extent = Extent3d {
+            // TODO: we assume that static block palettes only take the first raw, which is a bad assumption
+            width: BLOCK_SIZE * BLOCK_PALETTE_SIZE_X,
+            height: BLOCK_SIZE * BLOCK_PALETTE_SIZE_Y,
+            depth_or_array_layers: BLOCK_SIZE,
+        };
+
         self.current_encoder
             .as_mut()
             .unwrap()
@@ -365,6 +359,7 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
                     texture: &self.independent_images.block_palette.previous().texture,
                     mip_level: 0,
                     origin: *src,
+                    // origin: Origin3d { x: 0, y: 0, z: 0 },
                     aspect: wgpu::TextureAspect::All,
                 },
                 wgpu::TexelCopyTextureInfo {
@@ -376,7 +371,8 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
                 wgpu::Extent3d {
                     width: 16,
                     height: 16,
-                    depth_or_array_layers: 1,
+                    // TODO: fn for copying blocks cause i hate missing BLOCK_SIZE here
+                    depth_or_array_layers: BLOCK_SIZE,
                 },
             );
         }
@@ -870,161 +866,6 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
         swapchain_texture.present();
     }
 
-    fn move_next(&mut self) {
-        self.renderer.buffers.staging_world.move_next();
-        self.renderer.buffers.light_uniform.move_next();
-        self.renderer.buffers.uniform.move_next();
-        self.renderer.buffers.ao_lut_uniform.move_next();
-        self.renderer.buffers.gpu_radiance_updates.move_next();
-        // self.renderer.buffers.staging_radiance_updates.move_next();
-        // self.renderer.buffers.gpu_particles_staged.move_next();
-        self.renderer.buffers.gpu_particles.move_next();
-
-        // self.renderer.independent_images.grass_state.move_next();
-        // self.renderer.independent_images.water_state.move_next();
-        // self.renderer.independent_images.perlin_noise2d.move_next();
-        // self.renderer.independent_images.perlin_noise3d.move_next();
-        self.renderer.independent_images.world.move_next();
-        self.renderer.independent_images.radiance_cache.move_next();
-        self.renderer.independent_images.block_palette.move_next();
-        // self.renderer.independent_images.material_palette.move_next();
-        // self.renderer.independent_images.lightmap.move_next();
-
-        self.renderer
-            .pipes
-            .lightmap_blocks_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .lightmap_models_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .raygen_blocks_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .raygen_models_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .raygen_particles_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .raygen_water_pipe
-            .pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .diffuse_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer.pipes.ao_pipe.static_bind_groups.as_mut().map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .fill_stencil_glossy_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .fill_stencil_smoke_pipe
-            .pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .glossy_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .smoke_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .tonemap_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .radiance_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .map_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .update_grass_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .update_water_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .gen_perlin2d_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        self.renderer
-            .pipes
-            .gen_perlin3d_pipe
-            .static_bind_groups
-            .as_mut()
-            .map(|bg| bg.move_next());
-
-        for foliage_pipe in self.renderer.pipes.raygen_foliage_pipes.iter_mut() {
-            foliage_pipe.pipe.static_bind_groups.as_mut().map(|bg| bg.move_next());
-        }
-    }
-
     fn blockify_models(&mut self) {
         self.renderer.start_blockify();
         for mrr in &self.model_que {
@@ -1056,40 +897,36 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
                     for xx in border.min.x..=border.max.x {
                         let current_block =
                             self.renderer.current_world[(xx as usize, yy as usize, zz as usize)];
-                        if (current_block as u32) < self.renderer.static_block_palette_size {
-                            // static
-                            //add to copy queue
+
+                        // if static block (=not allocated yet)
+                        if current_block < self.renderer.static_block_palette_size as i32 {
                             let src_block = self.renderer.index_block_xy(current_block as usize);
                             let dst_block =
                                 self.renderer.index_block_xy(self.renderer.palette_counter);
+                            // dbg!(src_block);
+                            // dbg!(dst_block);
 
-                            // do image copy on for non-zero-src blocks. Other things still done for every allocated block
+                            // do image copy on for non-zero-src blocks. Other things are still done for every allocated block
                             // because zeroing is fast
-                            // if current_block != 0 {
-                            // not for wgpu though
+                            if current_block != 0 {
+                                self.renderer.block_copies_queue.push((
+                                    wgpu::Origin3d {
+                                        x: src_block.x as u32 * BLOCK_SIZE,
+                                        y: src_block.y as u32 * BLOCK_SIZE,
+                                        z: 0,
+                                    },
+                                    wgpu::Origin3d {
+                                        x: dst_block.x as u32 * BLOCK_SIZE,
+                                        y: dst_block.y as u32 * BLOCK_SIZE,
+                                        z: 0,
+                                    },
+                                ));
+                            }
 
-                            self.renderer.block_copies_queue.push((
-                                wgpu::Origin3d {
-                                    x: src_block.x as u32 * 16,
-                                    y: src_block.y as u32 * 16,
-                                    z: 0,
-                                },
-                                wgpu::Origin3d {
-                                    x: dst_block.x as u32 * 16,
-                                    y: dst_block.y as u32 * 16,
-                                    z: 0,
-                                },
-                            ));
-
-                            // } else {
-                            //     // push block to "zero"
-                            //     self.renderer.block_clear_queue.push(wgpu::Origin3d {
-                            //         x: dst_block.x as u32 * 16,
-                            //         y: dst_block.y as u32 * 16,
-                            //         z: 0,
-                            //     });
-                            // }
-
+                            debug_assert!(
+                                self.renderer.palette_counter
+                                    >= self.renderer.settings.static_block_palette_size as usize
+                            );
                             self.renderer.current_world[(xx as usize, yy as usize, zz as usize)] =
                                 self.renderer.palette_counter as InternalBlockId;
                             self.renderer.palette_counter += 1;
@@ -2525,7 +2362,7 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
         self.glossy();
         self.smoke();
         self.tonemap();
-        self.move_next();
+        self.renderer.move_next();
 
         self.renderer.counter += 1;
 
@@ -2575,12 +2412,8 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
     fn get_counter(&self) -> isize {
         self.renderer.counter
     }
-    fn get_time(&self) -> std::time::Instant {
-        #[cfg(not(target_arch = "wasm32"))]
+    fn get_time(&self) -> web_time::Instant {
         return self.renderer.last_time;
-
-        #[cfg(target_arch = "wasm32")]
-        panic!()
     }
     fn get_dt(&self) -> f32 {
         self.renderer.delta_time
