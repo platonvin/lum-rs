@@ -21,7 +21,7 @@ use lum::{
     Settings,
 };
 use std::marker::PhantomData;
-use std::random::Random;
+use std::random::Distribution;
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -44,6 +44,7 @@ use console_error_panic_hook;
 #[cfg(target_arch = "wasm32")]
 use console_log;
 
+use crate::demo_rnd::JustFuckingDistributionU64;
 use crate::demo_rnd::JustFuckingRandomGenerator;
 
 // we "harcode" world size but it could also be dynamic with `RuntimeDims`
@@ -184,7 +185,9 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         lum.draw_world();
         lum.draw_model(&self.meshes.tank_body, &self.transforms.tank_body);
 
-        let mut frand01 = || (u64::random(&mut self.rng) as f64 / u64::MAX as f64) as f32;
+        let dist = JustFuckingDistributionU64 {};
+
+        let mut frand01 = || (dist.sample(&mut self.rng) as f64 / u64::MAX as f64) as f32;
 
         let s = lum.get_model_size(self.meshes.tank_body);
         let size = vec3::new(s.x as f32, s.y as f32, s.z as f32);

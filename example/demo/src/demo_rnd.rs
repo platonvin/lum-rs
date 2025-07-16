@@ -1,4 +1,7 @@
-use std::{num::NonZeroU64, random::RandomSource};
+use std::{
+    num::NonZeroU64,
+    random::{Distribution, RandomSource},
+};
 
 pub struct JustFuckingRandomGenerator {
     state: u64,
@@ -29,15 +32,20 @@ impl JustFuckingRandomGenerator {
             chunk.copy_from_slice(&rnd[..len]);
         }
     }
-
-    fn next_f32(&mut self) -> f32 {
-        let r = (self.next_u64() >> 40) as u32;
-        (r as f32) / (u32::MAX >> 8) as f32
-    }
 }
 
 impl RandomSource for JustFuckingRandomGenerator {
     fn fill_bytes(&mut self, bytes: &mut [u8]) {
         self.fill_bytes(bytes);
+    }
+}
+
+pub struct JustFuckingDistributionU64 {}
+
+impl Distribution<u64> for JustFuckingDistributionU64 {
+    fn sample(&self, source: &mut (impl RandomSource + ?Sized)) -> u64 {
+        let mut bytes = [0u8; 8];
+        source.fill_bytes(&mut bytes);
+        u64::from_le_bytes(bytes)
     }
 }
