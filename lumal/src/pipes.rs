@@ -406,7 +406,7 @@ impl Renderer {
             self,
             debug_name,
             (&pipe.line, "Pipeline"),
-            (&pipe.line_layout, "Pipeline Layout")
+            (&pipe.layout, "Pipeline Layout")
         );
     }
 

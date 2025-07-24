@@ -268,12 +268,12 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             let stencil_view_for_ds =
                 unsafe { lumal.device.create_image_view(&view_info, None).unwrap() };
 
-            #[cfg(feature = "debug_validation_names")]
-            set_debug_names!(
-                lumal,
-                Some("Stencil View for DS"),
-                (&stencil_view_for_ds[i], "Image View")
-            );
+            // #[cfg(feature = "debug_validation_names")]
+            // set_debug_names!(
+            //     lumal,
+            //     Some("Stencil View for DS"),
+            //     (&stencil_view_for_ds[i], "Image View")
+            // );
 
             stencil_view_for_ds
         };

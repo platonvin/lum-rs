@@ -8,6 +8,7 @@ readme = { workspace = true }
 default = []
 wgpu_backend = ["lum/wgpu_backend"]
 vk_backend = ["lum/vk_backend"]
+debug_validation_names = ["lum/debug_validation_names"]
 
 [dependencies]
 lum = { path = "../../lum" }

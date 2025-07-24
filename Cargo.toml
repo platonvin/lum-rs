@@ -29,7 +29,7 @@ incremental = true
 debug = true
 
 # wtf so does it work or not? TODO:
-# features = ["lum/debug_validation_names"]
+# [profile.dev]
 
 
 [profile.dev.package.lum]

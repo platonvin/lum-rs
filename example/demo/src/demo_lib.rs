@@ -58,7 +58,7 @@ struct DemoState<'renderer, Renderer: RendererInterface<'renderer, WorldSize>> {
     transforms: AllTransforms,
     about_to_close: bool,
     /// crutch cause winit cant initialize properly for the last multiple years
-    /// also, there is multiple bad things this causes and it behaves differently depending on the platform
+    /// also, there are multiple bad things this causes and it behaves differently depending on the platform
     /// tracking issue: https://github.com/rust-windowing/winit/issues/2094
     /// what we effectively do is we dont resize if its still Init phase
     /// Ofcourse, in web it behaves differently. "fuck you, thats why"
@@ -85,7 +85,7 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         }
     }
 
-    pub fn load_scene(&mut self) {
+    pub fn load_scene(&mut self, grass: MeshFoliage) {
         let lum = &mut self.lum;
 
         // TODO: move to template args?
@@ -93,25 +93,6 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
             static_block_palette_size: 15,
             ..Settings::default()
         };
-
-        let mut foliage_desc_builder =
-            <Renderer as RendererInterface<WorldSize>>::FoliageDescriptionBuilder::new();
-
-        // here im using my `shaders` crate, but you (most likely)
-        // need to load it from somewhere else
-        #[cfg(feature = "vk_backend")]
-        let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-            ShaderSource::SpirV(shaders::Shader::get_spirv(shaders::Shader::GrassVert)),
-            13,
-            100,
-        ));
-
-        #[cfg(feature = "wgpu_backend")]
-        let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
-            ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
-            13,
-            100,
-        ));
 
         self.meshes = AllMeshes::new(lum, grass);
 
@@ -360,7 +341,7 @@ pub async fn run() {
 
     let mut foliage_desc_builder =
         <RendererWgpu<WorldSize> as RendererInterface<WorldSize>>::FoliageDescriptionBuilder::new();
-    let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
+    let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
         ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
         13,
         100,
@@ -378,15 +359,13 @@ pub async fn run() {
 
     let mut app = DemoState::new(window, renderer);
 
-    app.load_scene();
+    app.load_scene(grass);
 
     event_loop.run_app(&mut app).unwrap();
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'static>() {
-    use lum::render_interface::ShaderSource;
-
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
@@ -404,14 +383,14 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'stati
     let mut foliage_desc_builder =
         <Renderer as RendererInterface<WorldSize>>::FoliageDescriptionBuilder::new();
     #[cfg(feature = "vk_backend")]
-    let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
+    let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
         ShaderSource::SpirV(shaders::Shader::get_spirv(shaders::Shader::GrassVert)),
         13,
         100,
     ));
 
     #[cfg(feature = "wgpu_backend")]
-    let _grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
+    let grass = foliage_desc_builder.load_foliage(FoliageDescriptionCreate::new(
         ShaderSource::Wgsl(shaders::Shader::get_wgsl(shaders::Shader::GrassVert)),
         13,
         100,
@@ -426,7 +405,7 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'stati
 
     let mut app = DemoState::new(window, renderer);
 
-    app.load_scene();
+    app.load_scene(grass);
 
     event_loop.run_app(&mut app).unwrap();
 

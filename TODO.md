@@ -1,8 +1,11 @@
-IMPORTANT: Lum uses a RIGHT-HANDED coordinate system everywhere.
+RIGHT-HANDED coordinate system
+remove unused pc
+define a price for state chagne and move things a little bit even if makes it depth not sorted
+also sort radiance updates! Figure out what can be sorted for fun and profits
+dynamic reactivness - track in separate image, high for new, low for established, icrease on changes
 
 zero instead of copy wgpu
 remove clamps from shaders from everywhere (docs where clamps happen, maybe do them everywhere explicitly)
-define a price for state chagne and move things a little bit even if makes it depth not sorted
 store size of the allocated buffers and ensure that we are in bounds
 docs
 code cleanup

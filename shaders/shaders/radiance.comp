@@ -330,7 +330,7 @@ vec3 trace_ray(vec3 ray_pos, vec3 ray_dir){
 
 void store_probe(ivec3 probe_pos, vec3 accumulated_light){
     vec3 old_light = (texelFetch(radianceCache, probe_pos, 0).xyz);
-    old_light = clamp(old_light, 0, 1.0);
+    old_light = clamp(old_light, 0.0, 1.0);
     vec3 new_light = mix(old_light, accumulated_light, REACTIVNESS);
     imageStore(radianceCache2write, probe_pos, vec4(new_light,1));
 }
@@ -363,6 +363,7 @@ void main(){
         //  ray_dir = normalize(((Random3D() - 0.5)));
 
     vec3 ray_light = trace_ray(ray_pos, ray_dir);
+    
     // subgroupBarrier();
     ray_light = subgroupAdd(ray_light) / float(clamp(RAYS_PER_PROBE, 0, gl_SubgroupSize));
     // subgroupBarrier(); 

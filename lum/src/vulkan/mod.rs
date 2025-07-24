@@ -68,7 +68,7 @@ pub struct AllPipes {
     /// currently unused
     overlay_pipe: RasterPipe,
 
-    /// Updades per-block lighting
+    /// Updades per-block radiance field (probes) lighting
     radiance_pipe: lumal::ComputePipe,
     /// Maps voxels of a model into the worldspace
     map_pipe: lumal::ComputePipe,

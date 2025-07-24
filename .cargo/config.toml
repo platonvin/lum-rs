@@ -23,30 +23,27 @@ brw = "build --profile release --package demo --bin demo_wgpu --features wgpu_ba
 
 dv = "rdv"
 dw = "rdw"
-rdv = "run --profile dev --package demo --bin demo_vk --features vk_backend"
-rdw = "run --profile dev --package demo --bin demo_wgpu --features wgpu_backend"
-bdv = "build --profile dev --package demo --bin demo_vk --features vk_backend"
-bdw = "build --profile dev --package demo --bin demo_wgpu --features wgpu_backend"
-
-[build]
-[target.'cfg(target_arch="wasm32")'.profile.dev]
-rustflags = ["--cfg=web_sys_unstable_apis"]
+rdv = "run --profile dev --package demo --bin demo_vk --features vk_backend,debug_validation_names"
+rdw = "run --profile dev --package demo --bin demo_wgpu --features wgpu_backend,debug_validation_names"
+bdv = "build --profile dev --package demo --bin demo_vk --features vk_backend,debug_validation_names"
+bdw = "build --profile dev --package demo --bin demo_wgpu --features wgpu_backend,debug_validation_names"
 
 [env]
 RUST_BACKTRACE = "short" # this is what i love in Rust
 
-# [profile.dev.build-override]
-# rustflags = ["-Z", "self-profile"]
+[build]
+rustflags = ["-Z", "threads=8"]
+
+[target.'cfg(target_arch="wasm32")'.profile.dev]
+# to disable some llvm wasm features that break my current tooling (e.g. wasm-opt)
+rustflags = ["--cfg=web_sys_unstable_apis", "-C", "target-cpu=mvp"]
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
 
 # native is highest perfomance build
 [profile.native.build-override]
-rustflags = [
-    "-C",
-    "target-cpu=native",
-    # TODO: find better passes for Lum 
-    # "-C",
-    # "passes= adce loop-unroll simplifycfg gvn sroa tailcallelim early-cse",
-]
+rustflags = ["-C", "target-cpu=native"]
 
 # natsize is smallest build
 [profile.natsize.build-override]
@@ -60,11 +57,8 @@ rustflags = [
 [unstable]
 codegen-backend = true
 
-# [profile.dev]
-# codegen-backend = "cranelift"
+[profile.dev.build-override]
+codegen-backend = "cranelift"
+
 # [profile.release]
 # codegen-backend = "cranelift"
-
-# to disable some llvm wasm features that break my current tooling (e.g. wasm-opt)
-[target.wasm32-unknown-unknown]
-rustflags = ["-C", "target-cpu=mvp"]

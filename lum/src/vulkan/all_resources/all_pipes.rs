@@ -11,7 +11,7 @@ use containers::array3d::Dim3;
 use containers::Ring;
 use lumal::descriptors::{
     AttrFormOffs, BlendAttachment, DepthTesting, DescriptorInfo, DescriptorResource,
-    ShortDescriptorInfo,
+    RelativeResource, ShortDescriptorInfo,
 };
 use lumal::{vk, LumalSettings, Renderer};
 use std::mem::offset_of;
@@ -111,7 +111,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<quat>() + std::mem::size_of::<vec4>()) as u32, // push size
             DepthTesting::ReadWrite,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
@@ -138,7 +137,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::NoBlend],
             12, // push size
             DepthTesting::ReadWrite,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
@@ -165,7 +163,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() * 3) as u32,
             DepthTesting::ReadWrite,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -209,7 +206,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::NoBlend],
             0,
             DepthTesting::ReadWrite,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -230,7 +226,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::NoBlend],
             (std::mem::size_of::<vec4>() + (std::mem::size_of::<i32>() * 2)) as u32,
             DepthTesting::ReadWrite,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -258,7 +253,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 &[BlendAttachment::NoBlend],
                 (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32, // push size
                 DepthTesting::ReadWrite,
-                // DepthTesting::DT_None,
                 vk::CompareOp::LESS,
                 vk::CullModeFlags::NONE,
                 vk::StencilOpState::default(),
@@ -282,7 +276,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 + (std::mem::size_of::<vec4>() * 4)
                 + std::mem::size_of::<mat4>()) as u32,
             DepthTesting::None,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -303,7 +296,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::BlendMix],
             0,
             DepthTesting::None,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(),
@@ -326,7 +318,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::NoBlend],
             0, // No push constants
             DepthTesting::None,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -360,7 +351,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             ],
             std::mem::size_of::<pc_types::RaygenMapSmoke>() as u32,
             DepthTesting::Read,
-            // DepthTesting::DT_None,
             vk::CompareOp::ALWAYS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -389,7 +379,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::BlendMix],
             (std::mem::size_of::<vec4>() + std::mem::size_of::<vec4>()) as u32,
             DepthTesting::None,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -418,7 +407,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::BlendMix],
             0, // No push constants
             DepthTesting::None,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState {
@@ -447,7 +435,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[BlendAttachment::NoBlend],
             0, // No push constants
             DepthTesting::None,
-            // DepthTesting::DT_None,
             vk::CompareOp::LESS,
             vk::CullModeFlags::NONE,
             vk::StencilOpState::default(), // no stencil
@@ -617,18 +604,15 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             Option<&str>,
         ),
     {
-        // We DO clone buffer, but its pointers anyways, so its fine
-        // If anyone is smart enough to work with references in Rust, please improve it
-
         // Defer descriptor setup for lightmapBlocksPipe
         process(
             lumal,
             &mut pipes.lightmap_blocks_pipe.set_layout,
             &mut pipes.lightmap_blocks_pipe.sets,
             &[DescriptorInfo {
-                resources: DescriptorResource::UniformBuffer(
-                    lumal::descriptors::RelativeResource::Current(&buffers.light_uniform),
-                ),
+                resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                    &buffers.light_uniform,
+                )),
                 specified_stages: vk::ShaderStageFlags::VERTEX,
             }],
             vk::ShaderStageFlags::VERTEX,
@@ -645,9 +629,9 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.lightmap_models_pipe.set_layout,
             &mut pipes.lightmap_models_pipe.sets,
             &[DescriptorInfo {
-                resources: DescriptorResource::UniformBuffer(
-                    lumal::descriptors::RelativeResource::Current(&buffers.light_uniform),
-                ),
+                resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                    &buffers.light_uniform,
+                )),
                 specified_stages: vk::ShaderStageFlags::VERTEX,
             }],
             vk::ShaderStageFlags::VERTEX,
@@ -666,7 +650,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.world),
+                        RelativeResource::Current(&iimages.world),
                         vk::ImageLayout::GENERAL,
                         samplers.unnorm_nearest,
                     ),
@@ -674,7 +658,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.block_palette),
+                        RelativeResource::Current(&iimages.block_palette),
                         vk::ImageLayout::GENERAL,
                         samplers.unnorm_nearest,
                     ),
@@ -682,30 +666,33 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
+                        RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
+                // samples previous...
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Previous(&iimages.radiance_cache),
+                        RelativeResource::Previous(&iimages.radiance_cache),
                         vk::ImageLayout::GENERAL,
                         samplers.unnorm_linear,
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
+                // ...and uses it to update (write to) current
                 DescriptorInfo {
                     resources: DescriptorResource::StorageImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.radiance_cache),
+                        RelativeResource::Current(&iimages.radiance_cache),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::StorageBuffer(
-                        lumal::descriptors::RelativeResource::Single(&buffers.gpu_radiance_updates),
+                        // like you are
+                        RelativeResource::Single(&buffers.gpu_radiance_updates),
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
@@ -725,28 +712,28 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.diffuse_pipe.sets,
             &[
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::InputAttachment(
-                        lumal::descriptors::RelativeResource::Single(&dimages.mat_norm),
+                        RelativeResource::Single(&dimages.mat_norm),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::InputAttachment(
-                        lumal::descriptors::RelativeResource::Single(&dimages.depth_stencil),
+                        RelativeResource::Single(&dimages.depth_stencil),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
+                        RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
@@ -754,7 +741,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.radiance_cache),
+                        RelativeResource::Current(&iimages.radiance_cache),
                         vk::ImageLayout::GENERAL,
                         samplers.linear_sampler,
                     ),
@@ -762,7 +749,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Single(&iimages.lightmap),
+                        RelativeResource::Single(&iimages.lightmap),
                         vk::ImageLayout::GENERAL,
                         samplers.shadow_sampler,
                     ),
@@ -783,27 +770,27 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.ao_pipe.sets,
             &[
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.ao_lut_uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.ao_lut_uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::InputAttachment(
-                        lumal::descriptors::RelativeResource::Single(&dimages.mat_norm),
+                        RelativeResource::Single(&dimages.mat_norm),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Single(&dimages.depth_stencil),
+                        RelativeResource::Single(&dimages.depth_stencil),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
@@ -824,7 +811,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.tonemap_pipe.sets,
             &[DescriptorInfo {
                 resources: DescriptorResource::InputAttachment(
-                    lumal::descriptors::RelativeResource::Single(&dimages.frame),
+                    RelativeResource::Single(&dimages.frame),
                     vk::ImageLayout::GENERAL,
                 ),
                 specified_stages: vk::ShaderStageFlags::FRAGMENT,
@@ -844,14 +831,14 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[
                 DescriptorInfo {
                     resources: DescriptorResource::InputAttachment(
-                        lumal::descriptors::RelativeResource::Single(&dimages.mat_norm),
+                        RelativeResource::Single(&dimages.mat_norm),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
+                        RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
@@ -871,9 +858,9 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.fill_stencil_smoke_pipe.set_layout,
             &mut pipes.fill_stencil_smoke_pipe.sets,
             &[DescriptorInfo {
-                resources: DescriptorResource::UniformBuffer(
-                    lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                ),
+                resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                    &buffers.uniform,
+                )),
                 specified_stages: vk::ShaderStageFlags::VERTEX,
             }],
             vk::ShaderStageFlags::VERTEX,
@@ -890,14 +877,14 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.glossy_pipe.sets,
             &[
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Single(&dimages.mat_norm),
+                        RelativeResource::Single(&dimages.mat_norm),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
@@ -905,7 +892,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Single(&dimages.depth_stencil),
+                        RelativeResource::Single(&dimages.depth_stencil),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
@@ -913,7 +900,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.world),
+                        RelativeResource::Current(&iimages.world),
                         vk::ImageLayout::GENERAL,
                         samplers.unnorm_nearest,
                     ),
@@ -921,7 +908,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.block_palette),
+                        RelativeResource::Current(&iimages.block_palette),
                         vk::ImageLayout::GENERAL,
                         samplers.unnorm_nearest,
                     ),
@@ -929,7 +916,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.material_palette),
+                        RelativeResource::Current(&iimages.material_palette),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
@@ -937,7 +924,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.radiance_cache),
+                        RelativeResource::Current(&iimages.radiance_cache),
                         vk::ImageLayout::GENERAL,
                         samplers.unnorm_linear,
                     ),
@@ -958,28 +945,28 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.smoke_pipe.sets,
             &[
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::InputAttachment(
-                        lumal::descriptors::RelativeResource::Single(&dimages.far_depth),
+                        RelativeResource::Single(&dimages.far_depth),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::InputAttachment(
-                        lumal::descriptors::RelativeResource::Single(&dimages.near_depth),
+                        RelativeResource::Single(&dimages.near_depth),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.radiance_cache),
+                        RelativeResource::Current(&iimages.radiance_cache),
                         vk::ImageLayout::GENERAL,
                         samplers.nearest_sampler,
                     ),
@@ -987,7 +974,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Single(&iimages.perlin_noise3d),
+                        RelativeResource::Single(&iimages.perlin_noise3d),
                         vk::ImageLayout::GENERAL,
                         samplers.linear_sampler_tiled,
                     ),
@@ -1008,14 +995,14 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.raygen_blocks_pipe.sets,
             &[
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.block_palette),
+                        RelativeResource::Current(&iimages.block_palette),
                         vk::ImageLayout::GENERAL,
                         samplers.unnorm_nearest,
                     ),
@@ -1035,9 +1022,9 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.raygen_models_pipe.set_layout,
             &mut pipes.raygen_models_pipe.sets,
             &[DescriptorInfo {
-                resources: DescriptorResource::UniformBuffer(
-                    lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                ),
+                resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                    &buffers.uniform,
+                )),
                 specified_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             }],
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
@@ -1054,16 +1041,16 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.raygen_particles_pipe.sets,
             &[
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::VERTEX
                         | vk::ShaderStageFlags::FRAGMENT
                         | vk::ShaderStageFlags::GEOMETRY,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::StorageImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.world),
+                        RelativeResource::Current(&iimages.world),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::VERTEX
@@ -1072,7 +1059,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::StorageImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.block_palette),
+                        RelativeResource::Current(&iimages.block_palette),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::VERTEX
@@ -1095,7 +1082,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[
                 DescriptorInfo {
                     resources: DescriptorResource::StorageImage(
-                        lumal::descriptors::RelativeResource::Single(&iimages.grass_state),
+                        RelativeResource::Single(&iimages.grass_state),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::VERTEX
@@ -1104,7 +1091,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Single(&iimages.perlin_noise2d),
+                        RelativeResource::Single(&iimages.perlin_noise2d),
                         vk::ImageLayout::GENERAL,
                         samplers.linear_sampler_tiled,
                     ),
@@ -1127,7 +1114,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.update_water_pipe.sets,
             &[DescriptorInfo {
                 resources: DescriptorResource::StorageImage(
-                    lumal::descriptors::RelativeResource::Single(&iimages.water_state),
+                    RelativeResource::Single(&iimages.water_state),
                     vk::ImageLayout::GENERAL,
                 ),
                 specified_stages: vk::ShaderStageFlags::VERTEX
@@ -1148,16 +1135,16 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.raygen_water_pipe.sets,
             &[
                 DescriptorInfo {
-                    resources: DescriptorResource::UniformBuffer(
-                        lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                    ),
+                    resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                        &buffers.uniform,
+                    )),
                     specified_stages: vk::ShaderStageFlags::VERTEX
                         | vk::ShaderStageFlags::FRAGMENT
                         | vk::ShaderStageFlags::GEOMETRY,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::SampledImage(
-                        lumal::descriptors::RelativeResource::Single(&iimages.water_state),
+                        RelativeResource::Single(&iimages.water_state),
                         vk::ImageLayout::GENERAL,
                         samplers.linear_sampler_tiled,
                     ),
@@ -1180,7 +1167,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.gen_perlin2d_pipe.sets,
             &[DescriptorInfo {
                 resources: DescriptorResource::StorageImage(
-                    lumal::descriptors::RelativeResource::Single(&iimages.perlin_noise2d),
+                    RelativeResource::Single(&iimages.perlin_noise2d),
                     vk::ImageLayout::GENERAL,
                 ),
                 specified_stages: vk::ShaderStageFlags::VERTEX
@@ -1201,7 +1188,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &mut pipes.gen_perlin3d_pipe.sets,
             &[DescriptorInfo {
                 resources: DescriptorResource::StorageImage(
-                    lumal::descriptors::RelativeResource::Single(&iimages.perlin_noise3d),
+                    RelativeResource::Single(&iimages.perlin_noise3d),
                     vk::ImageLayout::GENERAL,
                 ),
                 specified_stages: vk::ShaderStageFlags::VERTEX
@@ -1223,14 +1210,14 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             &[
                 DescriptorInfo {
                     resources: DescriptorResource::StorageImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.world),
+                        RelativeResource::Current(&iimages.world),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
                 },
                 DescriptorInfo {
                     resources: DescriptorResource::StorageImage(
-                        lumal::descriptors::RelativeResource::Current(&iimages.block_palette),
+                        RelativeResource::Current(&iimages.block_palette),
                         vk::ImageLayout::GENERAL,
                     ),
                     specified_stages: vk::ShaderStageFlags::COMPUTE,
@@ -1251,15 +1238,15 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 &mut foliage.sets,
                 &[
                     DescriptorInfo {
-                        resources: DescriptorResource::UniformBuffer(
-                            lumal::descriptors::RelativeResource::Current(&buffers.uniform),
-                        ),
+                        resources: DescriptorResource::UniformBuffer(RelativeResource::Current(
+                            &buffers.uniform,
+                        )),
                         specified_stages: vk::ShaderStageFlags::VERTEX
                             | vk::ShaderStageFlags::FRAGMENT,
                     },
                     DescriptorInfo {
                         resources: DescriptorResource::SampledImage(
-                            lumal::descriptors::RelativeResource::Single(&iimages.grass_state),
+                            RelativeResource::Single(&iimages.grass_state),
                             vk::ImageLayout::GENERAL,
                             samplers.linear_sampler,
                         ),

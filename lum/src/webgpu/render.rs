@@ -12,7 +12,7 @@ use crate::{
         all_resources::all_types::UboData, types::*, wal::Wal, MeshFoliageDesc,
         BLOCK_PALETTE_SIZE_X, BLOCK_PALETTE_SIZE_Y,
     },
-    Settings, BLOCK_SIZE,
+    Camera, Settings, BLOCK_SIZE,
 };
 use as_u8_slice_derive::AsU8Slice;
 use containers::{
@@ -80,7 +80,7 @@ impl<'window, D: Dim3> InternalRendererWebGPU<'window, D> {
         type TheType = isize;
         // only radiance updates with this offset should be processed
 
-        let magic_number = 2;
+        let magic_number = 1;
         let current_offset = (self.counter) % magic_number;
 
         let mut pushed_radiance_count = 0;
@@ -2417,6 +2417,17 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
     }
     fn get_dt(&self) -> f32 {
         self.renderer.delta_time
+    }
+
+    fn get_camera(&self) -> &Camera {
+        &self.renderer.camera
+    }
+    fn get_camera_mut(&mut self) -> &mut Camera {
+        &mut self.renderer.camera
+    }
+
+    fn shift_radiance(&mut self, offset: ivec3) {
+        self.radiance_shift = offset;
     }
 }
 

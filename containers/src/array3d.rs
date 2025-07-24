@@ -208,9 +208,13 @@ macro_rules! impl_tousize3 {
     };
 }
 impl_tousize3!(
-    (usize, usize, usize),
     (i8, i8, i8),
+    (u8, u8, u8),
+    (i16, i16, i16),
+    (u16, u16, u16),
     (i32, i32, i32),
+    (u32, u32, u32),
+    (usize, usize, usize),
     (isize, isize, isize)
 );
 impl ToUsize3 for Vec3<i8> {
@@ -282,6 +286,20 @@ where
     }
 }
 
+impl<'a, T, U, D: Dim3> Array3DView<'a, T, U, D> {
+    pub fn dimensions(&self) -> (usize, usize, usize) {
+        self.array.dimensions()
+    }
+}
+
+impl<'a, T, U, D: Dim3, I: ToUsize3> Index<I> for Array3DView<'a, T, U, D> {
+    type Output = T;
+    fn index(&self, index: I) -> &Self::Output {
+        let (x, y, z) = index.to_usize3();
+        self.array.get(x, y, z)
+    }
+}
+
 /// Mutable view converting element type via `From<U>`.
 pub struct Array3DViewMut<'a, T, U, D: Dim3> {
     array: &'a mut Array3D<T, D>,
@@ -303,6 +321,31 @@ impl<'a, T, U, D: Dim3> Array3DViewMut<'a, T, U, D> {
     {
         let (x, y, z) = index.to_usize3();
         self.array.get(x, y, z).clone().into()
+    }
+
+    pub fn dimensions(&self) -> (usize, usize, usize) {
+        self.array.dimensions()
+    }
+}
+
+impl<'a, T: Clone, U, D: Dim3> Array3DViewMut<'a, T, U, D> {
+    pub fn fill(&mut self, value: T) {
+        self.array.data.fill(value);
+    }
+}
+
+impl<'a, T, U, D: Dim3, I: ToUsize3> Index<I> for Array3DViewMut<'a, T, U, D> {
+    type Output = T;
+    fn index(&self, index: I) -> &Self::Output {
+        let (x, y, z) = index.to_usize3();
+        self.array.get(x, y, z)
+    }
+}
+
+impl<'a, T, U, D: Dim3, I: ToUsize3> IndexMut<I> for Array3DViewMut<'a, T, U, D> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        let (x, y, z) = index.to_usize3();
+        self.array.get_mut(x, y, z)
     }
 }
 

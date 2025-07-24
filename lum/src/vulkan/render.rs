@@ -173,8 +173,9 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         type TheType = isize;
         // only radiance updates with this offset should be processed
 
-        let magic_number = 2;
-        self.counter += 1;
+        let magic_number = 1; // JUSUS FUCKING CRIST IT BROKE
+                              // seriously, when i had 3 FIF, it was fine, but when fif==2, same as magic number, things start behaving weirdly (aka bad hash)
+        self.counter += 1; // TODO:
         let current_offset = (self.counter) % magic_number;
 
         let mut pushed_radiance_count = 0;
@@ -310,12 +311,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                     self.buffers.gpu_radiance_updates.buffer,
                     &[copy],
                 );
-                // self.lumal.device.cmd_copy_buffer(
-                //     *command_buffer,
-                //     self.buffers.staging_radiance_updates.current().buffer,
-                //     self.buffers.gpu_radiance_updates.next().buffer,
-                //     &[copy],
-                // );
             };
         }
 
@@ -326,6 +321,28 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+        );
+
+        // TODO: barriers. Its 11th todo about barriers. Do them
+        self.lumal.image_memory_barrier(
+            command_buffer,
+            self.independent_images.radiance_cache.current(),
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+        );
+        self.lumal.image_memory_barrier(
+            command_buffer,
+            self.independent_images.radiance_cache.previous(),
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
 
         // binds descriptor sets and pipeline itself
@@ -350,21 +367,32 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
 
         unsafe { self.lumal.device.cmd_dispatch(*command_buffer, wg_count as u32, 1, 1) };
 
+        // Most of images are in GENERAL because:
+        // 1. Highly optimized GPU code uses images in multiple ways, which restricts to GENERAL only
+        // 2. When it does not, gained perfomance is negligible compared to (my) work required to manage layouts,
+        // especially in rapid development stage
+        // 3. Most popular GPU's dont give a fuck about layouts (NVIDIA)
+        // 4. Even AMD did not gain any perfomance in my tests (at some point, i did whole thing with correct layouts and barriers and it was the same perfomance)
+        // Anyways, there is still reason to do it, but only when all other optimizations are done
         self.lumal.image_memory_barrier(
             command_buffer,
-            self.independent_images.radiance_cache.first(),
+            self.independent_images.radiance_cache.current(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::ImageLayout::GENERAL,
-            vk::ImageLayout::GENERAL, // Most of images are in GENERAL because:
-                                      // 1. Highly optimized GPU code uses images in multiple ways, which restricts to GENERAL only
-                                      // 2. When it does not, gained perfomance is negligible compared to (my) work required to manage layouts,
-                                      // especially in rapid development stage
-                                      // 3. Most popular GPU's dont give a fuck about layouts (NVIDIA)
-                                      // 4. Even AMD did not gain any perfomance in my tests (at some point, i did whole thing with correct layouts and barriers and it was the same perfomance)
-                                      // Anyways, there is still reason to do it, but only when all other optimizations are done
+            vk::ImageLayout::GENERAL,
+        );
+        self.lumal.image_memory_barrier(
+            command_buffer,
+            self.independent_images.radiance_cache.previous(),
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
         );
     }
 
@@ -373,7 +401,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     fn shift_radiance(&mut self, radiance_shift: ivec3) {
         let command_buffer = self.cmdbufs.compute_command_buffers.current();
 
-        let cam_shift = radiance_shift + 0;
+        let cam_shift = radiance_shift;
 
         if cam_shift.x.abs() >= self.settings.world_size.x() as i32
             || cam_shift.y.abs() >= self.settings.world_size.y() as i32
@@ -381,31 +409,43 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         {
             return; // then its pointless (zero-volume intersection). We can set it to zero os some pre-computed value in future, tho
         }
+        if cam_shift == ivec3::zero() {
+            return; // no work to do
+        }
 
-        let process_axis = |shift: i32, _world_size: i32| -> ivec2 {
-            let self_src_offset = shift.clamp(0, shift);
-            let self_dst_offset = shift.clamp(shift, 0).abs();
+        // figure out where to copy from/into to stay in bounds
+        let process_axis = |cam_shift: i32| -> ivec2 {
+            // to understand this, its generally recommended to take pen & paper and draw both negative and positive shift cases
+            let self_src_offset;
+            let self_dst_offset;
+
+            if cam_shift > 0 {
+                self_src_offset = cam_shift;
+                self_dst_offset = 0;
+            } else {
+                self_src_offset = 0;
+                self_dst_offset = -cam_shift;
+            }
 
             ivec2::new(self_src_offset, self_dst_offset)
         };
 
         let self_src_offset = ivec3!(
-            process_axis(cam_shift.x, self.settings.world_size.x() as i32).x,
-            process_axis(cam_shift.y, self.settings.world_size.y() as i32).x,
-            process_axis(cam_shift.z, self.settings.world_size.z() as i32).x
+            process_axis(cam_shift.x).x,
+            process_axis(cam_shift.y).x,
+            process_axis(cam_shift.z).x
         );
         let self_dst_offset = ivec3!(
-            process_axis(cam_shift.x, self.settings.world_size.x() as i32).y,
-            process_axis(cam_shift.y, self.settings.world_size.y() as i32).y,
-            process_axis(cam_shift.z, self.settings.world_size.z() as i32).y
+            process_axis(cam_shift.x).y,
+            process_axis(cam_shift.y).y,
+            process_axis(cam_shift.z).y
         );
 
+        dbg!(self_src_offset);
+        dbg!(self_dst_offset);
+
         let intersection_size = uvec3!(self.settings.world_size.xyz())
-            - uvec3!(
-                cam_shift.x.unsigned_abs(),
-                cam_shift.y.unsigned_abs(),
-                cam_shift.z.unsigned_abs()
-            );
+            - uvec3!(cam_shift.x.abs(), cam_shift.y.abs(), cam_shift.z.abs());
 
         let mut copy_region = vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers {
@@ -431,9 +471,11 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 z: self_src_offset.z,
             },
             dst_offset: vk::Offset3D {
-                x: 0, // no reason to copy anywhere else - DST IS TEMP STORAGE
-                y: 0,
-                z: 0,
+                // 1) no reason to copy anywhere else - DST IS TEMP STORAGE
+                // 2) actually, there is a reason - to fuck up data only a little bit (1%)
+                x: self_src_offset.x,
+                y: self_src_offset.y,
+                z: self_src_offset.z,
             },
         };
 
@@ -458,7 +500,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             vk::ImageLayout::GENERAL,
         );
 
-        // copy to temp
+        // copy to temp. We use previous as temp. Dont worry, we used its information to construct current already
         unsafe {
             self.lumal.device.cmd_copy_image(
                 *command_buffer,
@@ -491,16 +533,19 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             vk::ImageLayout::GENERAL,
         );
 
-        // copy back (setting up region)
+        // copy back from temp
         copy_region.extent = vk::Extent3D {
             width: intersection_size.x,
             height: intersection_size.y,
             depth: intersection_size.z,
         };
         copy_region.src_offset = vk::Offset3D {
-            x: 0, // we want 0,0,0 to end up in shift
-            y: 0,
-            z: 0,
+            // we want 0,0,0 to end up in shift
+            // 1) no reason to copy anywhere else - DST IS TEMP STORAGE
+            // 2) actually, there is a reason - to fuck up data only a little bit (1%)
+            x: self_src_offset.x,
+            y: self_src_offset.y,
+            z: self_src_offset.z,
         };
         copy_region.dst_offset = vk::Offset3D {
             x: self_dst_offset.x, // well, this is how to tell it to end up in (shift)
@@ -942,6 +987,14 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
             vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
         );
+        self.lumal.buffer_memory_barrier(
+            command_buffer,
+            self.buffers.uniform.previous(),
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+        );
 
         unsafe {
             self.lumal.device.cmd_update_buffer(
@@ -949,13 +1002,27 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
                 self.buffers.uniform.current().buffer,
                 0,
                 buffer_patch.as_u8_slice(),
-            )
+            );
+            self.lumal.device.cmd_update_buffer(
+                *command_buffer,
+                self.buffers.uniform.previous().buffer,
+                0,
+                buffer_patch.as_u8_slice(),
+            );
         };
 
         // sync
         self.lumal.buffer_memory_barrier(
             command_buffer,
             self.buffers.uniform.current(),
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+        );
+        self.lumal.buffer_memory_barrier(
+            command_buffer,
+            self.buffers.uniform.previous(),
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::PipelineStageFlags::ALL_COMMANDS,
             vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
@@ -1602,25 +1669,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
 
         self.lumal.bind_raster_pipe(command_buffer, &self.pipes.diffuse_pipe);
 
-        // kinda rnd RaygenMapGrass
-        let transmuted_frame = f32::from_bits(i32::cast_unsigned(self.lumal.frame));
-        let push_constant = pc_types::Diffuse {
-            v1: vec4!(self.camera.camera_pos, transmuted_frame),
-            v2: vec4!(self.camera.camera_dir, 0),
-            lp: self.light.light_transform,
-        };
         unsafe {
-            self.lumal.device.cmd_push_constants(
-                *command_buffer,
-                self.pipes.diffuse_pipe.layout,
-                vk::ShaderStageFlags::VERTEX,
-                0,
-                push_constant.as_u8_slice(),
-            )
-        };
-
-        unsafe {
-            // you may wonder - why no bound buffer? Answer: its fullscreen triangle
+            // why no bound buffer? its fullscreen triangle
             self.lumal.device.cmd_draw(*command_buffer, 3, 1, 0, 0);
         } // btw, every such call is fullscreen triangle
     }
@@ -1772,18 +1822,50 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         self.cmdbufs.lightmap_command_buffers.move_next();
         self.cmdbufs.graphics_command_buffers.move_next();
 
-        self.buffers.staging_world.move_next();
         self.independent_images.world.move_next();
         self.independent_images.block_palette.move_next();
         self.independent_images.material_palette.move_next();
+        self.independent_images.radiance_cache.move_next();
+
+        // self.pipes.raygen_models_push_layout.sets.move_next();
+        // self.pipes.overlay_pipe.sets.move_next();
+
+        self.pipes.radiance_pipe.sets.move_next();
+
+        self.pipes.lightmap_blocks_pipe.sets.move_next();
+        self.pipes.lightmap_models_pipe.sets.move_next();
+        self.pipes.raygen_blocks_pipe.sets.move_next();
+        self.pipes.raygen_models_pipe.sets.move_next();
+        self.pipes.raygen_particles_pipe.sets.move_next();
+        self.pipes.raygen_water_pipe.sets.move_next();
+        self.pipes.diffuse_pipe.sets.move_next();
+        self.pipes.ao_pipe.sets.move_next();
+        self.pipes.fill_stencil_glossy_pipe.sets.move_next();
+        self.pipes.fill_stencil_smoke_pipe.sets.move_next();
+        self.pipes.glossy_pipe.sets.move_next();
+        self.pipes.smoke_pipe.sets.move_next();
+        self.pipes.tonemap_pipe.sets.move_next();
+        self.pipes.map_pipe.sets.move_next();
+        self.pipes.update_grass_pipe.sets.move_next();
+        self.pipes.update_water_pipe.sets.move_next();
+        self.pipes.gen_perlin2d_pipe.sets.move_next();
+        self.pipes.gen_perlin3d_pipe.sets.move_next();
+
+        for pipe in &mut self.pipes.raygen_foliage_pipes {
+            pipe.sets.move_next()
+        }
+
+        self.buffers.staging_world.move_next();
         self.buffers.light_uniform.move_next();
         self.buffers.uniform.move_next();
         self.buffers.ao_lut_uniform.move_next();
         self.buffers.staging_radiance_updates.move_next();
         self.buffers.gpu_particles.move_next();
 
-        let should_recreate = self.lumal.should_recreate;
-        if should_recreate {
+        // dependent_images dont have to be moved
+        // they are purely gpu-side. Most of them do not even exist in VRAM
+
+        if self.lumal.should_recreate {
             print!("recreated from flag: ");
             self.recreate_window(window.inner_size());
             self.lumal.should_recreate = false;
@@ -2150,9 +2232,14 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
         // this is because it contains syncronization, which im trying to delay as much as possible
         // sadly, it does not help when you are CPU-bound (which is the case here). But still useful
         self.renderer.start_frame();
+
+        // oh fuck we cant actually shift radiance before updates
+        // since we are using previous as temp storage, we erase its data
+        // its not that big of a problem if we override with same offset
+        self.renderer.update_radiance();
         self.renderer.shift_radiance(self.radiance_shift);
         self.radiance_shift = ivec3::zero();
-        self.renderer.update_radiance();
+
         self.renderer.updade_grass(Default::default());
         self.renderer.updade_water();
         self.renderer.exec_copies();
@@ -2342,6 +2429,17 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
     }
     fn get_dt(&self) -> f32 {
         self.renderer.delta_time
+    }
+
+    fn get_camera(&self) -> &Camera {
+        &self.renderer.camera
+    }
+    fn get_camera_mut(&mut self) -> &mut Camera {
+        &mut self.renderer.camera
+    }
+
+    fn shift_radiance(&mut self, offset: ivec3) {
+        self.radiance_shift = offset;
     }
 }
 

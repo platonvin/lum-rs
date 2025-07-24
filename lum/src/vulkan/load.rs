@@ -120,7 +120,7 @@ impl<'a, D: Dim3> LoadInterface for InternalRendererVulkan<'a, D> {
         // we do not write it to intermediate buffer cuz its already in right layout -
         // 6 float rows, one by one, 256 total
         assert!(!self.material_palette.is_empty());
-        dbg!(&self.material_palette.len());
+        assert!(self.material_palette.len() == 256);
         let buffer_count = self.material_palette.len();
         let buffer_size = buffer_count * std::mem::size_of::<Material>();
 

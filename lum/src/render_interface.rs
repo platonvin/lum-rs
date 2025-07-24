@@ -1,5 +1,8 @@
 use super::types::*;
-use crate::load_interface::{BlockData, ModelData};
+use crate::{
+    load_interface::{BlockData, ModelData},
+    Camera,
+};
 use containers::array3d::{Array3DView, Array3DViewMut, Dim3};
 use winit::window::Window;
 
@@ -29,7 +32,7 @@ pub trait RendererInterface<'a, D: Dim3> {
     type FoliageDescription: FoliageDescriptionCreate<'a>;
     type FoliageDescriptionBuilder: FoliageDescriptionBuilder<Self::FoliageDescription>;
 
-    type InternalBlockId: From<MeshBlock>;
+    type InternalBlockId: From<MeshBlock> + Clone + PartialEq;
 
     /// Constructs new Renderer.
     fn new(
@@ -114,6 +117,8 @@ pub trait RendererInterface<'a, D: Dim3> {
     /// Creates Particle (location, lifetime and other properties are _part_ of Particle)
     fn spawn_particle(&mut self, particle: &Particle);
 
+    fn shift_radiance(&mut self, offset: ivec3);
+
     /// Returns reference to 3d array of "origin" world blocks - static blocks in the world, not allocated ones.
     fn get_world_blocks(&'_ self) -> Array3DView<'_, Self::InternalBlockId, MeshBlock, D>;
     /// Returns mutable reference to 3d array of "origin" world blocks - static blocks in the world, not allocated ones.
@@ -132,4 +137,7 @@ pub trait RendererInterface<'a, D: Dim3> {
     fn get_counter(&self) -> isize;
     fn get_time(&self) -> web_time::Instant;
     fn get_dt(&self) -> f32;
+
+    fn get_camera(&self) -> &Camera;
+    fn get_camera_mut(&mut self) -> &mut Camera;
 }

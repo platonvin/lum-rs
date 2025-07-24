@@ -30,6 +30,8 @@ pub use winit;
 
 #[cfg(feature = "debug_validation_names")]
 use ash::vk::DebugUtilsObjectNameInfoEXT;
+#[cfg(feature = "debug_validation_names")]
+use ash::vk::Handle;
 use ash::{
     ext::debug_utils,
     khr::{push_descriptor, surface, swapchain},
@@ -409,6 +411,13 @@ impl Renderer {
             })
             .unwrap();
 
+            // these are loading functions (i mean this code is loading function pointers) (separate because they might not be presented)
+            let surface_loader = surface::Instance::new(&entry, &instance);
+            let swapchain_loader = swapchain::Device::new(&instance, &device);
+            let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
+            let debug_utils_device_loader = debug_utils::Device::new(&instance, &device);
+            let push_descriptors_loader = push_descriptor::Device::new(&instance, &device);
+
             let (swapchain, swapchain_images, swapchain_extent, swapchain_format) =
                 create_swapchain(
                     settings,
@@ -418,19 +427,14 @@ impl Renderer {
                     &device,
                     &surface,
                     &physical_device,
+                    #[cfg(feature = "debug_validation_names")]
+                    &debug_utils_device_loader,
                 );
 
             let command_pool =
                 create_command_pool(&instance, &entry, &device, &surface, &physical_device);
             let (image_available_semaphores, render_finished_semaphores, in_flight_fences) =
                 create_sync_objects(&device);
-
-            // these are loading functions (i mean this code is loading function pointers) (separate because they might not be presented)
-            let surface_loader = surface::Instance::new(&entry, &instance);
-            let swapchain_loader = swapchain::Device::new(&instance, &device);
-            let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
-            let debug_utils_device_loader = debug_utils::Device::new(&instance, &device);
-            let push_descriptors_loader = push_descriptor::Device::new(&instance, &device);
 
             let device_limits = instance.get_physical_device_properties(physical_device).limits;
 
@@ -901,6 +905,8 @@ impl Renderer {
                 &self.device,
                 &self.surface,
                 &self.physical_device,
+                #[cfg(feature = "debug_validation_names")]
+                &self.debug_utils_device_loader,
             );
 
             self.swapchain = swapchain;
@@ -1303,6 +1309,7 @@ fn create_swapchain(
     device: &Device,
     surface: &SurfaceKHR,
     physical_device: &vk::PhysicalDevice,
+    #[cfg(feature = "debug_validation_names")] debug_utils_device: &ash::ext::debug_utils::Device,
 ) -> (SwapchainKHR, Ring<Image>, Extent2D, Format) {
     let indices = QueueFamilyIndices::get(instance, entry, surface, physical_device).unwrap();
     let support = SwapchainSupport::get(instance, entry, physical_device, surface).unwrap();
@@ -1383,24 +1390,25 @@ fn create_swapchain(
                 let view = unsafe { device.create_image_view(&info, None).unwrap() };
 
                 // manually give swapchain image views debug names
+                // TODO: somehow move to same macro?
                 #[cfg(feature = "debug_validation_names")]
                 {
                     let debug_name = format!("Swapchain Image View {}\0", i);
                     let object_handle = (&view).as_raw();
-                    let object_type_option = crate::get_vulkan_object_type((&view));
+                    let object_type_option = crate::get_vulkan_object_type(&view);
                     if let Some(object_type_vk) = object_type_option {
                         let object_type_debug_report = object_type_vk;
                         let name_info = DebugUtilsObjectNameInfoEXT {
                             // TODO: get rid of vk, trait get_s_type & get_type_name
                             object_type: object_type_vk,
                             object_handle: object_handle,
-                            object_name: debug_name.as_bytes().as_ptr() as *const i8,
+                            p_object_name: debug_name.as_bytes().as_ptr() as *const i8,
                             ..Default::default()
                         };
                         unsafe {
-                            vk::vk::ExtDebugUtilsExtension::set_debug_utils_object_name_ext(
-                                instance,
-                                device.handle(),
+                            ash::ext::debug_utils::Device::set_debug_utils_object_name(
+                                // instance,
+                                debug_utils_device,
                                 &name_info,
                             );
                         }

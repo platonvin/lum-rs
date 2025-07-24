@@ -3,6 +3,8 @@
 use crate::Renderer;
 use crate::{Buffer, Image, LumalSettings, RasterPipe, DEFAULT_FRAMES_IN_FLIGHT};
 use ash::vk::DescriptorType;
+#[cfg(feature = "debug_validation_names")]
+use ash::vk::Handle;
 use ash::{vk, Device};
 use containers::Ring;
 use std::ops::Index;
@@ -199,10 +201,13 @@ pub struct AttrFormOffs {
     pub offset: usize,
 }
 
-/// Abstraction which simplifies managing CPU-GPU resources
-/// When the resource is operated by GPU only, we can have single copy of it, and always use this copy
+/// Abstraction which simplifies managing CPU-GPU resources.
+/// When the resource is operated by GPU only, we can have single copy of it, and always use this copy.
 /// When CPU writes to some resource, we need to (at least) double-buffer it,
-/// because otherwise we might end up with situation, where CPU is writing data for current frame which GPU is reading for previous frame
+/// because otherwise we might end up with situation, where CPU is writing data for current frame which GPU is reading for previous frame.
+///
+/// NOTE: Previous and Current are absolute relatives - they do not correspond to current() and previous() in your Rings directly.
+/// In other words, wether or not you move_next() your rings, descriptors pointing to them will have no idea
 #[derive(Debug)]
 pub enum RelativeResource<'a, T> {
     /// Resource is Ring of things and we bind current() (most resource)
@@ -370,7 +375,7 @@ impl Renderer {
     // anounce is just a request, this is an actual logic
     pub(crate) fn actually_setup_descriptor_impl(
         descriptor_pool: &vk::DescriptorPool,
-        settings: &LumalSettings,
+        _settings: &LumalSettings,
         device: &Device,
         dset_layout: &vk::DescriptorSetLayout,
         descriptor_sets: &mut Ring<vk::DescriptorSet>,
@@ -398,11 +403,10 @@ impl Renderer {
         // tats because some resources are FIF count in Ring
         // well, some are not, and there are pipelines that only need single reource to be bound
         // we might only use single descriptor for them, but its not done right now for simplicity
-        for frame_i in 0..descriptor_sets.len() {
-            let previous_frame_i = if frame_i == 0 {
-                settings.fif - 1
-            } else {
-                frame_i - 1
+        for frame_i in 0..DEFAULT_FRAMES_IN_FLIGHT {
+            let previous_frame_i = match frame_i {
+                0 => DEFAULT_FRAMES_IN_FLIGHT - 1, // wrap to last frame
+                _ => frame_i - 1,                  // just previous
             };
 
             // we have to keep theese around untill end of the scope because Vulkan wants descriptions to be pointers
@@ -411,12 +415,12 @@ impl Renderer {
             let mut image_infos = vec![vk::DescriptorImageInfo::default(); descriptions.len()];
             let mut buffer_infos = vec![vk::DescriptorBufferInfo::default(); descriptions.len()];
 
+            // TODO: single write
             let writes: Vec<_> = descriptions
                 .iter()
                 .enumerate()
                 .map(|(i, desc)| {
                     let mut write = vk::WriteDescriptorSet {
-                        s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
                         dst_set: descriptor_sets[frame_i],
                         dst_binding: i as u32,
                         dst_array_element: 0,
@@ -426,7 +430,6 @@ impl Renderer {
                     };
 
                     // now we need to extract resource from a description and find corresponding element in Ring (or just use it if its Single (nor Ring))
-
                     match &desc.resources {
                         // if descriptor is some type of image, we fill corresponding image slot in image_infos and point to it
                         DescriptorResource::StorageImage(images, image_layout) => {
@@ -505,6 +508,7 @@ impl Renderer {
         _create_flags: vk::DescriptorSetLayoutCreateFlags,
         #[cfg(feature = "debug_validation_names")] debug_name: Option<&str>,
     ) {
+        // TODO: remove this much indirection, thats crazy
         // actually setup descriptor
         Self::actually_setup_descriptor_impl(
             &self.descriptor_pool,

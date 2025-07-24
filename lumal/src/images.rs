@@ -3,6 +3,8 @@
 use crate::Renderer;
 use crate::{set_debug_names, Image};
 use ash::vk;
+#[cfg(feature = "debug_validation_names")]
+use ash::vk::Handle;
 use containers::Ring;
 use gpu_allocator::vulkan as vma;
 
@@ -102,13 +104,15 @@ impl Renderer {
             vk::ImageLayout::GENERAL,
         );
 
-        set_debug_names!(
-            self,
-            debug_name,
-            (&image.image, "Image"),
-            (&image.view, "Image View"),
-            (&image.allocation.memory(), "Image Allocation Device Memory")
-        );
+        unsafe {
+            set_debug_names!(
+                self,
+                debug_name,
+                (&image.image, "Image"),
+                (&image.view, "Image View"),
+                (&image.allocation.memory(), "Image Allocation Device Memory")
+            );
+        }
 
         image
     }

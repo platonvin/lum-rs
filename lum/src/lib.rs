@@ -13,6 +13,7 @@ pub use shaders;
 pub use web_time as time;
 pub use winit;
 
+pub use containers;
 use containers::array3d::{ConstDims, Dim3};
 use qvek::{vek::FrustumPlanes, *};
 use types::*;

@@ -52,7 +52,7 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             false, // we want this memory to be fast
         );
         let staging_radiance_updates = lumal.create_buffer_rings(
-            lumal_settings.fif,
+            1, // TODO:?
             vk::BufferUsageFlags::TRANSFER_SRC,
             // we allocate enough to update entire world to not deal with reallocations
             mem::size_of::<ivec4>()
