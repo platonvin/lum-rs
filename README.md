@@ -13,7 +13,8 @@ Lum is not an extendable engine*, but a specialized rendering library, developed
 - Vulkan SDK: glslc and validation layers (to build demo without validation layers enabled, glslc is sufficient)
 
 ### Usage
-look at the [demo source code](example/demo/src/demo_lib.rs) and [documentation](https://platonvin.github.io/docs/lum.html)
+look at the [demo source code](example/demo/src/demo_lib.rs) <!--and [documentation](https://platonvin.github.io/docs/lum.html)--! >
+
 
 ### How to run example (demo)...
 

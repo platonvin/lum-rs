@@ -78,9 +78,9 @@ impl<'window, D: Dim3> LoadInterface for InternalRendererWebGPU<'window, D> {
         }
 
         #[rustfmt::skip]
-        let buffer_count = block_palette_prepared.dimensions().0
-                         * block_palette_prepared.dimensions().1
-                         * block_palette_prepared.dimensions().2;
+        let buffer_count = block_palette_prepared.dimensions().x
+                         * block_palette_prepared.dimensions().y
+                         * block_palette_prepared.dimensions().z;
         let buffer_size = buffer_count * std::mem::size_of::<InternalVoxel>();
 
         let data_u8 = unsafe {

@@ -60,5 +60,5 @@ codegen-backend = true
 [profile.dev.build-override]
 codegen-backend = "cranelift"
 
-# [profile.release]
-# codegen-backend = "cranelift"
+[profile.release]
+codegen-backend = "cranelift"

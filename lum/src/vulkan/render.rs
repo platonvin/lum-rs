@@ -9,10 +9,7 @@ use crate::{
 use crate::{load_interface::LoadInterface, render_interface::RendererInterface, vulkan::types::*};
 use aabb::{get_shift, iAABB};
 use containers::Arena;
-use containers::{
-    array3d::{Array3DView, Array3DViewMut},
-    BitArray3d,
-};
+use containers::{Array3DView, Array3DViewMut, BitArray3d};
 use lumal::vk;
 use qvek::{i16vec3, i16vec4, i8vec4, ivec3, ivec4, uvec2, uvec3, vec3, vec4, vek::Clamp};
 use std::time::Instant;
@@ -126,9 +123,9 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
     }
 
     fn end_blockify(&mut self) {
-        let count_to_copy = self.current_world.dimensions().0
-            * self.current_world.dimensions().1
-            * self.current_world.dimensions().2;
+        let count_to_copy = self.current_world.dimensions().x
+            * self.current_world.dimensions().y
+            * self.current_world.dimensions().z;
         let size_to_copy = count_to_copy * size_of::<MeshBlock>();
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -440,9 +437,6 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
             process_axis(cam_shift.y).y,
             process_axis(cam_shift.z).y
         );
-
-        dbg!(self_src_offset);
-        dbg!(self_dst_offset);
 
         let intersection_size = uvec3!(self.settings.world_size.xyz())
             - uvec3!(cam_shift.x.abs(), cam_shift.y.abs(), cam_shift.z.abs());
@@ -1974,9 +1968,11 @@ impl<'a> render_interface::FoliageDescriptionBuilder<MeshFoliageDescription<'a>>
         }
     }
     fn load_foliage(&mut self, foliage: MeshFoliageDescription<'a>) -> MeshFoliage {
-        let index = self.foliage_descriptions.len() as u32;
+        let raw_index = self.foliage_descriptions.len();
         self.foliage_descriptions.push(foliage);
-        index as MeshFoliage
+        // we use non-zero as handles because its convenient
+        // but wasting first (0th) element is not ideal. Lets just add 1 to it
+        raw_index.try_into().unwrap()
     }
     fn build(self) -> Vec<MeshFoliageDescription<'a>> {
         self.foliage_descriptions
@@ -2048,15 +2044,19 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
 
     fn load_model(&mut self, model: ModelData) -> MeshModel {
         let model_mesh = self.renderer.load_model(model);
-        let index = self.storage.models.allocate(model_mesh).unwrap();
-        index as MeshModel
+        let raw_index = self.storage.models.allocate(model_mesh).unwrap();
+        // we use non-zero as handles because its convenient
+        // but wasting first (0th) element is not ideal. Lets just add 1 to it
+        raw_index.try_into().unwrap()
     }
     fn unload_model(&mut self, model: MeshModel) {
-        let model_mesh = self.storage.models.take(model).unwrap();
+        let raw_index = model.as_inner();
+        let model_mesh = self.storage.models.take(raw_index).unwrap();
         self.renderer.free_model(model_mesh);
     }
     fn get_model_size(&self, model: MeshModel) -> uvec3 {
-        self.storage.models.get(model).unwrap().size
+        let raw_index = model.as_inner();
+        self.storage.models.get(raw_index).unwrap().size
     }
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
@@ -2081,11 +2081,14 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
             variation: dencity_variation,
             color,
         };
-        let index = self.storage.volumetrics.allocate(volumetric_mesh).unwrap();
-        index as MeshVolumetric
+        let raw_index = self.storage.volumetrics.allocate(volumetric_mesh).unwrap();
+        // we use non-zero as handles because its convenient
+        // but wasting first (0th) element is not ideal. Lets just add 1 to it
+        raw_index.try_into().unwrap()
     }
     fn unload_volumetric(&mut self, volumetric: MeshVolumetric) {
-        let volumetric_mesh = self.storage.volumetrics.take(volumetric).unwrap();
+        let raw_index = volumetric.as_inner();
+        let volumetric_mesh = self.storage.volumetrics.take(raw_index).unwrap();
         drop(volumetric_mesh);
     }
 
@@ -2100,11 +2103,14 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
             // push_constants: todo!(),
             // pc_count: todo!(),
         };
-        let index = self.storage.liquids.allocate(liquid_mesh).unwrap();
-        index as MeshLiquid
+        let raw_index = self.storage.liquids.allocate(liquid_mesh).unwrap();
+        // we use non-zero as handles because its convenient
+        // but wasting first (0th) element is not ideal. Lets just add 1 to it
+        raw_index.try_into().unwrap()
     }
     fn unload_liquid(&mut self, liquid: MeshLiquid) {
-        let liquid_mesh = self.storage.liquids.take(liquid).unwrap();
+        let raw_index = liquid.as_inner();
+        let liquid_mesh = self.storage.liquids.take(raw_index).unwrap();
         drop(liquid_mesh);
     }
 
@@ -2143,7 +2149,8 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
     }
 
     fn draw_model(&mut self, model: &MeshModel, trans: &MeshTransform) {
-        let model_mesh = self.storage.models.get(*model).unwrap();
+        let raw_index = model.as_inner();
+        let model_mesh = self.storage.models.get(raw_index).unwrap();
         // model size also happens to be >= its bounding box (dont leave voxel padding)
         if self.is_model_visible(&model_mesh.size, trans) {
             self.model_que.push(ModelRenderRequest {
@@ -2223,7 +2230,8 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
 
         self.renderer.start_blockify();
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get(mrr.mesh).unwrap();
+            let raw_index = mrr.mesh.as_inner();
+            let model_mesh = self.storage.models.get(raw_index).unwrap();
             self.renderer.blockify_mesh(model_mesh, &mrr.trans);
         }
         self.renderer.end_blockify();
@@ -2237,6 +2245,7 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
         // since we are using previous as temp storage, we erase its data
         // its not that big of a problem if we override with same offset
         self.renderer.update_radiance();
+        // TODO: somehow shift before update does not work, investigate
         self.renderer.shift_radiance(self.radiance_shift);
         self.radiance_shift = ivec3::zero();
 
@@ -2245,7 +2254,8 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
         self.renderer.exec_copies();
         self.renderer.start_map();
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get(mrr.mesh).unwrap();
+            let raw_index = mrr.mesh.as_inner();
+            let model_mesh = self.storage.models.get(raw_index).unwrap();
             self.renderer.map_mesh(model_mesh, &mrr.trans);
         }
         self.renderer.end_map();
@@ -2258,7 +2268,8 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
         }
         self.renderer.lightmap_start_models();
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get(mrr.mesh).unwrap();
+            let raw_index = mrr.mesh.as_inner();
+            let model_mesh = self.storage.models.get(raw_index).unwrap();
             self.renderer.lightmap_model(model_mesh, &mrr.trans);
         }
         self.renderer.end_lightmap();
@@ -2270,23 +2281,26 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
         }
         self.renderer.raygen_start_models();
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get(mrr.mesh).unwrap();
+            let raw_index = mrr.mesh.as_inner();
+            let model_mesh = self.storage.models.get(raw_index).unwrap();
             self.renderer.raygen_model(model_mesh, &mrr.trans);
         }
         self.renderer.update_particles();
         self.renderer.raygen_map_particles();
         self.renderer.raygen_start_grass();
         for frr in &self.foliage_que {
+            let raw_index = frr.mesh.as_inner();
             self.renderer.raygen_map_grass(
                 &InternalMeshFoliage {
-                    stored_id: frr.mesh as u32,
+                    stored_id: raw_index as u32,
                 },
                 &frr.pos,
             );
         }
         self.renderer.raygen_start_water();
         for lrr in &self.liquid_que {
-            let liquid_mesh = self.storage.liquids.get(lrr.mesh).unwrap();
+            let raw_index = lrr.mesh.as_inner();
+            let liquid_mesh = self.storage.liquids.get(raw_index).unwrap();
             self.renderer.raygen_map_water(liquid_mesh, &lrr.pos);
         }
         self.renderer.end_raygen();
@@ -2296,7 +2310,8 @@ impl<'a, D: Dim3> RendererInterface<'a, D> for RendererVulkan<'a, D> {
         self.renderer.glossy_raygen();
         self.renderer.raygen_start_smoke();
         for vrr in &self.volumetric_que {
-            let volumetric_mesh = self.storage.volumetrics.get(vrr.mesh).unwrap();
+            let raw_index = vrr.mesh.as_inner();
+            let volumetric_mesh = self.storage.volumetrics.get(raw_index).unwrap();
             self.renderer.raygen_map_smoke(volumetric_mesh, &vrr.pos);
         }
         self.renderer.glossy();

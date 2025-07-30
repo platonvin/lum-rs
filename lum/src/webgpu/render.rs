@@ -15,15 +15,15 @@ use crate::{
     Camera, Settings, BLOCK_SIZE,
 };
 use as_u8_slice_derive::AsU8Slice;
-use containers::{
-    array3d::{Array3DView, Array3DViewMut, Dim3},
-    Arena, BitArray3d,
-};
+use containers::{Arena, Array3DView, Array3DViewMut, BitArray3d, Dim3};
 use qvek::{
     i16vec3, ivec3, ivec4, uvec2, uvec3, vec2, vec3, vec4,
     vek::{Clamp, Vec3},
 };
-use std::mem::{size_of, transmute};
+use std::{
+    mem::{size_of, transmute},
+    os::raw,
+};
 use wgpu::{
     BufferSize, Color, ComputePassDescriptor, Extent3d, Origin3d, TexelCopyBufferInfo,
     TexelCopyTextureInfo, COPY_BYTES_PER_ROW_ALIGNMENT,
@@ -869,7 +869,8 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
     fn blockify_models(&mut self) {
         self.renderer.start_blockify();
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get(mrr.mesh).unwrap();
+            let raw_index = usize::from(mrr.mesh);
+            let model_mesh = self.storage.models.get(raw_index).unwrap();
             let trans: &MeshTransform = &mrr.trans;
             let rotate = mat4::from(trans.rotation);
             let shift = mat4::identity().translated_3d(trans.translation);
@@ -903,8 +904,6 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
                             let src_block = self.renderer.index_block_xy(current_block as usize);
                             let dst_block =
                                 self.renderer.index_block_xy(self.renderer.palette_counter);
-                            // dbg!(src_block);
-                            // dbg!(dst_block);
 
                             // do image copy on for non-zero-src blocks. Other things are still done for every allocated block
                             // because zeroing is fast
@@ -937,16 +936,17 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
                 }
             }
         }
-        let (dim_x, dim_y, dim_z) = self.renderer.current_world.dimensions();
-        let padded_dim_x = (dim_x)
+
+        let dims = self.renderer.current_world.dimensions();
+        let padded_dim_x = (dims.x)
             .next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT as usize / size_of::<InternalBlockId>());
-        let padded_count_to_copy = padded_dim_x * dim_y * dim_z;
+        let padded_count_to_copy = padded_dim_x * dims.y * dims.z;
 
         let mut padded_data: Vec<InternalBlockId> = vec![0; padded_count_to_copy];
-        for zz in 0..dim_z {
-            for yy in 0..dim_y {
-                for xx in 0..dim_x {
-                    let index = xx + yy * padded_dim_x + zz * padded_dim_x * dim_y;
+        for zz in 0..dims.z {
+            for yy in 0..dims.y {
+                for xx in 0..dims.x {
+                    let index = xx + yy * padded_dim_x + zz * padded_dim_x * dims.y;
                     padded_data[index] =
                         self.renderer.current_world[(xx, yy, zz)] as InternalBlockId;
                 }
@@ -1335,39 +1335,38 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
             .bind_compute_pipeline(&mut compute_pass, &self.renderer.pipes.map_pipe);
 
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get_mut(mrr.mesh).unwrap();
-            {
-                let trans: &MeshTransform = &mrr.trans;
+            let raw_index = usize::from(mrr.mesh);
+            let model_mesh = self.storage.models.get_mut(raw_index).unwrap();
+            let trans: &MeshTransform = &mrr.trans;
 
-                let rotate = mat4::from(trans.rotation);
-                let shift = mat4::identity().translated_3d(trans.translation);
-                let transform = shift * rotate;
+            let rotate = mat4::from(trans.rotation);
+            let shift = mat4::identity().translated_3d(trans.translation);
+            let transform = shift * rotate;
 
-                // grid-aligned bounding box for our mesh in our voxel world
-                let border_in_voxel = get_shift(transform, model_mesh.size);
-                let border = iAABB {
-                    min: ivec3!(border_in_voxel.min.floor()),
-                    max: ivec3!(border_in_voxel.max.ceil()),
-                };
-                // unused, since we just use upper bound and dont extra voxels cull on cpu for higher parallelism
-                let map_area = border.max - border.min;
+            // grid-aligned bounding box for our mesh in our voxel world
+            let border_in_voxel = get_shift(transform, model_mesh.size);
+            let border = iAABB {
+                min: ivec3!(border_in_voxel.min.floor()),
+                max: ivec3!(border_in_voxel.max.ceil()),
+            };
+            // unused, since we just use upper bound and dont extra voxels cull on cpu for higher parallelism
+            let map_area = border.max - border.min;
 
-                // here we encounter a problem:
-                // just amount of dispatch calls is not enough, we (also) need bounding box
-                // more generic approach would be to store this as metadata in separate Vec
-                // however, due to how we divide compute work, this is already in push constants
-                let push_constant = PcMapModel {
-                    trans: transform.inverted(),
-                    shift: ivec4!(border.min, 0),
-                    map_area: ivec4!(map_area, 0),
-                };
+            // here we encounter a problem:
+            // just amount of dispatch calls is not enough, we (also) need bounding box
+            // more generic approach would be to store this as metadata in separate Vec
+            // however, due to how we divide compute work, this is already in push constants
+            let push_constant = PcMapModel {
+                trans: transform.inverted(),
+                shift: ivec4!(border.min, 0),
+                map_area: ivec4!(map_area, 0),
+            };
 
-                assert!(self.renderer.pipes.map_pipe.static_bind_groups.is_some());
+            assert!(self.renderer.pipes.map_pipe.static_bind_groups.is_some());
 
-                // as everywhere, instead of directly submitting command, "sort" by state and delay actual work
-                model_mesh.compute_push_constants.extend_from_slice(push_constant.as_u8_slice());
-                model_mesh.compute_pc_count += 1;
-            }
+            // as everywhere, instead of directly submitting command, "sort" by state and delay actual work
+            model_mesh.compute_push_constants.extend_from_slice(push_constant.as_u8_slice());
+            model_mesh.compute_pc_count += 1;
         }
 
         for model_mesh in &mut self.storage.models {
@@ -1448,8 +1447,8 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
         );
 
         for mrr in &self.model_que {
-            let model_id = mrr.mesh;
-            let model_mesh = &self.storage.models.get(model_id).unwrap();
+            let raw_index = usize::from(mrr.mesh);
+            let model_mesh = &self.storage.models.get(raw_index).unwrap();
 
             rpass.set_vertex_buffer(0, model_mesh.triangles.vertexes.as_ref().unwrap().slice(..));
             rpass.set_index_buffer(
@@ -1870,7 +1869,8 @@ impl<'window, D: Dim3> RendererWgpu<'window, D> {
         );
 
         for mrr in &self.model_que {
-            let model_mesh = self.storage.models.get_mut(mrr.mesh).unwrap();
+            let raw_index = usize::from(mrr.mesh);
+            let model_mesh = self.storage.models.get_mut(raw_index).unwrap();
             let model_trans: &MeshTransform = &mrr.trans;
 
             rpass.set_vertex_buffer(0, model_mesh.triangles.vertexes.as_ref().unwrap().slice(..));
@@ -2003,9 +2003,9 @@ impl<'a> FoliageDescriptionBuilder<MeshFoliageDesc<'a>> for SimpleFoliageDescrip
         }
     }
     fn load_foliage(&mut self, foliage: MeshFoliageDesc<'a>) -> MeshFoliage {
-        let index = self.foliage_descriptions.len() as u32;
+        let index = self.foliage_descriptions.len();
         self.foliage_descriptions.push(foliage);
-        index as MeshFoliage
+        index.try_into().unwrap()
     }
     fn build(self) -> Vec<MeshFoliageDesc<'a>> {
         self.foliage_descriptions
@@ -2068,15 +2068,17 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
     fn load_model(&mut self, model_data: ModelData) -> MeshModel {
         let model_mesh = self.renderer.load_model(model_data);
         let index = self.storage.models.allocate(model_mesh).unwrap();
-        index as MeshModel
+        index.try_into().unwrap()
     }
     fn unload_model(&mut self, model: MeshModel) {
-        let model_mesh = self.storage.models.take(model).unwrap();
+        let raw_index = usize::from(model);
+        let model_mesh = self.storage.models.take(raw_index).unwrap();
         self.renderer.free_model(model_mesh);
     }
     // TODO: move to impl MeshModel
     fn get_model_size(&self, model: MeshModel) -> uvec3 {
-        self.storage.models.get(model).unwrap().size
+        let raw_index = usize::from(model);
+        self.storage.models.get(raw_index).unwrap().size
     }
 
     // loads a block (from file) into GPU-side mesh and CPU-side voxel data
@@ -2101,10 +2103,11 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
             color,
         };
         let index = self.storage.volumetrics.allocate(volumetric_mesh).unwrap();
-        index as MeshVolumetric
+        index.try_into().unwrap()
     }
     fn unload_volumetric(&mut self, volumetric: MeshVolumetric) {
-        let volumetric_mesh = self.storage.volumetrics.take(volumetric).unwrap();
+        let raw_index = usize::from(volumetric);
+        let volumetric_mesh = self.storage.volumetrics.take(raw_index).unwrap();
         drop(volumetric_mesh);
     }
 
@@ -2116,10 +2119,11 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
             foam: foam_mat as InternalMatId,
         };
         let index = self.storage.liquids.allocate(liquid_mesh).unwrap();
-        index as MeshLiquid
+        index.try_into().unwrap()
     }
     fn unload_liquid(&mut self, liquid: MeshLiquid) {
-        let liquid_mesh = self.storage.liquids.take(liquid).unwrap();
+        let raw_index = usize::from(liquid);
+        let liquid_mesh = self.storage.liquids.take(raw_index).unwrap();
         drop(liquid_mesh);
     }
 
@@ -2247,7 +2251,8 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
     }
 
     fn draw_model(&mut self, model: &MeshModel, trans: &MeshTransform) {
-        let model_mesh = self.storage.models.get(*model).unwrap();
+        let raw_index = usize::from(*model);
+        let model_mesh = self.storage.models.get(raw_index).unwrap();
         // model size also happens to be >= its bounding box (dont leave voxel padding)
         if self.is_model_visible(&model_mesh.size, trans) {
             self.model_que.push(ModelRenderRequest {
@@ -2260,8 +2265,9 @@ impl<'window, D: Dim3> RendererInterface<'window, D> for RendererWgpu<'window, D
 
     fn draw_foliage(&mut self, foliage: &MeshFoliage, pos: &vec3) {
         // foliage is assumed to be somewhat block constrained
+        let raw_index = usize::from(*foliage);
         if self.is_block_visible(*pos) {
-            let corresponding_foliage_queue = &mut self.foliage_ques[*foliage as usize];
+            let corresponding_foliage_queue = &mut self.foliage_ques[raw_index];
             corresponding_foliage_queue.push(FoliageRenderRequest {
                 cam_dist: 0.0,
                 mesh: foliage.clone(),

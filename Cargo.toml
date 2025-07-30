@@ -71,7 +71,7 @@ overflow-checks = false
 # highest possible optimizations
 [profile.distribution]
 inherits = "release"
-opt-level = "s"
+opt-level = 3
 codegen-units = 1
 lto = "fat"
 debug = false

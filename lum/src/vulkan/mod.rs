@@ -271,6 +271,41 @@ pub struct InternalRendererVulkan<'a, D: Dim3> {
                                                       // m_ru_visited: BitArray3d<u64>,
 }
 
+#[derive(Debug, Clone)]
+pub struct IndicesSnapshot {
+    pub staging_world: usize,
+    pub light_uniform: usize,
+    pub uniform: usize,
+    pub ao_lut_uniform: usize,
+    pub gpu_particles: usize,
+
+    pub world_image: usize,
+    pub radiance_cache_image: usize,
+    pub block_palette_image: usize,
+
+    pub lightmap_blocks_bg: usize,
+    pub lightmap_models_bg: usize,
+    pub raygen_blocks_bg: usize,
+    pub raygen_models_bg: usize,
+    pub raygen_particles_bg: usize,
+    pub raygen_water_bg: usize,
+    pub diffuse_bg: usize,
+    pub ao_bg: usize,
+    pub fill_stencil_glossy_bg: usize,
+    pub fill_stencil_smoke_bg: usize,
+    pub glossy_bg: usize,
+    pub smoke_bg: usize,
+    pub tonemap_bg: usize,
+    pub radiance_bg: usize,
+    pub map_bg: usize,
+    pub update_grass_bg: usize,
+    pub update_water_bg: usize,
+    pub gen_perlin2d_bg: usize,
+    pub gen_perlin3d_bg: usize,
+
+    pub raygen_foliage_bg: Vec<usize>,
+}
+
 const DEPTH_FORMAT_SPARE: vk::Format = vk::Format::D24_UNORM_S8_UINT; // TODO somehow D32 faster than vk::Format::D24_UNORM_S8_UINT on low-end
 const DEPTH_FORMAT_PREFERED: vk::Format = vk::Format::D32_SFLOAT_S8_UINT;
 
@@ -395,6 +430,8 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         // wait for GPU to complete all work so deleting resources wont break anything
         unsafe { self.lumal.device.device_wait_idle().unwrap() };
 
+        let index_frame = self.store_indices();
+
         // we CANT actually disassemble Renderer to recreate parts of it
         // this is due to mix of styles: functional (move self return Self) vs &mut self modifying fields
         // to solve this i implement unsafe default() with uninit (i really dont want Option<>)
@@ -429,6 +466,113 @@ impl<'a, D: Dim3> InternalRendererVulkan<'a, D> {
         self.dependent_images = dimages;
         self.pipes = pipes;
         self.rpasses = rpasses;
+
+        self.restore_indices(&index_frame);
+    }
+
+    /// Capture all the current ring-buffer indices into a snapshot
+    pub fn store_indices(&self) -> IndicesSnapshot {
+        IndicesSnapshot {
+            staging_world: self.buffers.staging_world.index,
+            light_uniform: self.buffers.light_uniform.index,
+            uniform: self.buffers.uniform.index,
+            ao_lut_uniform: self.buffers.ao_lut_uniform.index,
+            gpu_particles: self.buffers.gpu_particles.index,
+
+            world_image: self.independent_images.world.index,
+            radiance_cache_image: self.independent_images.radiance_cache.index,
+            block_palette_image: self.independent_images.block_palette.index,
+
+            lightmap_blocks_bg: self.pipes.lightmap_blocks_pipe.sets.index,
+            lightmap_models_bg: self.pipes.lightmap_models_pipe.sets.index,
+            raygen_blocks_bg: self.pipes.raygen_blocks_pipe.sets.index,
+            raygen_models_bg: self.pipes.raygen_models_pipe.sets.index,
+            raygen_particles_bg: self.pipes.raygen_particles_pipe.sets.index,
+            raygen_water_bg: self.pipes.raygen_water_pipe.sets.index,
+            diffuse_bg: self.pipes.diffuse_pipe.sets.index,
+            ao_bg: self.pipes.ao_pipe.sets.index,
+            fill_stencil_glossy_bg: self.pipes.fill_stencil_glossy_pipe.sets.index,
+            fill_stencil_smoke_bg: self.pipes.fill_stencil_smoke_pipe.sets.index,
+            glossy_bg: self.pipes.glossy_pipe.sets.index,
+            smoke_bg: self.pipes.smoke_pipe.sets.index,
+            tonemap_bg: self.pipes.tonemap_pipe.sets.index,
+            radiance_bg: self.pipes.radiance_pipe.sets.index,
+            map_bg: self.pipes.map_pipe.sets.index,
+            update_grass_bg: self.pipes.update_grass_pipe.sets.index,
+            update_water_bg: self.pipes.update_water_pipe.sets.index,
+            gen_perlin2d_bg: self.pipes.gen_perlin2d_pipe.sets.index,
+            gen_perlin3d_bg: self.pipes.gen_perlin3d_pipe.sets.index,
+
+            raygen_foliage_bg: self
+                .pipes
+                .raygen_foliage_pipes
+                .iter()
+                .map(|fp| fp.sets.index)
+                .collect(),
+        }
+    }
+
+    /// Restore all ring-buffer indices from a previously taken snapshot.
+    pub fn restore_indices(&mut self, snap: &IndicesSnapshot) {
+        self.buffers.staging_world.index = snap.staging_world;
+        self.buffers.light_uniform.index = snap.light_uniform;
+        self.buffers.uniform.index = snap.uniform;
+        self.buffers.ao_lut_uniform.index = snap.ao_lut_uniform;
+        self.buffers.gpu_particles.index = snap.gpu_particles;
+
+        self.independent_images.world.index = snap.world_image;
+        self.independent_images.radiance_cache.index = snap.radiance_cache_image;
+        self.independent_images.block_palette.index = snap.block_palette_image;
+
+        // helper to set Option<Ring>.index
+        fn set_idx<T>(opt: &mut Ring<T>, new: usize) {
+            opt.index = new;
+        }
+
+        set_idx(
+            &mut self.pipes.lightmap_blocks_pipe.sets,
+            snap.lightmap_blocks_bg,
+        );
+        set_idx(
+            &mut self.pipes.lightmap_models_pipe.sets,
+            snap.lightmap_models_bg,
+        );
+        set_idx(
+            &mut self.pipes.raygen_blocks_pipe.sets,
+            snap.raygen_blocks_bg,
+        );
+        set_idx(
+            &mut self.pipes.raygen_models_pipe.sets,
+            snap.raygen_models_bg,
+        );
+        set_idx(
+            &mut self.pipes.raygen_particles_pipe.sets,
+            snap.raygen_particles_bg,
+        );
+        set_idx(&mut self.pipes.raygen_water_pipe.sets, snap.raygen_water_bg);
+        set_idx(&mut self.pipes.diffuse_pipe.sets, snap.diffuse_bg);
+        set_idx(&mut self.pipes.ao_pipe.sets, snap.ao_bg);
+        set_idx(
+            &mut self.pipes.fill_stencil_glossy_pipe.sets,
+            snap.fill_stencil_glossy_bg,
+        );
+        set_idx(
+            &mut self.pipes.fill_stencil_smoke_pipe.sets,
+            snap.fill_stencil_smoke_bg,
+        );
+        set_idx(&mut self.pipes.glossy_pipe.sets, snap.glossy_bg);
+        set_idx(&mut self.pipes.smoke_pipe.sets, snap.smoke_bg);
+        set_idx(&mut self.pipes.tonemap_pipe.sets, snap.tonemap_bg);
+        set_idx(&mut self.pipes.radiance_pipe.sets, snap.radiance_bg);
+        set_idx(&mut self.pipes.map_pipe.sets, snap.map_bg);
+        set_idx(&mut self.pipes.update_grass_pipe.sets, snap.update_grass_bg);
+        set_idx(&mut self.pipes.update_water_pipe.sets, snap.update_water_bg);
+        set_idx(&mut self.pipes.gen_perlin2d_pipe.sets, snap.gen_perlin2d_bg);
+        set_idx(&mut self.pipes.gen_perlin3d_pipe.sets, snap.gen_perlin3d_bg);
+
+        for (fp, &i) in self.pipes.raygen_foliage_pipes.iter_mut().zip(&snap.raygen_foliage_bg) {
+            fp.sets.index = i;
+        }
     }
 
     /// Destroys the renderer

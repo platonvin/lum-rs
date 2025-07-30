@@ -67,10 +67,9 @@ impl<'a, D: Dim3> LoadInterface for InternalRendererVulkan<'a, D> {
             });
         }
 
-        #[rustfmt::skip]
-        let buffer_count = block_palette_prepared.dimensions().0
-                         * block_palette_prepared.dimensions().1
-                         * block_palette_prepared.dimensions().2;
+        let buffer_count = block_palette_prepared.dimensions().x
+            * block_palette_prepared.dimensions().y
+            * block_palette_prepared.dimensions().z;
         let buffer_size = buffer_count * std::mem::size_of::<InternalVoxel>();
 
         // TODO: move to static staging Ring and single buffer
@@ -99,16 +98,16 @@ impl<'a, D: Dim3> LoadInterface for InternalRendererVulkan<'a, D> {
         };
 
         for block_palette in self.independent_images.block_palette.iter() {
-            assert!(block_palette_prepared.dimensions().0 == block_palette.extent.width as usize);
-            assert!(block_palette_prepared.dimensions().1 == block_palette.extent.height as usize);
-            assert!(block_palette_prepared.dimensions().2 == block_palette.extent.depth as usize);
+            assert!(block_palette_prepared.dimensions().x == block_palette.extent.width as usize);
+            assert!(block_palette_prepared.dimensions().y == block_palette.extent.height as usize);
+            assert!(block_palette_prepared.dimensions().z == block_palette.extent.depth as usize);
             self.lumal.copy_buffer_to_image_single_time(
                 staging_buffer.buffer,
                 block_palette,
                 vk::Extent3D {
-                    width: block_palette_prepared.dimensions().0 as u32,
-                    height: block_palette_prepared.dimensions().1 as u32,
-                    depth: block_palette_prepared.dimensions().2 as u32,
+                    width: block_palette_prepared.dimensions().x as u32,
+                    height: block_palette_prepared.dimensions().y as u32,
+                    depth: block_palette_prepared.dimensions().z as u32,
                 },
             );
         }

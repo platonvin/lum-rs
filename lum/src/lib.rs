@@ -6,9 +6,11 @@
 #![feature(slice_as_array)]
 #![feature(default_field_values)]
 #![feature(const_trait_impl)]
+#![feature(structural_match)]
+#![feature(rustc_attrs)]
+#![allow(internal_features)]
 // clippy settings
 #![allow(clippy::too_many_arguments)] // LOL
-
 pub use shaders;
 pub use web_time as time;
 pub use winit;

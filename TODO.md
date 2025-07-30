@@ -3,6 +3,7 @@ remove unused pc
 define a price for state chagne and move things a little bit even if makes it depth not sorted
 also sort radiance updates! Figure out what can be sorted for fun and profits
 dynamic reactivness - track in separate image, high for new, low for established, icrease on changes
+docs site (but write them first)
 
 zero instead of copy wgpu
 remove clamps from shaders from everywhere (docs where clamps happen, maybe do them everywhere explicitly)

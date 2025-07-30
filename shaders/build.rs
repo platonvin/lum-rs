@@ -72,7 +72,7 @@ fn compile_spirv_shaders(dest: &Path) -> std::io::Result<Vec<String>> {
 
                     let out_path = dest.join(format!("{}.spv", name));
                     if needs_recompile(&path, &out_path) {
-                        println!("cargo:warning=Compiling SPIR-V: {}", path.display());
+                        // println!("cargo:warning=Compiling SPIR-V: {}", path.display());
                         let status = Command::new("glslc")
                             .arg(&path)
                             .arg("-o")

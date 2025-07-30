@@ -3,12 +3,12 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use zarray::z3d::ZArray3D;
 
 fn blur_array3d(src: &Array3D<u8, RuntimeDims>, radius: usize) -> Array3D<u16, RuntimeDims> {
-    let (x_size, y_size, z_size) = src.dimensions();
+    let dims = src.dimensions();
     let mut result = Array3D::new_default(src.dims);
 
-    for z in 0..z_size {
-        for y in 0..y_size {
-            for x in 0..x_size {
+    for z in 0..dims.z {
+        for y in 0..dims.y {
+            for x in 0..dims.x {
                 let mut sum = 0u16;
                 let mut count = 0u16;
 
@@ -20,11 +20,11 @@ fn blur_array3d(src: &Array3D<u8, RuntimeDims>, radius: usize) -> Array3D<u16, R
                             let nz = z as isize + dz;
 
                             if nx >= 0
-                                && nx < x_size as isize
+                                && nx < dims.x as isize
                                 && ny >= 0
-                                && ny < y_size as isize
+                                && ny < dims.y as isize
                                 && nz >= 0
-                                && nz < z_size as isize
+                                && nz < dims.z as isize
                             {
                                 sum += src[(nx as usize, ny as usize, nz as usize)] as u16;
                                 count += 1;

@@ -3,7 +3,7 @@ use crate::{
     load_interface::{BlockData, ModelData},
     Camera,
 };
-use containers::array3d::{Array3DView, Array3DViewMut, Dim3};
+use containers::{Array3DView, Array3DViewMut, Dim3};
 use winit::window::Window;
 
 // i am clearly trash with managing division into files

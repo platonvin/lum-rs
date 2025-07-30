@@ -40,9 +40,9 @@ impl World {
     fn generate(&mut self) {
         // let mut rng = rand::rng();
         let (x_size, y_size, z_size) = (
-            self.blocks.dimensions().0,
-            self.blocks.dimensions().1,
-            self.blocks.dimensions().2,
+            self.blocks.dimensions().x,
+            self.blocks.dimensions().y,
+            self.blocks.dimensions().z,
         );
 
         for z in 0..z_size {
@@ -110,8 +110,8 @@ unsafe fn update_radiance_unrolled(world: &mut World, settings: &Settings) {
     let wx = sx - 1;
     let wy = sy - 1;
     let wz = sz - 1;
-    let x_size = world.blocks.dimensions().0;
-    let y_size = world.blocks.dimensions().1;
+    let x_size = world.blocks.dimensions().x;
+    let y_size = world.blocks.dimensions().y;
     assert_assume!(x_size == settings.world_size.x as usize);
     assert_assume!(y_size == settings.world_size.y as usize);
 

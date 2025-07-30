@@ -71,11 +71,19 @@ struct DemoState<'renderer, Renderer: RendererInterface<'renderer, WorldSize>> {
 impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
     type FoliageDescription = Renderer::FoliageDescription;
 
-    fn new(window: Arc<Window>, lum: Renderer) -> Self {
+    fn new(window: Arc<Window>, mut lum: Renderer, grass: MeshFoliage) -> Self {
+        // TODO: move to template args?
+        let settings = Settings::<WorldSize> {
+            static_block_palette_size: 15,
+            ..Settings::default()
+        };
+
+        let meshes = AllMeshes::new(&mut lum, grass);
+
         Self {
             window,
             lum,
-            meshes: AllMeshes::default(),
+            meshes,
             transforms: Default::default(),
             about_to_close: false,
             is_still_init: true,
@@ -85,16 +93,8 @@ impl<'r, Renderer: RendererInterface<'r, WorldSize>> DemoState<'r, Renderer> {
         }
     }
 
-    pub fn load_scene(&mut self, grass: MeshFoliage) {
+    pub fn load_scene(&mut self) {
         let lum = &mut self.lum;
-
-        // TODO: move to template args?
-        let settings = Settings::<WorldSize> {
-            static_block_palette_size: 15,
-            ..Settings::default()
-        };
-
-        self.meshes = AllMeshes::new(lum, grass);
 
         lum.load_block(1, assets::get_block(BlockAsset::Dirt));
         lum.load_block(2, assets::get_block(BlockAsset::Grass));
@@ -403,9 +403,9 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'stati
         &foliage_desc_builder.build(),
     ); // on native we can execute sequentially
 
-    let mut app = DemoState::new(window, renderer);
+    let mut app = DemoState::new(window, renderer, grass);
 
-    app.load_scene(grass);
+    app.load_scene();
 
     event_loop.run_app(&mut app).unwrap();
 
@@ -413,7 +413,6 @@ pub fn run<'renderer, Renderer: RendererInterface<'renderer, WorldSize> + 'stati
 }
 
 // You probably should use some sort of "Asset library" - hashmap (array) of YourEntityTypeEnum -> LumMeshModel
-#[derive(Default)]
 struct AllMeshes {
     tank_body: MeshModel,
     tank_head: MeshModel,
